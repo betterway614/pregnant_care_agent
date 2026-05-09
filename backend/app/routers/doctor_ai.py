@@ -6,6 +6,7 @@ from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
+from ..config import settings
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
@@ -133,7 +134,11 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
                                    query: str) -> DoctorAnalyzeResponse | None:
     """尝试通过LLM综合分析孕妇数据，失败返回None"""
     try:
-        client = get_llm_client()
+        if settings.agno_enabled:
+            from ..core.agno_client import get_agno_client
+            client = get_agno_client()
+        else:
+            client = get_llm_client()
         prompt = _build_doctor_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, context, query)
         messages = [
             {"role": "system", "content": "你是一位资深的产科医生，擅长高危妊娠管理和循证医学。请基于孕妇数据提供专业的综合分析，引用权威医学指南。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：analysis(综合分析), evidence_references(证据引用，字符串数组), suggested_orders(建议医嘱), risk_summary(风险摘要)"},

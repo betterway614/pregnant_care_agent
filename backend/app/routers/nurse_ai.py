@@ -6,6 +6,7 @@ from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment
 from ..schemas import NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse
 from ..core import get_llm_client
+from ..config import settings
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
 
@@ -104,7 +105,11 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
                                  risk_tags: list, patient_data: dict) -> NurseAnalyzeResponse | None:
     """尝试通过LLM分析孕妇数据，失败返回None"""
     try:
-        client = get_llm_client()
+        if settings.agno_enabled:
+            from ..core.agno_client import get_agno_client
+            client = get_agno_client()
+        else:
+            client = get_llm_client()
         prompt = _build_nurse_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, patient_data)
         messages = [
             {"role": "system", "content": "你是一位经验丰富的产科护士，擅长孕产妇护理和健康教育。请根据孕妇数据提供专业的护理分析。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：summary(综合概述), risk_assessment(风险评估), nursing_suggestions(护理建议), followup_focus(随访重点，字符串数组)"},
@@ -276,7 +281,11 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
                                       template_id: str) -> FollowUpGenerateResponse | None:
     """尝试通过LLM生成随访对话脚本，失败返回None"""
     try:
-        client = get_llm_client()
+        if settings.agno_enabled:
+            from ..core.agno_client import get_agno_client
+            client = get_agno_client()
+        else:
+            client = get_llm_client()
         prompt = _build_followup_generate_prompt(pregnant, gest_week, gest_day, risk_tags,
                                                   patient_data, template_id)
         messages = [
