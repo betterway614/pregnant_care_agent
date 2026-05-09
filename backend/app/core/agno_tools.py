@@ -273,12 +273,15 @@ def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
         return {"results": [], "message": "RAG功能未启用"}
 
     try:
-        if settings.agno_enabled:
+        from ..core.agno_knowledge import agno_knowledge
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # 在已有事件循环中，使用同步 search
             from ..core.agno_rag import agno_rag_engine
             result = agno_rag_engine.search(query, top_k=top_k)
         else:
-            from ..core import rag_engine
-            result = rag_engine.search(query, top_k=top_k)
+            result = loop.run_until_complete(agno_knowledge.asearch(query, top_k=top_k))
         return {"results": result, "count": len(result)}
     except Exception as e:
         return {"results": [], "error": str(e)}

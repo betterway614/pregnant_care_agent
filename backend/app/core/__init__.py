@@ -4,6 +4,7 @@ from .agno_tools import (
     AGNO_FOLLOWUP_TOOLS, MEDICAL_TOOLS,
     agno_get_followup_context, agno_record_answer, agno_complete_followup,
 )
+from .agno_knowledge import AgnoKnowledgeAdapter, agno_knowledge
 from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient, LocalOllamaClient
 from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
@@ -22,6 +23,7 @@ __all__ = [
     "get_embedding_client", "EmbeddingClient", "MockEmbedding", "HuggingFaceEmbedding", "APIEmbedding",
     "rag_engine", "RAGEngine",
     "AgnoRAGEngine", "agno_rag_engine",
+    "AgnoKnowledgeAdapter", "agno_knowledge",
     "AGNO_FOLLOWUP_TOOLS", "MEDICAL_TOOLS",
     "agno_get_followup_context", "agno_record_answer", "agno_complete_followup",
 ]
