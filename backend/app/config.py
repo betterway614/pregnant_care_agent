@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Seed
     seed_data: bool = True
 
+    # Agno 配置
+    agno_enabled: bool = False
+    agno_model_id: str = "gpt-4o"
+    agno_knowledge_dir: str = "data/knowledge"
+    agno_knowledge_table: str = "knowledge_chunks"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
