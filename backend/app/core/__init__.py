@@ -1,3 +1,4 @@
+from .agno_agent import create_main_agent, create_followup_agent
 from .agno_client import get_agno_client, AgnoClient, get_agno_model, reset_agno_client
 from .agno_tools import AGNO_FOLLOWUP_TOOLS, agno_get_followup_context, agno_record_answer, agno_complete_followup
 from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient, LocalOllamaClient
@@ -9,6 +10,7 @@ from .rag_engine import rag_engine, RAGEngine
 from .agno_rag import AgnoRAGEngine, agno_rag_engine
 
 __all__ = [
+    "create_main_agent", "create_followup_agent",
     "get_agno_client", "AgnoClient", "get_agno_model", "reset_agno_client",
     "get_llm_client", "LLMClient", "MockLLMClient", "CloudAPIClient", "LocalOllamaClient",
     "nlu_engine", "RuleBaseNLU", "NLUResult",
