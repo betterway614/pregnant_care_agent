@@ -482,22 +482,6 @@ def _build_followup_system_prompt(pregnant, record, record_id: str) -> str:
     )
 
 
-# ==================== 随访会话历史管理 ====================
-
-_followup_history: dict[str, list[dict]] = {}
-
-def _history_key(session_id: str, record_id: str) -> str:
-    return f"{session_id or ''}:{record_id}"
-
-def _load_followup_history(session_id: str, record_id: str) -> list[dict]:
-    return _followup_history.get(_history_key(session_id, record_id), [])
-
-def _save_followup_history(session_id: str, record_id: str, new_msgs: list[dict]):
-    key = _history_key(session_id, record_id)
-    if key not in _followup_history:
-        _followup_history[key] = []
-    _followup_history[key].extend(new_msgs)
-
 
 def _extract_extra_entities(message: str, nlu_result):
     """扩展NLU实体提取：补充睡眠时长、运动步数等nlu_engine未覆盖的数据项"""
