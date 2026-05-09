@@ -11,6 +11,11 @@ from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
 from ..core.followup_tools import FOLLOWUP_TOOLS, dispatch_tool
 from ..core.agno_client import get_agno_client
 from ..core.agno_rag import agno_rag_engine
+from ..core.conversation_store import conversation_store
+from ..core.prompts import (
+    get_pregnant_system_prompt,
+    get_followup_system_prompt,
+)
 from ..models import HealthDataPoint, Pregnant, FollowUpRecord
 from ..database import SessionLocal
 from ..config import settings
@@ -24,6 +29,13 @@ llm = get_llm_client()
 @router.post("/send", response_model=ChatResponse)
 async def send_message(req: ChatSendRequest):
     """发送对话消息"""
+    # Agno Agent 模式
+    if settings.agno_enabled:
+        from ..core.agno_chat_handler import handle_chat_with_agno, handle_followup_chat_with_agno
+        if req.record_id:
+            return await handle_followup_chat_with_agno(req)
+        return await handle_chat_with_agno(req)
+
     # 随访Agent模式：当传入 record_id 时进入结构随访对话
     if req.record_id:
         return await _handle_followup_chat(req)
@@ -86,24 +98,36 @@ async def send_message(req: ChatSendRequest):
                 patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
             if pregnant.nickname:
                 patient_context += f" 孕妇昵称：{pregnant.nickname}。"
+
+            # 注入健康趋势分析
+            try:
+                from datetime import timedelta
+                from ..models import HealthDataPoint
+                from ..core.trend_engine import trend_engine
+
+                two_weeks_ago = datetime.now() - timedelta(days=14)
+                recent_records = patient_db.query(HealthDataPoint).filter(
+                    HealthDataPoint.pregnant_id == req.pregnant_id,
+                    HealthDataPoint.recorded_at >= two_weeks_ago,
+                ).order_by(HealthDataPoint.recorded_at).all()
+
+                if recent_records:
+                    records_data = [
+                        {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
+                        for r in recent_records
+                    ]
+                    trends = trend_engine.analyze(records_data, gest_week=gw)
+                    if trends:
+                        trend_summaries = [t.summary for t in trends if t.summary]
+                        if trend_summaries:
+                            patient_context += " 【近期健康趋势】" + " ".join(trend_summaries)
+            except Exception:
+                pass  # 趋势分析失败不影响主流程
     finally:
         patient_db.close()
 
     # 4. 构建对话上下文
-    system_prompt_content = (
-        "你是'小安'，一位温暖、专业的孕期智能助手。你的职责是：\n"
-        "1. 用温暖亲切的语气回答孕期相关问题\n"
-        "2. 帮助记录孕妇的健康数据（体重、血压、胎动等）\n"
-        "3. 提供情绪安抚和支持\n"
-        "4. 回答孕期基础生理知识\n"
-        "5. 绝不出具诊断结论或用药建议\n"
-        "6. 所有知识性回答末尾必须标注'知识来源'标签，格式为：『知识来源：<具体指南/文献名称>』\n"
-        "7. 若识别到紧急情况，引导就医\n"
-        "8. 若孕妇询问的问题超出你的知识范围，请回复：'这个问题建议您咨询产检医生，小安暂时无法提供确切答案。'\n\n"
-        "记住：你是辅助工具，不能替代医生的专业判断。"
-    )
-    if patient_context:
-        system_prompt_content = patient_context + system_prompt_content
+    system_prompt_content = get_pregnant_system_prompt(patient_context)
     system_prompt = {
         "role": "system",
         "content": system_prompt_content
@@ -127,16 +151,40 @@ async def send_message(req: ChatSendRequest):
     if follow_up_question:
         response = response.rstrip() + follow_up_question
 
+    # 持久化对话消息
+    session_id = req.session_id or f"SESS_{req.pregnant_id[:8]}"
+    try:
+        conversation_store.save_single(session_id, req.pregnant_id, "user", req.message)
+        conversation_store.save_single(session_id, req.pregnant_id, "assistant", response)
+    except Exception:
+        pass
+
     return ChatResponse(
         content=response,
         nlu_result=ChatNLUResult(
             intent=nlu_result.intent,
             entities=nlu_result.entities
         ) if nlu_result else None,
-        session_id=req.session_id or f"SESS_{req.pregnant_id[:8]}",
+        session_id=session_id,
         memory_updated=memory_entries,
         source="AI_CARE"
     )
+
+
+@router.get("/conversation/{pregnant_id}")
+async def get_conversation_history(pregnant_id: str, session_id: str = ""):
+    """获取对话历史记录"""
+    sid = session_id or f"SESS_{pregnant_id[:8]}"
+    history = conversation_store.load_history(sid, pregnant_id)
+    return {"session_id": sid, "messages": history}
+
+
+@router.delete("/conversation/{pregnant_id}")
+async def clear_conversation_history(pregnant_id: str, session_id: str = ""):
+    """清除对话历史"""
+    sid = session_id or f"SESS_{pregnant_id[:8]}"
+    conversation_store.clear_session(sid, pregnant_id)
+    return {"message": "对话历史已清除"}
 
 
 # ==================== SSE 流式输出 ====================
@@ -202,20 +250,15 @@ async def _build_chat_context(req: ChatSendRequest) -> dict:
         patient_db.close()
 
     # 6. 构建 system prompt
-    system_prompt_content = (
-        "你是'小安'，一位温暖、专业的孕期智能助手。你的职责是：\n"
-        "1. 用温暖亲切的语气回答孕期相关问题\n"
-        "2. 帮助记录孕妇的健康数据（体重、血压、胎动等）\n"
-        "3. 提供情绪安抚和支持\n"
-        "4. 回答孕期基础生理知识\n"
-        "5. 绝不出具诊断结论或用药建议\n"
-        "6. 所有知识性回答末尾必须标注'知识来源'标签，格式为：『知识来源：<具体指南/文献名称>』\n"
-        "7. 若识别到紧急情况，引导就医\n"
-        "8. 若孕妇询问的问题超出你的知识范围，请回复：'这个问题建议您咨询产检医生，小安暂时无法提供确切答案。'\n\n"
-        "记住：你是辅助工具，不能替代医生的专业判断。"
-    )
-    if patient_context:
-        system_prompt_content = patient_context + system_prompt_content
+    system_prompt_content = get_pregnant_system_prompt(patient_context)
+
+    # 7. 加载对话历史
+    session_id = req.session_id or f"SESS_{req.pregnant_id[:8]}"
+    history = conversation_store.load_history(session_id, req.pregnant_id)
+
+    messages = [{"role": "system", "content": system_prompt_content}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": req.message})
 
     return {
         "nlu_result": nlu_result,
@@ -223,18 +266,24 @@ async def _build_chat_context(req: ChatSendRequest) -> dict:
         "emergency_msg": emergency_msg,
         "memory_entries": memory_entries,
         "follow_up_question": follow_up_question,
-        "messages": [
-            {"role": "system", "content": system_prompt_content},
-            {"role": "user", "content": req.message},
-        ],
+        "messages": messages,
         "pregnant_id": req.pregnant_id,
-        "session_id": req.session_id or f"SESS_{req.pregnant_id[:8]}",
+        "session_id": session_id,
     }
 
 
 @router.post("/send/stream")
 async def send_message_stream(req: ChatSendRequest):
     """发送对话消息（SSE 流式输出）"""
+    # Agno Agent 模式
+    if settings.agno_enabled:
+        from ..core.agno_chat_handler import handle_chat_with_agno, handle_followup_chat_with_agno
+        if req.record_id:
+            result = await handle_followup_chat_with_agno(req)
+            return JSONResponse(result.model_dump())
+        result = await handle_chat_with_agno(req)
+        return JSONResponse(result.model_dump())
+
     # 随访模式暂不支持流式，回退到非流式
     if req.record_id:
         result = await _handle_followup_chat(req)
@@ -262,6 +311,20 @@ async def send_message_stream(req: ChatSendRequest):
     async def event_generator():
         """SSE 事件生成器"""
         full_response = ""
+
+        # 发送思考状态事件
+        thinking_messages = {
+            "HEALTH_DATA_REPORT": "正在分析您的健康数据...",
+            "EMOTION_EXPRESS": "正在理解您的感受...",
+            "KNOWLEDGE_QUERY": "正在查阅孕期知识库...",
+            "SCHEDULE_INQUIRY": "正在查看您的产检安排...",
+            "GREETING": "正在准备回复...",
+        }
+        thinking_msg = thinking_messages.get(
+            ctx["nlu_result"].intent if ctx["nlu_result"] else "",
+            "小安正在思考..."
+        )
+        yield {"event": "thinking", "data": thinking_msg}
 
         # 调用LLM流式接口（支持 Agno 模式切换）
         try:
@@ -296,6 +359,14 @@ async def send_message_stream(req: ChatSendRequest):
             "memory_updated": memory_entries,
         })}
 
+        # 持久化对话消息
+        try:
+            user_msg = ctx["messages"][-1]  # 最后一条是用户消息
+            conversation_store.save_single(session_id, ctx["pregnant_id"], "user", user_msg["content"])
+            conversation_store.save_single(session_id, ctx["pregnant_id"], "assistant", full_response)
+        except Exception:
+            pass  # 持久化失败不影响主流程
+
     return EventSourceResponse(event_generator())
 
 
@@ -324,8 +395,9 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
         system_prompt = _build_followup_system_prompt(pregnant, record, req.record_id)
 
         messages = [{"role": "system", "content": system_prompt}]
-        # 加载历史消息（基于 session_id 的简单追踪）
-        history = _load_followup_history(req.session_id, req.record_id)
+        # 加载历史消息（使用 conversation_store 持久化）
+        fu_session_id = f"FU_{req.record_id[:8]}"
+        history = conversation_store.load_history(fu_session_id, req.pregnant_id)
         messages.extend(history)
         messages.append({"role": "user", "content": req.message})
 
@@ -349,13 +421,23 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
                         "tool_call_id": tc.get("id", ""),
                         "content": json.dumps(tool_result, ensure_ascii=False),
                     })
-                # 记录到历史
-                _save_followup_history(req.session_id, req.record_id, messages[-4:])
+                # 记录到历史（持久化）
+                try:
+                    user_and_assistant = [m for m in messages[-4:] if m.get("role") in ("user", "assistant")]
+                    conversation_store.save_messages(fu_session_id, req.pregnant_id, user_and_assistant)
+                except Exception:
+                    pass
             else:
                 final_response = result.get("content", "")
                 break
         else:
             final_response = "随访流程已结束，感谢您的配合！如有其他问题，随时可以问我。"
+
+        # 持久化最终回复
+        try:
+            conversation_store.save_single(fu_session_id, req.pregnant_id, "assistant", final_response)
+        except Exception:
+            pass
 
         return ChatResponse(
             content=final_response,
@@ -389,46 +471,15 @@ def _build_followup_system_prompt(pregnant, record, record_id: str) -> str:
 
     patient_name = pregnant.nickname or pregnant.display_name if pregnant else "准妈妈"
 
-    return f"""你是'小安'，一位温暖、贴心的孕期智能助手。当前处于【随访模式】。
-
-【孕妇信息】
-- 称呼: {patient_name}
-- 孕周: {gw}周
-- 风险标签: {risk_text}
-
-【随访信息】
-- 随访记录ID: {record_id}
-- template_name: {tmpl_name}
-- 随访状态: {record.status}
-
-【核心人设要求——务必遵守】
-你必须用以下风格与孕妇交流：
-
-1. 【称呼方式】直接称呼孕妇昵称"{patient_name}"，不要说"{patient_name}妈妈"或"妈妈"。例如："{patient_name}，您好呀~"、"{patient_name}真棒！"
-
-2. 【语气风格】温暖亲切，像闺蜜或姐姐一样聊天。多用语气词（呀、呢、哦、嘛、啦），适当使用 emoji（💗😊👶💪🌟🎉）
-
-3. 【提问方式】每次只问一个问题，用自然的过渡引出：
-   ✅ "那再问您一个小问题哦~关于{话题}方面："
-   ❌ 不要生硬地说"下一个问题"
-
-4. 【回答反馈】每次孕妇回答后，先给予温暖的认可和简单反馈，再问下一题：
-   - 正面回答："听到您这么说我就放心啦~😊"
-   - 不适症状："孕期有些小不适很正常的，您辛苦了~🥺 如果加重的话记得及时就医哦"
-   - 体重/血压数据："好的，已经帮您记下啦！您坚持记录真棒~👏"
-
-5. 【情绪价值】主动关心孕妇感受，提供简短温馨的健康提示。结束时送祝福。
-
-6. 【规则】绝不出具诊断结论或用药建议。如果孕妇表现出紧急症状，引导就医。
-
-【工具使用流程】
-1. 首先调用 get_followup_context 获取随访模板和当前进度
-2. 根据模板逐一提问，每次用 record_answer 记录孕妇回答（回答会自动保存健康数据）
-3. 所有问题完成后，调用 complete_followup 归档记录
-
-【健康教育内容】
-{health_edu if health_edu else "无"}
-"""
+    return get_followup_system_prompt(
+        patient_name=patient_name,
+        gest_week=gw,
+        risk_text=risk_text,
+        record_id=record_id,
+        template_name=tmpl_name,
+        record_status=record.status,
+        health_education=health_edu,
+    )
 
 
 # ==================== 随访会话历史管理 ====================
@@ -634,5 +685,131 @@ def rag_status():
             "db_type": settings.db_type,
             "embedding_mode": settings.embedding_mode,
         }
+    finally:
+        db.close()
+
+
+# ==================== 健康趋势分析 ====================
+
+@router.get("/trends/{pregnant_id}")
+async def get_health_trends(pregnant_id: str):
+    """获取孕妇近期健康趋势"""
+    from datetime import timedelta
+    from ..models import HealthDataPoint
+    from ..core.trend_engine import trend_engine
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        gest_week = (pregnant.gestational_age_days // 7) if pregnant and pregnant.gestational_age_days else 0
+
+        two_weeks_ago = datetime.now() - timedelta(days=14)
+        records = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pregnant_id,
+            HealthDataPoint.recorded_at >= two_weeks_ago,
+        ).order_by(HealthDataPoint.recorded_at).all()
+
+        records_data = [
+            {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
+            for r in records
+        ]
+        trends = trend_engine.analyze(records_data, gest_week=gest_week)
+
+        return {
+            "pregnant_id": pregnant_id,
+            "trends": [
+                {
+                    "metric": t.metric,
+                    "current_value": t.current_value,
+                    "unit": t.unit,
+                    "trend": t.trend,
+                    "summary": t.summary,
+                    "is_normal": t.is_normal,
+                }
+                for t in trends
+            ],
+        }
+    finally:
+        db.close()
+
+
+# ==================== 主动问候 ====================
+
+class ProactiveGreeting(BaseModel):
+    message: str
+    greeting_type: str  # morning, afternoon, evening, night
+    icon: str
+
+
+@router.get("/proactive/{pregnant_id}", response_model=ProactiveGreeting)
+async def get_proactive_greeting(pregnant_id: str):
+    """基于上下文生成主动问候消息"""
+    from datetime import datetime
+    from ..models import HealthDataPoint
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if not pregnant:
+            return ProactiveGreeting(message="欢迎回来！", greeting_type="morning", icon="👋")
+
+        hour = datetime.now().hour
+        gw = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
+
+        # 检查最近是否有健康数据录入
+        from datetime import timedelta
+        recent_data = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pregnant_id,
+            HealthDataPoint.recorded_at >= datetime.now() - timedelta(days=1)
+        ).count()
+
+        # 孕周里程碑
+        milestones = {
+            12: "NT检查（颈项透明层扫描）",
+            16: "唐氏筛查",
+            20: "大排畸超声检查",
+            24: "糖耐量检测（OGTT）",
+            28: "开始数胎动",
+            30: "孕晚期开始",
+            32: "胎心监护",
+            36: "每周产检",
+            37: "足月",
+            40: "预产期",
+        }
+        milestone_msg = None
+        for week, desc in milestones.items():
+            if gw == week:
+                milestone_msg = f"本周需要做{desc}哦，记得提前预约~"
+                break
+
+        # 时段问候
+        if hour < 9:
+            greeting_type = "morning"
+            icon = "🌅"
+            if recent_data == 0:
+                msg = f"早安~今天记得记录体重和血压哦！{milestone_msg or ''}"
+            else:
+                msg = f"早安~今天已经记录了健康数据，真棒！{milestone_msg or '祝您今天心情愉快~'}"
+        elif hour < 14:
+            greeting_type = "afternoon"
+            icon = "☀️"
+            msg = f"下午好~午饭后散散步对宝宝有好处哦。{milestone_msg or ''}"
+        elif hour < 18:
+            greeting_type = "evening"
+            icon = "🌆"
+            msg = f"傍晚好~别忘了数胎动哦，每天固定时间数一数更准确。{milestone_msg or ''}"
+        else:
+            greeting_type = "night"
+            icon = "🌙"
+            msg = f"晚上好~今天辛苦了，早点休息对宝宝最好。{milestone_msg or ''}"
+
+        if not msg:
+            msg = "欢迎回来！有什么需要小安帮忙的吗？"
+
+        return ProactiveGreeting(
+            message=msg,
+            greeting_type=greeting_type,
+            icon=icon,
+        )
     finally:
         db.close()

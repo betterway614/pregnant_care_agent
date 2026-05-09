@@ -40,50 +40,45 @@ class AgnoClient:
             markdown=True,
         )
 
-    async def chat(self, messages: list[dict], **kwargs) -> str:
-        """同步对话接口"""
+    def _extract_messages(self, messages: list[dict]) -> tuple[str, list[str]]:
+        """从消息列表中提取用户消息和系统指令"""
         user_msg = messages[-1]["content"] if messages else ""
-        system_msg = ""
+        instructions = []
         for m in messages:
             if m["role"] == "system":
-                system_msg = m["content"]
+                instructions.append(m["content"])
                 break
+        return user_msg, instructions
 
-        if system_msg:
-            self._agent.instructions = [system_msg]
+    def _create_agent(self, instructions: list[str] | None = None):
+        """创建新 Agent 实例（避免指令副作用）"""
+        from agno.agent import Agent
+        return Agent(
+            model=get_agno_model(),
+            instructions=instructions or self._agent.instructions,
+            markdown=True,
+        )
 
-        response = self._agent.run(user_msg)
+    async def chat(self, messages: list[dict], **kwargs) -> str:
+        """异步对话接口"""
+        user_msg, instructions = self._extract_messages(messages)
+        agent = self._create_agent(instructions) if instructions else self._agent
+        response = await agent.arun(user_msg)
         return response.content or ""
 
     async def chat_stream(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
-        """流式对话接口"""
-        user_msg = messages[-1]["content"] if messages else ""
-        system_msg = ""
-        for m in messages:
-            if m["role"] == "system":
-                system_msg = m["content"]
-                break
-
-        if system_msg:
-            self._agent.instructions = [system_msg]
-
-        async for event in self._agent.arun_stream(user_msg):
+        """异步流式对话接口"""
+        user_msg, instructions = self._extract_messages(messages)
+        agent = self._create_agent(instructions) if instructions else self._agent
+        async for event in agent.arun_stream(user_msg):
             if hasattr(event, "content") and event.content:
                 yield event.content
 
     async def chat_with_tools(self, messages: list[dict], tools: list[dict], **kwargs) -> dict:
         """支持工具调用的对话 - 使用 Agno Agent 的工具循环"""
-        user_msg = messages[-1]["content"] if messages else ""
-        system_msg = ""
-        for m in messages:
-            if m["role"] == "system":
-                system_msg = m["content"]
-                break
-
-        if system_msg:
-            self._agent.instructions = [system_msg]
-
-        response = self._agent.run(user_msg)
+        user_msg, instructions = self._extract_messages(messages)
+        agent = self._create_agent(instructions) if instructions else self._agent
+        response = await agent.arun(user_msg)
         return {
             "role": "assistant",
             "content": response.content or "",
