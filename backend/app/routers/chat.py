@@ -10,6 +10,7 @@ from ..schemas import ChatSendRequest, ChatResponse, ChatNLUResult
 from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
 from ..core.followup_tools import FOLLOWUP_TOOLS, dispatch_tool
 from ..core.agno_client import get_agno_client
+from ..core.agno_rag import agno_rag_engine
 from ..models import HealthDataPoint, Pregnant, FollowUpRecord
 from ..database import SessionLocal
 from ..config import settings
@@ -585,10 +586,10 @@ async def rag_ask(req: RAGAskRequest):
 
     # 获取孕妇上下文
     patient_context = ""
-    if req.pregnant_id:
+    if req.patient_id:
         db = SessionLocal()
         try:
-            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.patient_id).first()
             if pregnant and pregnant.gestational_age_days:
                 gw = pregnant.gestational_age_days // 7
                 gd = pregnant.gestational_age_days % 7
@@ -598,11 +599,18 @@ async def rag_ask(req: RAGAskRequest):
         finally:
             db.close()
 
-    result = await rag_engine.ask(
-        question=req.question,
-        patient_context=patient_context,
-        top_k=req.top_k,
-    )
+    if settings.agno_enabled:
+        result = await agno_rag_engine.ask(
+            question=req.question,
+            patient_context=patient_context,
+            top_k=req.top_k,
+        )
+    else:
+        result = await rag_engine.ask(
+            question=req.question,
+            patient_context=patient_context,
+            top_k=req.top_k,
+        )
     return RAGAskResponse(**result)
 
 
