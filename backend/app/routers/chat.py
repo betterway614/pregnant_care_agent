@@ -9,6 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 from ..schemas import ChatSendRequest, ChatResponse, ChatNLUResult
 from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
 from ..core.followup_tools import FOLLOWUP_TOOLS, dispatch_tool
+from ..core.agno_client import get_agno_client
 from ..models import HealthDataPoint, Pregnant, FollowUpRecord
 from ..database import SessionLocal
 from ..config import settings
@@ -108,9 +109,13 @@ async def send_message(req: ChatSendRequest):
     }
     user_msg = {"role": "user", "content": req.message}
 
-    # 5. 调用LLM获取回复
+    # 5. 调用LLM获取回复（支持 Agno 模式切换）
     try:
-        response = await llm.chat([system_prompt, user_msg], max_tokens=1024)
+        if settings.agno_enabled:
+            agno = get_agno_client()
+            response = await agno.chat([system_prompt, user_msg])
+        else:
+            response = await llm.chat([system_prompt, user_msg], max_tokens=1024)
     except Exception as e:
         # LLM调用失败时回退到mock
         from ..core import MockLLMClient
@@ -257,11 +262,17 @@ async def send_message_stream(req: ChatSendRequest):
         """SSE 事件生成器"""
         full_response = ""
 
-        # 调用LLM流式接口
+        # 调用LLM流式接口（支持 Agno 模式切换）
         try:
-            async for chunk in llm.chat_stream(ctx["messages"], max_tokens=1024):
-                full_response += chunk
-                yield {"event": "chunk", "data": chunk}
+            if settings.agno_enabled:
+                agno = get_agno_client()
+                async for chunk in agno.chat_stream(ctx["messages"]):
+                    full_response += chunk
+                    yield {"event": "chunk", "data": chunk}
+            else:
+                async for chunk in llm.chat_stream(ctx["messages"], max_tokens=1024):
+                    full_response += chunk
+                    yield {"event": "chunk", "data": chunk}
         except Exception:
             mock = MockLLMClient()
             async for chunk in mock.chat_stream(ctx["messages"]):
