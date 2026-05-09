@@ -1,3 +1,4 @@
+from .agno_client import get_agno_client, AgnoClient, get_agno_model, reset_agno_client
 from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient, LocalOllamaClient
 from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
@@ -6,6 +7,7 @@ from .embedding import get_embedding_client, EmbeddingClient, MockEmbedding, Hug
 from .rag_engine import rag_engine, RAGEngine
 
 __all__ = [
+    "get_agno_client", "AgnoClient", "get_agno_model", "reset_agno_client",
     "get_llm_client", "LLMClient", "MockLLMClient", "CloudAPIClient", "LocalOllamaClient",
     "nlu_engine", "RuleBaseNLU", "NLUResult",
     "memory_manager", "MemoryManager",
