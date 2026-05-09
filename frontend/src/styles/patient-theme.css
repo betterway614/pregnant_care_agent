@@ -1,0 +1,456 @@
+/* 孕妇端暖色主题 - Warm & Nurturing */
+:root {
+  --pt-primary: #F48FB1;
+  --pt-primary-dark: #EC407A;
+  --pt-primary-light: #FCE4EC;
+  --pt-accent: #CE93D8;
+  --pt-accent-light: #F3E5F5;
+  --pt-gradient: linear-gradient(160deg, #FCE4EC 0%, #F3E5F5 40%, #E8EAF6 100%);
+  --pt-gradient-header: linear-gradient(135deg, #F8BBD0 0%, #E1BEE7 50%, #C5CAE9 100%);
+  --pt-card-bg: rgba(255, 255, 255, 0.85);
+  --pt-card-bg-solid: #FFFFFF;
+  --pt-shadow: 0 2px 16px rgba(244, 143, 177, 0.12);
+  --pt-shadow-hover: 0 6px 24px rgba(244, 143, 177, 0.2);
+  --pt-text: #4A4458;
+  --pt-text-secondary: #7C7590;
+  --pt-text-muted: #B0A8BC;
+  --pt-border: #F3E5F5;
+  --pt-radius: 20px;
+  --pt-radius-sm: 14px;
+  --pt-tab-height: 68px;
+}
+
+/* 暖色主题覆盖 */
+.patient-theme {
+  font-family: 'Noto Sans', -apple-system, sans-serif;
+  color: var(--pt-text);
+  background: var(--pt-gradient);
+  min-height: 100vh;
+}
+
+.patient-theme .page-container {
+  padding: 16px;
+}
+
+/* 渐变头部卡片 */
+.patient-header-card {
+  background: var(--pt-gradient-header);
+  border-radius: var(--pt-radius);
+  padding: 24px 20px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  min-height: 160px;
+}
+
+.patient-header-card::after {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -20px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.patient-header-card__greeting {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+  margin-bottom: 2px;
+}
+
+.patient-header-card__name {
+  font-family: 'Figtree', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.patient-header-card__week {
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.patient-header-card__baby {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.patient-header-card__baby-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.patient-header-card__baby-text {
+  font-size: 13px;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+/* 暖色信息卡片 */
+.patient-info-card {
+  background: var(--pt-card-bg);
+  backdrop-filter: blur(10px);
+  border-radius: var(--pt-radius);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  box-shadow: var(--pt-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.patient-info-card__title {
+  font-family: 'Figtree', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pt-text);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.patient-info-card__title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pt-primary);
+}
+
+/* 今日提醒项 */
+.reminder-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pt-border);
+}
+
+.reminder-item:last-child {
+  border-bottom: none;
+}
+
+.reminder-item__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.reminder-item__icon.pink { background: #FCE4EC; color: #EC407A; }
+.reminder-item__icon.purple { background: #F3E5F5; color: #AB47BC; }
+.reminder-item__icon.blue { background: #E3F2FD; color: #42A5F5; }
+.reminder-item__icon.orange { background: #FFF3E0; color: #FF9800; }
+
+.reminder-item__text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--pt-text);
+  font-weight: 500;
+}
+
+.reminder-item__check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #E0D8E8;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.reminder-item__check.done {
+  background: var(--pt-primary);
+  border-color: var(--pt-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+}
+
+/* 工具网格 */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.tool-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: var(--pt-radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-item:hover {
+  background: var(--pt-primary-light);
+}
+
+.tool-item:active {
+  transform: scale(0.95);
+}
+
+.tool-item__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.tool-item__icon.pink { background: #FCE4EC; color: #EC407A; }
+.tool-item__icon.purple { background: #F3E5F5; color: #AB47BC; }
+.tool-item__icon.blue { background: #E3F2FD; color: #42A5F5; }
+.tool-item__icon.teal { background: #E0F2F1; color: #009688; }
+.tool-item__icon.orange { background: #FFF3E0; color: #FF9800; }
+.tool-item__icon.green { background: #E8F5E9; color: #66BB6A; }
+
+.tool-item__label {
+  font-size: 12px;
+  color: var(--pt-text-secondary);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* 暖心进度条 */
+.pregnancy-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.pregnancy-progress__ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.pregnancy-progress__ring svg {
+  transform: rotate(-90deg);
+}
+
+.pregnancy-progress__value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.pregnancy-progress__value .weeks {
+  font-family: 'Figtree', sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--pt-primary-dark);
+  line-height: 1;
+}
+
+.pregnancy-progress__value .label {
+  font-size: 11px;
+  color: var(--pt-text-muted);
+  margin-top: 2px;
+}
+
+.pregnancy-progress__info {
+  flex: 1;
+}
+
+.pregnancy-progress__info .size {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pt-text);
+}
+
+.pregnancy-progress__info .desc {
+  font-size: 13px;
+  color: var(--pt-text-secondary);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* 底部标签栏 - 毛玻璃 */
+.patient-tab-bar {
+  flex-shrink: 0;
+  position: relative;
+  left: 0;
+  right: 0;
+  height: var(--pt-tab-height);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.patient-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--pt-text-muted);
+  transition: all 0.2s;
+  min-width: 52px;
+}
+
+.patient-tab-item.active {
+  color: var(--pt-primary-dark);
+}
+
+.patient-tab-item.active .patient-tab-label {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.patient-tab-icon {
+  font-size: 22px;
+  transition: transform 0.2s;
+}
+
+.patient-tab-item.active .patient-tab-icon {
+  transform: scale(1.1);
+}
+
+.patient-tab-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* Element Plus 覆盖 */
+.patient-theme .el-card {
+  background: var(--pt-card-bg);
+  border-radius: var(--pt-radius);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.patient-theme .el-button--primary {
+  background: linear-gradient(135deg, var(--pt-primary), var(--pt-primary-dark));
+  border: none;
+  box-shadow: 0 4px 14px rgba(244, 143, 177, 0.3);
+}
+
+.patient-theme .el-button--primary:hover {
+  box-shadow: 0 6px 20px rgba(244, 143, 177, 0.4);
+}
+
+/* ========== 移动端响应式适配 ========== */
+
+/* 小屏手机 (iPhone SE, 320-374px) */
+@media (max-width: 374px) {
+  .patient-theme .page-container {
+    padding: 10px;
+  }
+
+  .patient-header-card {
+    padding: 16px 14px;
+    min-height: 120px;
+    border-radius: var(--pt-radius-sm);
+  }
+
+  .patient-header-card__name { font-size: 18px; }
+  .patient-header-card__week { font-size: 13px; }
+  .patient-header-card__baby-icon { width: 36px; height: 36px; font-size: 22px; }
+
+  .patient-info-card {
+    padding: 14px;
+    margin-bottom: 10px;
+    border-radius: var(--pt-radius-sm);
+  }
+
+  .patient-info-card__title { font-size: 14px; }
+
+  .tool-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+
+  .tool-item { padding: 8px 4px; }
+  .tool-item__icon { width: 36px; height: 36px; font-size: 16px; border-radius: 10px; }
+  .tool-item__label { font-size: 10px; }
+
+  .pregnancy-progress__ring { width: 64px; height: 64px; }
+  .pregnancy-progress__value .weeks { font-size: 22px; }
+  .pregnancy-progress__info .size { font-size: 13px; }
+
+  .patient-tab-item { min-width: 44px; padding: 4px 8px; }
+  .patient-tab-icon { font-size: 20px; }
+  .patient-tab-label { font-size: 10px; }
+}
+
+/* 标准手机 (iPhone 12/13/14, 375-389px) */
+@media (min-width: 375px) and (max-width: 389px) {
+  .patient-theme .page-container {
+    padding: 12px;
+    padding-bottom: 0;
+  }
+
+  .patient-header-card {
+    padding: 18px 16px;
+    min-height: 140px;
+  }
+
+  .patient-header-card__name { font-size: 20px; }
+  .patient-header-card__week { font-size: 14px; }
+
+  .patient-info-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .tool-grid { gap: 6px; }
+  .tool-item__icon { width: 40px; height: 40px; font-size: 18px; }
+  .tool-item__label { font-size: 11px; }
+
+  .pregnancy-progress__ring { width: 72px; height: 72px; }
+  .pregnancy-progress__value .weeks { font-size: 24px; }
+
+  .patient-tab-icon { font-size: 20px; }
+  .patient-tab-label { font-size: 10px; }
+}
+
+/* 大屏手机 (iPhone 14 Pro Max, 390-430px) */
+@media (min-width: 390px) and (max-width: 430px) {
+  .patient-theme .page-container {
+    padding: 14px 16px;
+    padding-bottom: 0;
+  }
+}
+
+/* 平板及以上 (431px+) */
+@media (min-width: 431px) {
+  .patient-theme .page-container {
+    padding: 20px 24px;
+    padding-bottom: 0;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+}

@@ -1,0 +1,163 @@
+"""SQLAlchemy 数据模型定义"""
+import uuid
+from datetime import datetime, date
+from sqlalchemy import (
+    Column, String, Integer, Float, DateTime, Date,
+    Text, ForeignKey, JSON, TypeDecorator
+)
+from ..database import Base
+
+
+class _UUID(TypeDecorator):
+    """跨数据库UUID类型：SQLite用String，PostgreSQL用原生UUID"""
+    impl = String(36)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        if dialect.name == "postgresql":
+            return value
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(value)
+
+
+UUIDColumn = _UUID
+GUID = _UUID  # 别名，保持兼容
+
+
+class Pregnant(Base):
+    """孕妇（匿名哈希ID）"""
+    __tablename__ = "pregnant"
+
+    pregnant_id = Column(String(64), primary_key=True, comment="匿名哈希ID")
+    display_name = Column(String(32), nullable=False, comment="展示名称")
+    nickname = Column(String(32), nullable=True, comment="昵称")
+    phone = Column(String(20), nullable=True, comment="手机号(脱敏)")
+    hospital_id = Column(String(32), nullable=True, comment="医院ID卡号")
+    gestational_age_days = Column(Integer, nullable=True, comment="孕周天数")
+    lmp_date = Column(Date, nullable=True, comment="末次月经")
+    edd = Column(Date, nullable=True, comment="预产期")
+    risk_tags = Column(JSON, default=list, comment="风险标签列表")
+    avatar_url = Column(String(256), nullable=True, comment="头像URL")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class HealthDataPoint(Base):
+    """健康数据点"""
+    __tablename__ = "health_data_points"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    metric_code = Column(String(32), nullable=False, comment="指标代码: weight/sbp/dbp/fetal_movement/...")
+    value = Column(Float, nullable=False)
+    unit = Column(String(16), nullable=False)
+    recorded_at = Column(DateTime, default=datetime.utcnow)
+    source = Column(String(32), default="PATIENT_REPORT", comment="数据来源")
+
+
+class ScheduleNode(Base):
+    """排期节点"""
+    __tablename__ = "schedule_nodes"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    gest_week = Column(Integer, nullable=False, comment="孕周")
+    scheduled_date = Column(Date, nullable=False, comment="计划日期")
+    item = Column(String(128), nullable=False, comment="检查项目")
+    node_type = Column(String(32), default="routine", comment="节点类型: routine/fgr_high_risk/custom")
+    status = Column(String(16), default="pending", comment="状态: pending/published/completed")
+    is_published = Column(Integer, default=0, comment="是否已发布")
+
+
+class FollowUpRecord(Base):
+    """随访记录"""
+    __tablename__ = "follow_up_records"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    gestational_week = Column(String(16), comment="孕周")
+    follow_up_date = Column(DateTime, default=datetime.utcnow)
+    self_reported_data = Column(JSON, default=dict, comment="自报数据")
+    chief_complaint = Column(Text, nullable=True, comment="主诉")
+    health_education = Column(JSON, default=list, comment="健康教育内容")
+    status = Column(String(16), default="draft", comment="draft/confirmed/archived")
+    summary = Column(Text, nullable=True, comment="随访摘要")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FgrAssessment(Base):
+    """FGR评估记录"""
+    __tablename__ = "fgr_assessments"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    case_id = Column(String(64), nullable=False, comment="病例编号")
+    image_hash = Column(String(128), nullable=True, comment="脱敏B超图片哈希")
+    image_type = Column(String(32), nullable=True, comment="切面类型: HC/AC/FL/UA_Doppler")
+    gestational_weeks = Column(Float, nullable=False)
+    risk_level = Column(String(16), nullable=False, comment="low/medium/high/critical")
+    confidence_lower = Column(Float, nullable=True)
+    confidence_upper = Column(Float, nullable=True)
+    explanation = Column(Text, nullable=True)
+    processing_time_ms = Column(Integer, nullable=True)
+    assessed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Alert(Base):
+    """预警记录"""
+    __tablename__ = "alerts"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    trigger_source = Column(String(32), default="RULE_ENGINE", comment="RULE_ENGINE/FGR_ALGORITHM/MANUAL")
+    rule_id = Column(String(32), nullable=True)
+    level = Column(String(16), default="YELLOW", comment="RED/ORANGE/YELLOW")
+    message = Column(Text, nullable=False)
+    details = Column(JSON, default=dict, comment="触发详情")
+    status = Column(String(16), default="PENDING", comment="PENDING/CONFIRMED/DISMISSED")
+    reviewed_by = Column(String(64), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FetalMovementSession(Base):
+    """胎动计数会话"""
+    __tablename__ = "fetal_movement_sessions"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    start_time = Column(DateTime, nullable=False, comment="开始计数时间")
+    end_time = Column(DateTime, nullable=True, comment="结束计数时间")
+    duration_minutes = Column(Integer, nullable=True, comment="持续分钟数")
+    total_count = Column(Integer, default=0, comment="总胎动次数")
+    kick_times = Column(JSON, default=list, comment="每次胎动时刻列表")
+    notes = Column(Text, nullable=True, comment="备注")
+
+
+class MedicalOrder(Base):
+    """医嘱记录"""
+    __tablename__ = "medical_orders"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    alert_id = Column(UUIDColumn(as_uuid=True), ForeignKey("alerts.id"), nullable=True)
+    content = Column(Text, nullable=False, comment="医嘱内容")
+    order_type = Column(String(32), default="standard", comment="standard/custom")
+    source = Column(String(32), default="AI_RECOMMENDED", comment="AI_RECOMMENDED/DOCTOR_WRITTEN")
+    status = Column(String(16), default="draft", comment="draft/signed/executed")
+    created_by = Column(String(64), nullable=True, comment="医生ID")
+    signed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
