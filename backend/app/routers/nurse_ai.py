@@ -48,6 +48,25 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
                 f"护士AI分析提示：{result.risk_assessment[:100]}",
                 "MANUAL"
             )
+
+        # 生成随访排期推荐
+        schedule_result = tool_recommend_followup_schedule(db, req.pregnant_id)
+        if "error" not in schedule_result:
+            result.followup_schedule = FollowupScheduleResponse(**schedule_result)
+
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/schedule-recommend/{pregnant_id}")
+def recommend_followup_schedule(pregnant_id: str):
+    """获取随访排期推荐列表"""
+    db = SessionLocal()
+    try:
+        result = tool_recommend_followup_schedule(db, pregnant_id)
+        if "error" in result:
+            raise HTTPException(404, result["error"])
         return result
     finally:
         db.close()
