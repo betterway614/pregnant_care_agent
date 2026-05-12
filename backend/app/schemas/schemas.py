@@ -252,6 +252,35 @@ class RecommendResponse(BaseModel):
     source: str = "AI_CARE"
 
 
+# === 随访排期推荐 ===
+class FollowupScheduleRecommendation(BaseModel):
+    recommended_date: str                    # ISO日期 "2026-05-15" 或 "immediate"
+    gestational_week: str                    # 该日期的孕周 "29+0"
+    template_id: str                         # standard / fgr_high_risk / post_discharge
+    reason: str                              # 推荐原因（中文）
+    priority: str                            # high / medium / low
+    is_overdue: bool = False
+    suggested_actions: list[str] = []
+
+
+class FollowupScheduleContext(BaseModel):
+    days_since_last_followup: int | None = None
+    last_followup_date: str | None = None
+    last_followup_status: str | None = None
+    health_data_frequency: str = "inactive"  # active / moderate / inactive
+    health_data_count_14d: int = 0
+    active_alert_count: int = 0
+    has_critical_alerts: bool = False
+    risk_tags: list[str] = []
+
+
+class FollowupScheduleResponse(BaseModel):
+    pregnant_id: str
+    current_gestational_week: str
+    recommendations: list[FollowupScheduleRecommendation] = []
+    context_summary: FollowupScheduleContext = FollowupScheduleContext()
+
+
 # === Nurse AI ===
 class NurseAnalyzeRequest(BaseModel):
     pregnant_id: str
@@ -264,6 +293,7 @@ class NurseAnalyzeResponse(BaseModel):
     risk_assessment: str = ""
     nursing_suggestions: str = ""
     followup_focus: list[str] = []
+    followup_schedule: FollowupScheduleResponse | None = None
 
 
 class FollowUpGenerateRequest(BaseModel):
@@ -290,6 +320,8 @@ class DoctorAnalyzeResponse(BaseModel):
     evidence_references: list[str] = []
     suggested_orders: str = ""
     risk_summary: str = ""
+    differential_diagnosis: list[dict] = []  # [{condition, confidence, reasoning}]
+    reasoning_chain: list[str] = []  # 逐步推理链
 
 
 # === Order Explain ===

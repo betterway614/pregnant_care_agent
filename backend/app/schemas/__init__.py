@@ -11,6 +11,7 @@ from .schemas import (
     RecommendRequest, RecommendResponse,
     NurseAnalyzeRequest, NurseAnalyzeResponse,
     FollowUpGenerateRequest, FollowUpGenerateResponse,
+    FollowupScheduleRecommendation, FollowupScheduleContext, FollowupScheduleResponse,
     DoctorAnalyzeRequest, DoctorAnalyzeResponse,
     OrderExplainResponse,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "RecommendRequest", "RecommendResponse",
     "NurseAnalyzeRequest", "NurseAnalyzeResponse",
     "FollowUpGenerateRequest", "FollowUpGenerateResponse",
+    "FollowupScheduleRecommendation", "FollowupScheduleContext", "FollowupScheduleResponse",
     "DoctorAnalyzeRequest", "DoctorAnalyzeResponse",
     "OrderExplainResponse",
 ]
