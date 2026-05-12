@@ -1,10 +1,14 @@
 """护士AI辅助 API"""
 import json
-from datetime import date
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import desc, func
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment
-from ..schemas import NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse
+from ..schemas import (
+    NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse,
+    FollowupScheduleResponse, FollowupScheduleRecommendation, FollowupScheduleContext,
+)
 from ..core import get_llm_client
 from ..core.prompts import get_nurse_system_prompt
 from ..config import settings
@@ -534,3 +538,217 @@ def tool_update_nursing_note(db, record_id: str, summary: str, health_education:
         record.health_education = health_education
     db.commit()
     return {"success": True, "message": "护理笔记已更新"}
+
+
+# ==================== 随访排期推荐 ====================
+
+def _determine_base_interval(gest_week: int, risk_tags: list, has_critical: bool) -> int:
+    """返回建议随访间隔（天）"""
+    if has_critical:
+        return 0  # 立即
+    if gest_week >= 36:
+        return 7
+    if any(t in risk_tags for t in ("FGR高危", "高血压")):
+        return 10
+    if "GDM" in risk_tags:
+        return 14
+    return 21
+
+
+def _select_template(risk_tags: list, gest_week: int) -> str:
+    """根据风险标签和孕周选择随访模板"""
+    if any(t in risk_tags for t in ("FGR高危", "高血压")):
+        return "fgr_high_risk"
+    if gest_week >= 37:
+        return "post_discharge"
+    return "standard"
+
+
+def _build_suggested_actions(gest_week: int, risk_tags: list, data_freq: str) -> list[str]:
+    """根据条件生成建议动作列表"""
+    actions = ["确认随访时间并通知孕妇"]
+    if "FGR高危" in risk_tags:
+        actions.append("提醒携带最近B超报告")
+    if "高血压" in risk_tags:
+        actions.append("提醒携带血压监测记录")
+    if "GDM" in risk_tags:
+        actions.append("提醒携带血糖监测记录")
+    if data_freq == "inactive":
+        actions.append("督促孕妇加强健康数据上报")
+    if gest_week >= 36:
+        actions.append("确认分娩准备情况")
+    return actions
+
+
+def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
+    """根据历史随访和数据上报情况，生成随访排期推荐列表"""
+    # 1. 查询孕妇信息
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        return {"error": "孕妇不存在", "pregnant_id": pregnant_id}
+
+    gest_days = pregnant.gestational_age_days or 0
+    gest_week = gest_days // 7
+    gest_day = gest_days % 7
+    risk_tags = pregnant.risk_tags or []
+    current_date = datetime.utcnow().date()
+
+    # 2. 查询最近随访记录
+    last_followup = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == pregnant_id
+    ).order_by(desc(FollowUpRecord.created_at)).first()
+
+    days_since_last = None
+    last_followup_date = None
+    last_followup_status = None
+    if last_followup and last_followup.created_at:
+        last_followup_date = last_followup.created_at.date()
+        days_since_last = (current_date - last_followup_date).days
+        last_followup_status = last_followup.status
+
+    # 3. 查询活跃预警
+    active_alerts = db.query(Alert).filter(
+        Alert.pregnant_id == pregnant_id,
+        Alert.status == "PENDING"
+    ).all()
+    has_critical = any(a.level in ("RED", "ORANGE") for a in active_alerts)
+    alert_count = len(active_alerts)
+
+    # 4. 查询14天健康数据量
+    fourteen_days_ago = datetime.utcnow() - timedelta(days=14)
+    data_count_14d = db.query(func.count(HealthDataPoint.id)).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.recorded_at >= fourteen_days_ago
+    ).scalar() or 0
+
+    if data_count_14d >= 7:
+        data_freq = "active"
+    elif data_count_14d >= 3:
+        data_freq = "moderate"
+    else:
+        data_freq = "inactive"
+
+    # 5. 计算排期
+    interval = _determine_base_interval(gest_week, risk_tags, has_critical)
+    template = _select_template(risk_tags, gest_week)
+    recommendations = []
+
+    # 5.1 立即随访：高危预警
+    if has_critical:
+        critical_alerts = [a for a in active_alerts if a.level in ("RED", "ORANGE")]
+        reasons = [f"[{a.level}] {a.message}" for a in critical_alerts[:3]]
+        recommendations.append({
+            "recommended_date": "immediate",
+            "gestational_week": f"{gest_week}+{gest_day}",
+            "template_id": _select_template(risk_tags, gest_week),
+            "reason": f"存在{len(critical_alerts)}条高级别预警需立即处理：{'；'.join(reasons)}",
+            "priority": "high",
+            "is_overdue": False,
+            "suggested_actions": ["立即联系孕妇进行随访", "确认预警详情并处理"],
+        })
+
+    # 5.2 逾期检查
+    if interval > 0 and days_since_last is not None and days_since_last > interval * 1.5:
+        recommendations.append({
+            "recommended_date": "immediate",
+            "gestational_week": f"{gest_week}+{gest_day}",
+            "template_id": template,
+            "reason": f"已超过{days_since_last}天未随访（建议间隔{interval}天），需尽快安排",
+            "priority": "high",
+            "is_overdue": True,
+            "suggested_actions": ["尽快安排随访", "了解未随访原因"],
+        })
+    elif interval > 0 and days_since_last is None and gest_week >= 12:
+        recommendations.append({
+            "recommended_date": "immediate",
+            "gestational_week": f"{gest_week}+{gest_day}",
+            "template_id": template,
+            "reason": "该孕妇尚无随访记录，建议尽快安排首次随访",
+            "priority": "high",
+            "is_overdue": True,
+            "suggested_actions": ["安排首次随访", "建立随访档案"],
+        })
+
+    # 5.3 数据督促
+    if data_freq == "inactive" and risk_tags:
+        has_data_engagement = any(r.get("reason", "").startswith("数据不活跃") for r in recommendations)
+        if not has_data_engagement:
+            recommendations.append({
+                "recommended_date": "immediate",
+                "gestational_week": f"{gest_week}+{gest_day}",
+                "template_id": template,
+                "reason": f"数据不活跃：14天内仅上报{data_count_14d}条，有风险标签的孕妇需加强监测",
+                "priority": "medium",
+                "is_overdue": False,
+                "suggested_actions": ["督促孕妇加强健康数据上报", "了解数据未上报原因"],
+            })
+
+    # 5.4 未来排期（2-3次）
+    for i in range(1, 4):
+        future_date = current_date + timedelta(days=interval * i)
+        future_days_offset = interval * i
+        future_gest_week = gest_week + (future_days_offset // 7)
+        future_gest_day = gest_day + (future_days_offset % 7)
+        if future_gest_day >= 7:
+            future_gest_week += 1
+            future_gest_day -= 7
+
+        if future_gest_week > 42:
+            break
+
+        # 优先级
+        if future_gest_week >= 36:
+            priority = "high"
+        elif any(t in risk_tags for t in ("FGR高危", "高血压")):
+            priority = "medium"
+        else:
+            priority = "low"
+
+        if data_freq == "inactive" and priority == "low":
+            priority = "medium"
+
+        future_template = _select_template(risk_tags, future_gest_week)
+
+        reason_parts = []
+        if future_gest_week >= 36:
+            reason_parts.append(f"孕{future_gest_week}周已进入晚期，需每周随访")
+        if any(t in risk_tags for t in ("FGR高危", "高血压")):
+            reason_parts.append("高危孕妇需加密随访")
+        if "GDM" in risk_tags:
+            reason_parts.append("妊娠期糖尿病需定期监测")
+        if not reason_parts:
+            reason_parts.append(f"常规随访（建议间隔{interval}天）")
+
+        recommendations.append({
+            "recommended_date": future_date.isoformat(),
+            "gestational_week": f"{future_gest_week}+{future_gest_day}",
+            "template_id": future_template,
+            "reason": "；".join(reason_parts),
+            "priority": priority,
+            "is_overdue": False,
+            "suggested_actions": _build_suggested_actions(future_gest_week, risk_tags, data_freq),
+        })
+
+    # 6. 排序：immediate优先，然后按priority，最后按日期
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    recommendations.sort(key=lambda r: (
+        0 if r["recommended_date"] == "immediate" else 1,
+        priority_order.get(r["priority"], 2),
+        r["recommended_date"] if r["recommended_date"] != "immediate" else "",
+    ))
+
+    return {
+        "pregnant_id": pregnant_id,
+        "current_gestational_week": f"{gest_week}+{gest_day}",
+        "recommendations": recommendations[:5],  # 最多5条
+        "context_summary": {
+            "days_since_last_followup": days_since_last,
+            "last_followup_date": last_followup_date.isoformat() if last_followup_date else None,
+            "last_followup_status": last_followup_status,
+            "health_data_frequency": data_freq,
+            "health_data_count_14d": data_count_14d,
+            "active_alert_count": alert_count,
+            "has_critical_alerts": has_critical,
+            "risk_tags": risk_tags,
+        },
+    }
