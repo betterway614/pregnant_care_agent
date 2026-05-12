@@ -9,8 +9,9 @@ import json
 import re
 from uuid import UUID
 from sqlalchemy.orm import Session
-from ..models import FollowUpRecord, Pregnant, HealthDataPoint
+from ..models import Alert, FollowUpRecord, Pregnant, HealthDataPoint
 from ..services import followup_service
+from .rule_engine import rule_engine
 from datetime import datetime
 
 # ==================== Tool Schemas (OpenAI Function Calling 格式) ====================
@@ -157,6 +158,9 @@ async def execute_record_answer(
 
     db.commit()
 
+    # 3.5 保存健康数据后触发规则引擎评估
+    _evaluate_rules_after_answer(record.pregnant_id, db)
+
     # 4. 计算剩余问题
     template = followup_service.get_template_from_questions(current_data)
     all_keys = [q["key"] for q in template["questions"]]
@@ -296,3 +300,57 @@ async def dispatch_tool(tool_call: dict, db: Session) -> dict:
             args["record_id"], args.get("summary", ""), db
         )
     return {"error": f"未知工具: {func_name}"}
+
+
+def _evaluate_rules_after_answer(pregnant_id: str, db: Session):
+    """随访回答后触发规则引擎评估，自动创建预警"""
+    from sqlalchemy import desc
+    from datetime import timedelta
+
+    # 收集该孕妇最近7天的健康数据
+    recent_points = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.recorded_at >= datetime.utcnow() - timedelta(days=7),
+    ).order_by(desc(HealthDataPoint.recorded_at)).all()
+
+    if not recent_points:
+        return
+
+    # 构建规则引擎上下文：取每种指标的最新值
+    context = {}
+    metric_values = {}
+    for point in recent_points:
+        if point.metric_code not in metric_values:
+            metric_values[point.metric_code] = []
+        metric_values[point.metric_code].append(point.value)
+
+    for metric, values in metric_values.items():
+        if metric in ("sbp", "dbp", "weight", "fetal_movement", "blood_sugar",
+                       "emotion_score", "sleep_hours"):
+            context[metric] = values[0]  # 最新值
+
+    # 获取孕周
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if pregnant and pregnant.gestational_age_days:
+        context["gest_week"] = pregnant.gestational_age_days // 7
+
+    # 计算胎动平均值（排除最新一条）
+    fm_values = metric_values.get("fetal_movement", [])
+    if len(fm_values) > 1:
+        context["fetal_movement_avg"] = sum(fm_values[1:]) / len(fm_values[1:])
+
+    # 评估规则
+    hits = rule_engine.evaluate_all(context)
+    for hit in hits:
+        alert = Alert(
+            pregnant_id=pregnant_id,
+            trigger_source="RULE_ENGINE",
+            rule_id=hit["rule_id"],
+            level=hit["level"],
+            message=hit["message"],
+            details=hit,
+            status="PENDING",
+        )
+        db.add(alert)
+    if hits:
+        db.commit()

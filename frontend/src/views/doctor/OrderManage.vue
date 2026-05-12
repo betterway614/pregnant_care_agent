@@ -184,6 +184,9 @@ import { ref, onMounted } from 'vue'
 import { Search, Refresh, Document } from '@element-plus/icons-vue'
 import { orderApi } from '@/api/endpoints'
 import type { MedicalOrder } from '@/types'
+import { useAppStore } from '@/stores/app'
+
+const appStore = useAppStore()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -303,7 +306,8 @@ async function doSignOrder() {
   if (!signOrder.value) return
   submitting.value = true
   try {
-    await orderApi.sign(signOrder.value.id, 'current-doctor')
+    const doctorId = appStore.currentRole === 'doctor' ? 'doctor_001' : 'current-doctor'
+    await orderApi.sign(signOrder.value.id, doctorId)
     signDialogVisible.value = false
     signOrder.value = null
     await loadOrders()

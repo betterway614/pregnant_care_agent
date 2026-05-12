@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # LLM配置
-    llm_mode: Literal["cloud", "local", "mock"] = "mock"
+    llm_mode: Literal["cloud", "local", "mock", "mixed"] = "mock"
+    llm_pregnant_mode: Literal["cloud", "local", "mock"] = "cloud"
     llm_api_key: str = "sk-placeholder"
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_model: str = "deepseek-chat"

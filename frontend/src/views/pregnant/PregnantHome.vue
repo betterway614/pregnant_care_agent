@@ -38,6 +38,50 @@
         </div>
       </div>
 
+      <!-- 待查看医嘱通知 -->
+      <el-card v-if="pendingOrders.length > 0" shadow="hover" class="notification-card" style="border-left: 4px solid #e6a23c;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">📋</span>
+          <div>
+            <div style="font-weight: 600; color: #303133;">待查看医嘱</div>
+            <div style="font-size: 13px; color: #909399;">您有 {{ pendingOrders.length }} 条医嘱待查看</div>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- AI 主动问候 -->
+      <div
+        v-if="proactiveGreeting"
+        class="proactive-greeting-card"
+      >
+        <div class="proactive-greeting__inner">
+          <span class="proactive-greeting__icon">{{ proactiveGreeting.icon }}</span>
+          <div class="proactive-greeting__text">{{ proactiveGreeting.message }}</div>
+        </div>
+      </div>
+
+      <!-- 健康趋势 -->
+      <div v-if="healthTrends.length > 0" class="health-trends-card">
+        <div class="health-trends__title">
+          <span class="dot" style="background: #42A5F5"></span>近期健康趋势
+        </div>
+        <div class="health-trends__list">
+          <div
+            v-for="trend in healthTrends"
+            :key="trend.metric"
+            class="trend-item"
+            :class="{ 'trend-item--warning': trend.is_normal === false }"
+          >
+            <div class="trend-item__header">
+              <span class="trend-item__icon">{{ trendIcon(trend.metric) }}</span>
+              <span class="trend-item__name">{{ trendName(trend.metric) }}</span>
+              <span class="trend-item__value">{{ trend.current_value }}{{ trend.unit }}</span>
+            </div>
+            <div class="trend-item__summary">{{ trend.summary }}</div>
+          </div>
+        </div>
+      </div>
+
       <!-- 胎宝宝变化 -->
       <div class="patient-info-card">
         <div class="patient-info-card__title">
@@ -115,13 +159,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Loading, Check, Clock, ScaleToOriginal, ColdDrink, Opportunity, ChatDotSquare, Calendar, Search, Document, HomeFilled } from '@element-plus/icons-vue'
-import { pregnantApi, recommendApi, followUpApi } from '@/api/endpoints'
+import { pregnantApi, recommendApi, followUpApi, chatApi, orderApi } from '@/api/endpoints'
 
 const router = useRouter()
 const loading = ref(true)
 const homeData = ref<any>(null)
 const recommend = ref<any>(null)
 const pendingFollowUps = ref<any[]>([])
+const proactiveGreeting = ref<{ message: string; greeting_type: string; icon: string } | null>(null)
+const healthTrends = ref<Array<{ metric: string; current_value: number; unit: string; trend: string; summary: string; is_normal: boolean | null }>>([])
+const pendingOrders = ref<any[]>([])
 
 const pregnantName = computed(() => homeData.value?.pregnant?.nickname || homeData.value?.pregnant?.display_name || '准妈妈')
 const gestWeek = computed(() => {
@@ -195,6 +242,66 @@ function goToFollowUp(recordId: string) {
   router.push(`/pregnant/chat?followup=${recordId}`)
 }
 
+async function fetchProactiveGreeting() {
+  try {
+    const pregnantId = localStorage.getItem('currentPregnantId') || ''
+    if (pregnantId) {
+      const res = await chatApi.getProactive(pregnantId)
+      proactiveGreeting.value = res.data
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+async function fetchHealthTrends() {
+  try {
+    const pregnantId = localStorage.getItem('currentPregnantId') || ''
+    if (pregnantId) {
+      const res = await chatApi.getTrends(pregnantId)
+      healthTrends.value = res.data?.trends || []
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+const loadPregnantOrders = async () => {
+  try {
+    const pid = localStorage.getItem('currentPregnantId') || ''
+    if (pid) {
+      const res = await orderApi.getPregnantOrders(pid)
+      pendingOrders.value = (res.data || []).filter((o: any) => o.status === 'signed')
+    }
+  } catch (e) {
+    // 静默处理
+  }
+}
+
+function trendIcon(metric: string): string {
+  const icons: Record<string, string> = {
+    weight: '⚖️',
+    systolic: '🫀',
+    diastolic: '🫀',
+    fetal_movement: '👶',
+    blood_sugar: '🩸',
+    heart_rate: '💓',
+  }
+  return icons[metric] || '📊'
+}
+
+function trendName(metric: string): string {
+  const names: Record<string, string> = {
+    weight: '体重',
+    systolic: '收缩压',
+    diastolic: '舒张压',
+    fetal_movement: '胎动',
+    blood_sugar: '血糖',
+    heart_rate: '心率',
+  }
+  return names[metric] || metric
+}
+
 async function fetchData() {
   loading.value = true
   try {
@@ -235,6 +342,9 @@ onMounted(() => {
   }
   fetchData()
   fetchFollowUps()
+  fetchProactiveGreeting()
+  fetchHealthTrends()
+  loadPregnantOrders()
 })
 </script>
 
@@ -258,6 +368,92 @@ onMounted(() => {
 
 .followup-notice-card:active {
   transform: scale(0.98);
+}
+
+/* AI 主动问候卡片 */
+.proactive-greeting-card {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-radius: var(--pt-radius);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(66, 165, 245, 0.2);
+  box-shadow: 0 2px 12px rgba(66, 165, 245, 0.1);
+}
+.proactive-greeting__inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.proactive-greeting__icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.proactive-greeting__text {
+  font-size: 14px;
+  color: #1565c0;
+  line-height: 1.5;
+}
+
+/* 健康趋势卡片 */
+.health-trends-card {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border-radius: var(--pt-radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+.health-trends__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2e7d32;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.health-trends__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trend-item {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(76, 175, 80, 0.1);
+}
+.trend-item--warning {
+  background: rgba(255, 243, 224, 0.8);
+  border-color: rgba(255, 152, 0, 0.3);
+}
+.trend-item__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.trend-item__icon {
+  font-size: 16px;
+}
+.trend-item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.trend-item__value {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+.trend-item--warning .trend-item__value {
+  color: #e65100;
+}
+.trend-item__summary {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  padding-left: 24px;
 }
 
 .followup-notice__inner {

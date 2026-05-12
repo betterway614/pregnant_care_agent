@@ -6,6 +6,7 @@ from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment
 from ..schemas import NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse
 from ..core import get_llm_client
+from ..core.prompts import get_nurse_system_prompt
 from ..config import settings
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
@@ -31,10 +32,19 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
         # 尝试LLM分析
         llm_result = await _try_llm_nurse_analyze(pregnant, gest_week, gest_day, risk_tags, patient_data)
         if llm_result:
-            return llm_result
+            result = llm_result
+        else:
+            # 模板兜底
+            result = _fallback_nurse_analyze(pregnant, gest_week, gest_day, risk_tags, patient_data)
 
-        # 模板兜底
-        return _fallback_nurse_analyze(pregnant, gest_week, gest_day, risk_tags, patient_data)
+        # 分析完成后自动创建预警（如果检测到高风险）
+        if "高风险" in (result.risk_assessment or "") or "异常" in (result.risk_assessment or ""):
+            tool_create_alert(
+                db, req.pregnant_id, "ORANGE",
+                f"护士AI分析提示：{result.risk_assessment[:100]}",
+                "MANUAL"
+            )
+        return result
     finally:
         db.close()
 
@@ -112,7 +122,7 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             client = get_llm_client()
         prompt = _build_nurse_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, patient_data)
         messages = [
-            {"role": "system", "content": "你是一位经验丰富的产科护士，擅长孕产妇护理和健康教育。请根据孕妇数据提供专业的护理分析。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：summary(综合概述), risk_assessment(风险评估), nursing_suggestions(护理建议), followup_focus(随访重点，字符串数组)"},
+            {"role": "system", "content": get_nurse_system_prompt()},
             {"role": "user", "content": prompt}
         ]
         response = await client.chat(messages)
@@ -388,3 +398,139 @@ def _parse_llm_json(response: str) -> dict | None:
         except json.JSONDecodeError:
             pass
     return None
+
+
+# ==================== 护士 AI 持续对话 ====================
+
+from fastapi.responses import JSONResponse
+from sse_starlette.sse import EventSourceResponse
+from ..core.prompts import get_nurse_chat_system_prompt
+
+
+@router.post("/chat/stream")
+async def nurse_chat_stream(req: dict):
+    """护士 AI 持续对话（SSE 流式）"""
+    message = req.get("message", "")
+    pregnant_id = req.get("pregnant_id", "")
+
+    if not message:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    # 构建护士 AI 上下文
+    db = SessionLocal()
+    patient_summary = ""
+    try:
+        if pregnant_id:
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+            if pregnant:
+                gw = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
+                risk_text = "、".join(pregnant.risk_tags) if pregnant.risk_tags else "无"
+                patient_summary = f"当前查看的孕妇: {pregnant.display_name}, 孕{gw}周, 风险: {risk_text}"
+
+                # 获取最近健康数据
+                from datetime import datetime, timedelta
+                recent = db.query(HealthDataPoint).filter(
+                    HealthDataPoint.pregnant_id == pregnant_id,
+                    HealthDataPoint.recorded_at >= datetime.now() - timedelta(days=7)
+                ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
+                if recent:
+                    data_lines = [f"  - {r.metric_code}: {r.value}{r.unit}" for r in recent]
+                    patient_summary += "\n近7日数据:\n" + "\n".join(data_lines)
+
+                # 获取活跃告警
+                alerts = db.query(Alert).filter(
+                    Alert.pregnant_id == pregnant_id,
+                    Alert.status == "pending"
+                ).all()
+                if alerts:
+                    alert_lines = [f"  - [{a.level}] {a.message}" for a in alerts]
+                    patient_summary += "\n活跃告警:\n" + "\n".join(alert_lines)
+    finally:
+        db.close()
+
+    system_prompt = get_nurse_chat_system_prompt(patient_summary)
+
+    async def event_generator():
+        try:
+            if settings.agno_enabled:
+                from ..core.agno_client import get_agno_client
+                client = get_agno_client()
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ]
+                async for chunk in client.chat_stream(messages):
+                    yield {"event": "chunk", "data": chunk}
+            else:
+                client = get_llm_client()
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ]
+                async for chunk in client.chat_stream(messages, max_tokens=1024):
+                    yield {"event": "chunk", "data": chunk}
+        except Exception:
+            from ..core.llm_client import MockLLMClient
+            mock = MockLLMClient()
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            async for chunk in mock.chat_stream(messages):
+                yield {"event": "chunk", "data": chunk}
+
+        yield {"event": "done", "data": json.dumps({"source": "NURSE_AI"})}
+
+    return EventSourceResponse(event_generator())
+
+
+# ==================== 小Hu 工具函数 ====================
+
+def tool_create_alert(db, pregnant_id: str, level: str, message: str, trigger_source: str = "MANUAL") -> dict:
+    """创建预警记录"""
+    alert = Alert(
+        pregnant_id=pregnant_id,
+        trigger_source=trigger_source,
+        level=level,
+        message=message,
+        status="PENDING",
+    )
+    db.add(alert)
+    db.commit()
+    return {"success": True, "alert_id": str(alert.id), "message": f"已创建{level}级预警"}
+
+
+def tool_generate_followup_record(db, pregnant_id: str, template_id: str, chief_complaint: str) -> dict:
+    """生成随访记录（草稿状态）"""
+    from ..services import followup_service
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        return {"error": "孕妇不存在"}
+
+    gw = (pregnant.gestational_age_days or 168) // 7
+    template = followup_service.get_template(template_id)
+    health_edu = followup_service.generate_health_education(gw, pregnant.risk_tags or [])
+
+    record = FollowUpRecord(
+        pregnant_id=pregnant_id,
+        gestational_week=str(gw),
+        chief_complaint=chief_complaint,
+        health_education=health_edu,
+        status="draft",
+    )
+    db.add(record)
+    db.commit()
+    return {"success": True, "record_id": str(record.id), "message": "随访记录已创建（草稿）"}
+
+
+def tool_update_nursing_note(db, record_id: str, summary: str, health_education: list = None) -> dict:
+    """更新护理笔记"""
+    from uuid import UUID
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        return {"error": "随访记录不存在"}
+    record.summary = summary
+    if health_education:
+        record.health_education = health_education
+    db.commit()
+    return {"success": True, "message": "护理笔记已更新"}

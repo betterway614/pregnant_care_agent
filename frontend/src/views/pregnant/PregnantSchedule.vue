@@ -173,9 +173,11 @@ import {
 import { scheduleApi } from '@/api/endpoints'
 import type { ScheduleNode } from '@/types'
 import { ElMessage } from 'element-plus'
+import { useAppStore } from '@/stores/app'
 
 /* ============ 常量 ============ */
-const PREGNANT_ID = 'current-pregnant-id'
+const appStore = useAppStore()
+const PREGNANT_ID = computed(() => appStore.currentPregnantId || '')
 
 /* ============ 响应式状态 ============ */
 const loading = ref(true)
@@ -299,7 +301,7 @@ function getStatusColor(status: string): string {
 async function loadSchedules() {
   loading.value = true
   try {
-    const res = await scheduleApi.get(PREGNANT_ID)
+    const res = await scheduleApi.get(PREGNANT_ID.value)
     allSchedules.value = res.data || []
   } catch (err) {
     console.error('加载日程失败:', err)

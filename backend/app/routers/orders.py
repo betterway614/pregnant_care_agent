@@ -113,6 +113,23 @@ def get_orders(status: Optional[str] = None,
     return result
 
 
+@router.get("/pregnant/{pregnant_id}", response_model=list[OrderResponse])
+def get_pregnant_orders(pregnant_id: str, db: Session = Depends(get_db)):
+    """获取孕妇的医嘱列表（用于孕妇端展示）"""
+    orders = db.query(MedicalOrder).filter(
+        MedicalOrder.pregnant_id == pregnant_id,
+    ).order_by(MedicalOrder.created_at.desc()).limit(10).all()
+
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    return [
+        OrderResponse(
+            **{c.name: getattr(o, c.name) for c in o.__table__.columns},
+            patient_name=pregnant.display_name if pregnant else "未知",
+        )
+        for o in orders
+    ]
+
+
 @router.put("/{order_id}/sign", response_model=OrderResponse)
 def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_db)):
     """签署发布医嘱"""

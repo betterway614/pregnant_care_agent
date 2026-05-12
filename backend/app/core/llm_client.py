@@ -436,7 +436,40 @@ def get_llm_client() -> LLMClient:
     return _llm_client_instance
 
 
+_pregnant_llm_client_instance: LLMClient | None = None
+
+
+def get_pregnant_llm_client() -> LLMClient:
+    """获取孕妇对话专用的LLM客户端（mixed模式下使用）"""
+    global _pregnant_llm_client_instance
+    if _pregnant_llm_client_instance is not None:
+        return _pregnant_llm_client_instance
+
+    from ..config import settings
+
+    if settings.llm_mode == "mixed":
+        mode = settings.llm_pregnant_mode
+    else:
+        mode = settings.llm_mode
+
+    if mode == "cloud":
+        _pregnant_llm_client_instance = CloudAPIClient(
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            model=settings.llm_model,
+        )
+    elif mode == "local":
+        _pregnant_llm_client_instance = LocalOllamaClient(
+            host=settings.ollama_host,
+            model=settings.local_model,
+        )
+    else:
+        _pregnant_llm_client_instance = MockLLMClient()
+    return _pregnant_llm_client_instance
+
+
 def reset_llm_client():
     """重置LLM客户端（配置变更后调用）"""
-    global _llm_client_instance
+    global _llm_client_instance, _pregnant_llm_client_instance
     _llm_client_instance = None
+    _pregnant_llm_client_instance = None

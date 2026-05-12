@@ -13,6 +13,22 @@ export const chatApi = {
   getMemory: (pregnantId: string) => client.get('/chat/history', { params: { pregnant_id: pregnantId } }),
   clearMemory: (pregnantId: string) => client.delete('/chat/memory', { params: { pregnant_id: pregnantId } }),
   getContext: (pregnantId: string) => client.get(`/chat/context/${pregnantId}`),
+  getProactive: (pregnantId: string) => client.get<{ message: string; greeting_type: string; icon: string }>(`/chat/proactive/${pregnantId}`),
+  getTrends: (pregnantId: string) => client.get<{ trends: Array<{ metric: string; current_value: number; unit: string; trend: string; summary: string; is_normal: boolean | null }> }>(`/chat/trends/${pregnantId}`),
+  getConversation: (pregnantId: string, sessionId?: string) =>
+    client.get<{ session_id: string; messages: Array<{ role: string; content: string }> }>(
+      `/chat/conversation/${pregnantId}`,
+      { params: { session_id: sessionId } }
+    ),
+  clearConversation: (pregnantId: string, sessionId?: string) =>
+    client.delete(`/chat/conversation/${pregnantId}`, { params: { session_id: sessionId } }),
+}
+
+// 用户反馈
+export const feedbackApi = {
+  submit: (data: { pregnant_id: string; message_id: string; rating: string; comment?: string; session_id?: string }) =>
+    client.post('/feedback', data),
+  getStats: (pregnantId?: string) => client.get('/feedback/stats', { params: { pregnant_id: pregnantId } }),
 }
 
 // 排期
@@ -68,6 +84,8 @@ export const orderApi = {
   update: (orderId: string, data: any) =>
     client.put(`/orders/${orderId}`, data),
   templates: () => client.get('/orders/templates'),
+  getPregnantOrders: (pregnantId: string) =>
+    client.get(`/orders/pregnant/${pregnantId}`),
 }
 
 // 统计
@@ -94,6 +112,42 @@ export const nurseAiApi = {
   analyze: (pregnantId: string) => client.post<any>('/nurse/analyze', { pregnant_id: pregnantId }),
   generateFollowUp: (pregnantId: string, templateId: string = 'standard') =>
     client.post<any>('/nurse/followup/generate', { pregnant_id: pregnantId, template_id: templateId }),
+  chatStream: (data: { message: string; pregnant_id?: string }, callbacks: SSEStreamCallbacks, signal?: AbortSignal) =>
+    nurseChatStream(data, callbacks, signal),
+}
+
+/* ========== 护士 AI 流式对话 ========== */
+async function nurseChatStream(
+  data: { message: string; pregnant_id?: string },
+  callbacks: SSEStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  await fetchEventSource('/api/v1/nurse/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+    signal,
+    async onopen(response) {
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '')
+        throw new Error(`HTTP ${response.status}: ${errText}`)
+      }
+    },
+    onmessage(msg) {
+      if (msg.event === 'thinking') {
+        callbacks.onThinking?.(msg.data)
+      } else if (msg.event === 'chunk') {
+        callbacks.onChunk?.(msg.data)
+      } else if (msg.event === 'done') {
+        callbacks.onDone?.(JSON.parse(msg.data))
+      }
+    },
+    onerror(err) {
+      callbacks.onError?.(err)
+      class FatalError extends Error { }
+      throw new FatalError(String(err))
+    },
+  })
 }
 
 // 医生AI
@@ -135,6 +189,7 @@ export interface SSEStreamCallbacks {
   onChunk?: (text: string) => void
   onDone?: (metadata: any) => void
   onError?: (err: Error) => void
+  onThinking?: (message: string) => void
 }
 
 /**
@@ -157,7 +212,9 @@ export async function postChatStream(
       }
     },
     onmessage(msg) {
-      if (msg.event === 'chunk') {
+      if (msg.event === 'thinking') {
+        callbacks.onThinking?.(msg.data)
+      } else if (msg.event === 'chunk') {
         callbacks.onChunk?.(msg.data)
       } else if (msg.event === 'done') {
         callbacks.onDone?.(JSON.parse(msg.data))
@@ -170,4 +227,12 @@ export async function postChatStream(
       throw new FatalError(String(err))
     },
   })
+}
+
+// 心理健康筛查
+export const mentalHealthApi = {
+  getQuestions: () => client.get<{ questions: Array<{ id: number; text: string; options: string[] }>; total: number }>('/mental-health/epds/questions'),
+  submit: (data: { pregnant_id: string; answers: Record<number, number> }) =>
+    client.post<{ id: string; total_score: number; risk_level: string; risk_description: string; recommendations: string[] }>('/mental-health/epds/submit', data),
+  getHistory: (pregnantId: string) => client.get<{ screenings: Array<{ id: string; total_score: number; risk_level: string; created_at: string }> }>(`/mental-health/epds/history/${pregnantId}`),
 }

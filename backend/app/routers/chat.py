@@ -23,7 +23,16 @@ from ..config import settings
 MAX_AGENT_TURNS = 15
 
 router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
-llm = get_llm_client()
+
+from ..core.llm_client import get_pregnant_llm_client
+
+
+def _get_chat_llm():
+    """获取对话专用LLM客户端：mixed模式下孕妇对话用真实API"""
+    from ..config import settings
+    if settings.llm_mode == "mixed":
+        return get_pregnant_llm_client()
+    return get_llm_client()
 
 
 @router.post("/send", response_model=ChatResponse)
@@ -140,7 +149,7 @@ async def send_message(req: ChatSendRequest):
             agno = get_agno_client()
             response = await agno.chat([system_prompt, user_msg])
         else:
-            response = await llm.chat([system_prompt, user_msg], max_tokens=1024)
+            response = await _get_chat_llm().chat([system_prompt, user_msg], max_tokens=1024)
     except Exception as e:
         # LLM调用失败时回退到mock
         from ..core import MockLLMClient
@@ -334,7 +343,7 @@ async def send_message_stream(req: ChatSendRequest):
                     full_response += chunk
                     yield {"event": "chunk", "data": chunk}
             else:
-                async for chunk in llm.chat_stream(ctx["messages"], max_tokens=1024):
+                async for chunk in _get_chat_llm().chat_stream(ctx["messages"], max_tokens=1024):
                     full_response += chunk
                     yield {"event": "chunk", "data": chunk}
         except Exception:
@@ -789,6 +798,15 @@ async def get_proactive_greeting(pregnant_id: str):
 
         if not msg:
             msg = "欢迎回来！有什么需要小安帮忙的吗？"
+
+        # 检查是否有新签署的医嘱
+        from ..models import MedicalOrder
+        pending_orders = db.query(MedicalOrder).filter(
+            MedicalOrder.pregnant_id == pregnant_id,
+            MedicalOrder.status == "signed",
+        ).count()
+        if pending_orders > 0:
+            msg += f"\n\n📋 您有 {pending_orders} 条新医嘱待查看，请在首页查看。"
 
         return ProactiveGreeting(
             message=msg,

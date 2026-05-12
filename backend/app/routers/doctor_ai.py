@@ -6,6 +6,7 @@ from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
+from ..core.prompts import get_doctor_system_prompt
 from ..config import settings
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
@@ -33,11 +34,19 @@ async def doctor_analyze(pregnant_id: str, req: DoctorAnalyzeRequest = None):
         llm_result = await _try_llm_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
                                                     analysis_context, query)
         if llm_result:
-            return llm_result
+            result = llm_result
+        else:
+            # 模板兜底
+            result = _fallback_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
+                                              analysis_context, query)
 
-        # 模板兜底
-        return _fallback_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
-                                        analysis_context, query)
+        # 分析完成后自动生成医嘱草稿
+        if result.suggested_orders:
+            tool_generate_medical_order(
+                db, pregnant_id, result.suggested_orders,
+                order_type="standard"
+            )
+        return result
     finally:
         db.close()
 
@@ -70,7 +79,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
 
     # 预警历史
     alerts = db.query(Alert).filter(
-        Alert.pregnant_id == patient_id
+        Alert.pregnant_id == pregnant_id
     ).order_by(desc(Alert.created_at)).limit(10).all()
     for a in alerts:
         context["alerts_history"].append({
@@ -84,7 +93,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
 
     # FGR评估历史
     fgrs = db.query(FgrAssessment).filter(
-        FgrAssessment.pregnant_id == patient_id
+        FgrAssessment.pregnant_id == pregnant_id
     ).order_by(desc(FgrAssessment.assessed_at)).limit(5).all()
     for f in fgrs:
         context["fgr_assessments"].append({
@@ -100,7 +109,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
 
     # 最近随访记录
     followups = db.query(FollowUpRecord).filter(
-        FollowUpRecord.pregnant_id == patient_id
+        FollowUpRecord.pregnant_id == pregnant_id
     ).order_by(desc(FollowUpRecord.created_at)).limit(5).all()
     for f in followups:
         context["recent_followups"].append({
@@ -114,7 +123,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
 
     # 最近医嘱
     orders = db.query(MedicalOrder).filter(
-        MedicalOrder.pregnant_id == patient_id
+        MedicalOrder.pregnant_id == pregnant_id
     ).order_by(desc(MedicalOrder.created_at)).limit(5).all()
     for o in orders:
         context["recent_orders"].append({
@@ -141,7 +150,7 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             client = get_llm_client()
         prompt = _build_doctor_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, context, query)
         messages = [
-            {"role": "system", "content": "你是一位资深的产科医生，擅长高危妊娠管理和循证医学。请基于孕妇数据提供专业的综合分析，引用权威医学指南。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：analysis(综合分析), evidence_references(证据引用，字符串数组), suggested_orders(建议医嘱), risk_summary(风险摘要)"},
+            {"role": "system", "content": get_doctor_system_prompt()},
             {"role": "user", "content": prompt}
         ]
         response = await client.chat(messages)
@@ -158,6 +167,8 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             evidence_references=data.get("evidence_references", []),
             suggested_orders=data.get("suggested_orders", ""),
             risk_summary=data.get("risk_summary", ""),
+            differential_diagnosis=data.get("differential_diagnosis", []),
+            reasoning_chain=data.get("reasoning_chain", []),
         )
     except Exception:
         return None
@@ -354,3 +365,48 @@ def _parse_llm_json(response: str) -> dict | None:
         except json.JSONDecodeError:
             pass
     return None
+
+
+# ==================== Dr.智 工具函数 ====================
+
+def tool_generate_medical_order(db, pregnant_id: str, content: str, order_type: str = "standard", alert_id: str = None) -> dict:
+    """生成医嘱草稿"""
+    from uuid import UUID as _UUID
+    order = MedicalOrder(
+        pregnant_id=pregnant_id,
+        alert_id=_UUID(alert_id) if alert_id else None,
+        content=content,
+        order_type=order_type,
+        source="AI_RECOMMENDED",
+        status="draft",
+    )
+    db.add(order)
+    db.commit()
+    return {"success": True, "order_id": str(order.id), "message": "医嘱草稿已生成"}
+
+
+def tool_update_alert_review(db, alert_id: str, action: str, reason: str = "") -> dict:
+    """更新预警审核状态"""
+    from uuid import UUID as _UUID
+    alert = db.query(Alert).filter(Alert.id == _UUID(alert_id)).first()
+    if not alert:
+        return {"error": "预警不存在"}
+    if action == "confirm":
+        alert.status = "CONFIRMED"
+    elif action == "dismiss":
+        alert.status = "DISMISSED"
+    alert.reviewed_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": f"预警已{'确认' if action == 'confirm' else 'dismiss'}"}
+
+
+def tool_record_clinical_note(db, pregnant_id: str, content: str) -> dict:
+    """记录临床笔记（写入最新随访记录的summary）"""
+    record = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == pregnant_id
+    ).order_by(FollowUpRecord.created_at.desc()).first()
+    if record:
+        record.summary = (record.summary or "") + f"\n\n【临床笔记】{content}"
+        db.commit()
+        return {"success": True, "message": "临床笔记已记录"}
+    return {"error": "未找到该孕妇的随访记录"}
