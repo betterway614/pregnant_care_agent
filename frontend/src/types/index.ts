@@ -162,22 +162,6 @@ export interface DashboardStats {
   weekly_new_pregnant: number
 }
 
-// 硬件监控
-export interface HardwareMonitor {
-  gpu_utilization: number
-  gpu_memory_used: number
-  npu_utilization: number
-  cpu_utilization: number
-  memory_used: number
-  memory_total: number
-  inference_latency_ms: number
-  power_watts: number
-  gpu_info?: { model: string; driver: string; temperature: number }
-  npu_info?: { model: string; status: string; ops: string }
-  uma_info?: { total_gb: number; used_gb: number; available_gb: number }
-  timestamp?: string
-}
-
 // 对话
 export interface ChatRequest {
   pregnant_id: string
@@ -198,3 +182,45 @@ export interface ChatResponse {
 
 // 角色
 export type UserRole = 'nurse' | 'doctor' | 'pregnant' | 'admin'
+
+// 健康趋势数据
+export interface TrendDataPoint {
+  date: string
+  gest_week: number
+  value: number
+}
+
+export interface TrendSeries {
+  metric: string
+  name: string
+  unit: string
+  normal_range: { min: number; max: number }
+  data: TrendDataPoint[]
+  trend: 'rising' | 'falling' | 'stable' | 'insufficient_data'
+  latest_value: number | null
+  is_normal: boolean | null
+}
+
+export interface HealthTrendResponse {
+  pregnant_id: string
+  gestational_week: string
+  axis_mode: string
+  series: TrendSeries[]
+}
+
+// 随访历史
+export interface FollowUpHistoryRecord {
+  id: string
+  follow_up_date: string | null
+  gestational_week: string | null
+  status: string
+  summary: string | null
+  chief_complaint: string | null
+  self_reported_data: Record<string, any>
+  health_education: string[]
+}
+
+export interface FollowUpHistoryResponse {
+  pregnant_id: string
+  records: FollowUpHistoryRecord[]
+}

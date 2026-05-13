@@ -3,8 +3,9 @@ import client from './client'
 import type {
   Pregnant, FollowUpRecord, Alert, ScheduleNode,
   FgrAssessment, FgrTrendPoint, MedicalOrder,
-  DashboardStats, HardwareMonitor, ChatRequest, ChatResponse,
+  DashboardStats, ChatRequest, ChatResponse,
   HomeResponse, RecommendResponse,
+  HealthTrendResponse, FollowUpHistoryResponse,
 } from '@/types'
 
 // 对话
@@ -100,6 +101,37 @@ export const pregnantApi = {
   get: (pregnantId: string) => client.get<Pregnant>(`/pregnant/${pregnantId}`),
   update: (pregnantId: string, data: Partial<Pregnant>) => client.put<Pregnant>(`/pregnant/${pregnantId}`, data),
   getHome: (pregnantId: string) => client.get<HomeResponse>(`/pregnant/${pregnantId}/home`),
+  submitHealthData: (pregnantId: string, data: {
+    weight?: number
+    systolic?: number
+    diastolic?: number
+    fetal_movement?: number
+    blood_sugar?: number
+    blood_sugar_type?: 'fasting' | 'postprandial'
+    heart_rate?: number
+    sleep_hours?: number
+    steps?: number
+    mood?: 'good' | 'neutral' | 'bad'
+  }) => client.post<{ success: boolean; saved_metrics: string[]; count: number; message: string }>(
+    `/pregnant/${pregnantId}/health-data`, data
+  ),
+  getHealthTrends: (pregnantId: string, params: {
+    metrics: string
+    start_date?: string
+    end_date?: string
+    axis_mode?: 'date' | 'gestational_week'
+    granularity?: 'daily' | 'weekly'
+  }) => client.get<HealthTrendResponse>(
+    `/pregnant/${pregnantId}/health-trends`,
+    { params }
+  ),
+  getFollowUpHistory: (pregnantId: string, params?: {
+    status?: string
+    limit?: number
+  }) => client.get<FollowUpHistoryResponse>(
+    `/pregnant/${pregnantId}/follow-up-history`,
+    { params }
+  ),
 }
 
 // AI 推荐
@@ -122,32 +154,7 @@ async function nurseChatStream(
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  await fetchEventSource('/api/v1/nurse/chat/stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    signal,
-    async onopen(response) {
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '')
-        throw new Error(`HTTP ${response.status}: ${errText}`)
-      }
-    },
-    onmessage(msg) {
-      if (msg.event === 'thinking') {
-        callbacks.onThinking?.(msg.data)
-      } else if (msg.event === 'chunk') {
-        callbacks.onChunk?.(msg.data)
-      } else if (msg.event === 'done') {
-        callbacks.onDone?.(JSON.parse(msg.data))
-      }
-    },
-    onerror(err) {
-      callbacks.onError?.(err)
-      class FatalError extends Error { }
-      throw new FatalError(String(err))
-    },
-  })
+  await _sseFetch('/api/v1/nurse/chat/stream', data, callbacks, signal)
 }
 
 // 医生AI
@@ -176,12 +183,8 @@ export const fetalMovementApi = {
     client.delete(`/fetal-movement/sessions/${sessionId}`),
 }
 
-// 监控
-export const monitorApi = {
-  hardware: () => client.get<HardwareMonitor>('/monitor/hardware'),
-}
 
-/* ========== SSE 流式聊天 ========== */
+/* ========== 流式聊天（SSE + 非 SSE 降级） ========== */
 
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
@@ -193,40 +196,75 @@ export interface SSEStreamCallbacks {
 }
 
 /**
- * 基于 @microsoft/fetch-event-source 库的 SSE 流式聊天
+ * SSE 流式请求内部实现（自动兼容非 SSE 响应）
  */
-export async function postChatStream(
-  data: ChatRequest,
+async function _sseFetch(
+  url: string,
+  body: object,
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  await fetchEventSource('/api/v1/chat/send/stream', {
+  await fetchEventSource(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(body),
     signal,
     async onopen(response) {
       if (!response.ok) {
         const errText = await response.text().catch(() => '')
         throw new Error(`HTTP ${response.status}: ${errText}`)
       }
+      // 调试日志：检查 SSE 响应头
+      const ct = response.headers.get('content-type') || ''
+      const hasBody = !!response.body
+      console.log('[SSE] onopen content-type:', ct, 'hasBody:', hasBody, 'url:', url)
+      // 非 SSE 响应降级：直接解析完整 JSON 并通过 callbacks 交付
+      if (!ct.includes('text/event-stream') || !response.body) {
+        const text = await response.text()
+        if (text) {
+          try {
+            const json = JSON.parse(text)
+            if (json.content) callbacks.onChunk?.(json.content)
+            callbacks.onDone?.(json)
+          } catch {
+            if (text) callbacks.onChunk?.(text)
+            callbacks.onDone?.({})
+          }
+        } else {
+          callbacks.onDone?.({})
+        }
+        throw new Error('HANDLED_NON_SSE')
+      }
     },
     onmessage(msg) {
-      if (msg.event === 'thinking') {
-        callbacks.onThinking?.(msg.data)
-      } else if (msg.event === 'chunk') {
-        callbacks.onChunk?.(msg.data)
-      } else if (msg.event === 'done') {
-        callbacks.onDone?.(JSON.parse(msg.data))
+      if (msg.event === 'thinking') callbacks.onThinking?.(msg.data)
+      else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
+      else if (msg.event === 'done') {
+        try { callbacks.onDone?.(JSON.parse(msg.data)) } catch { callbacks.onDone?.({}) }
       }
     },
     onerror(err) {
-      callbacks.onError?.(err)
-      // 阻止自动重试
+      if ((err as Error).message === 'HANDLED_NON_SSE') {
+        class FatalError extends Error { }
+        throw new FatalError(String(err))
+      }
+      callbacks.onError?.(err as Error)
       class FatalError extends Error { }
       throw new FatalError(String(err))
     },
   })
+}
+
+/** 孕妇聊天流式接口 */
+export async function postChatStream(
+  data: ChatRequest,
+  callbacks: SSEStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  await _sseFetch('/api/v1/chat/send/stream', data, callbacks, signal)
 }
 
 // 心理健康筛查
