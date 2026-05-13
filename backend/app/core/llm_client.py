@@ -32,57 +32,103 @@ class CloudAPIClient(LLMClient):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        # 统一 HTTP 客户端超时：连接 15s，读取 120s（LLM 生成需要时间）
+        self.http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=15.0, read=120.0)
+        )
+        self._logger = __import__("loguru").logger
+
+    @staticmethod
+    def _fix_roles(messages: list[dict]) -> list[dict]:
+        """OpenAI SDK v2 可能把 'system' 转成 'developer'，但 Qwen API 不接受 'developer'"""
+        fixed = []
+        for m in messages:
+            if m.get("role") == "developer":
+                m = {**m, "role": "system"}
+            fixed.append(m)
+        return fixed
+
+    def _build_client(self):
+        from openai import AsyncOpenAI
+        return AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            http_client=self.http_client,
+        )
 
     async def chat(self, messages: list[dict], **kwargs) -> str:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-        resp = await client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            **kwargs
-        )
-        return resp.choices[0].message.content or ""
+        client = self._build_client()
+        self._logger.info("LLM chat 开始 model={}", self.model)
+        import time
+        t0 = time.time()
+        try:
+            resp = await client.chat.completions.create(
+                model=self.model,
+                messages=self._fix_roles(messages),
+                **kwargs
+            )
+            elapsed = time.time() - t0
+            self._logger.info("LLM chat 完成 ({:.1f}s)", elapsed)
+            return resp.choices[0].message.content or ""
+        except Exception as e:
+            elapsed = time.time() - t0
+            self._logger.warning("LLM chat 失败 ({:.1f}s): {}", elapsed, e)
+            raise
 
     async def chat_stream(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-        stream = await client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            stream=True,
-            **kwargs
-        )
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        client = self._build_client()
+        self._logger.info("LLM chat_stream 开始 model={}", self.model)
+        try:
+            stream = await client.chat.completions.create(
+                model=self.model,
+                messages=self._fix_roles(messages),
+                stream=True,
+                **kwargs
+            )
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+            self._logger.info("LLM chat_stream 完成")
+        except Exception as e:
+            self._logger.warning("LLM chat_stream 失败: {}", e)
+            raise
 
     async def chat_with_tools(self, messages: list[dict], tools: list[dict], **kwargs) -> dict:
         """使用 OpenAI 原生 function calling"""
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-        resp = await client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            **kwargs
-        )
-        choice = resp.choices[0]
-        msg = choice.message
-        result = {"role": "assistant", "content": msg.content or "", "tool_calls": None}
-        if msg.tool_calls:
-            result["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in msg.tool_calls
-            ]
-        return result
+        client = self._build_client()
+        self._logger.info("LLM chat_with_tools 开始 model={}", self.model)
+        import time
+        t0 = time.time()
+        try:
+            resp = await client.chat.completions.create(
+                model=self.model,
+                messages=self._fix_roles(messages),
+                tools=tools,
+                tool_choice="auto",
+                **kwargs
+            )
+            elapsed = time.time() - t0
+            self._logger.info("LLM chat_with_tools 完成 ({:.1f}s)", elapsed)
+            choice = resp.choices[0]
+            msg = choice.message
+            result = {"role": "assistant", "content": msg.content or "", "tool_calls": None}
+            if msg.tool_calls:
+                result["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ]
+            return result
+        except Exception as e:
+            elapsed = time.time() - t0
+            self._logger.warning("LLM chat_with_tools 失败 ({:.1f}s): {}", elapsed, e)
+            raise
 
 
 class LocalOllamaClient(LLMClient):

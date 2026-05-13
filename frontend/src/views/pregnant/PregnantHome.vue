@@ -230,8 +230,20 @@ async function fetchFollowUps() {
   try {
     const pregnantId = localStorage.getItem('currentPregnantId') || ''
     if (pregnantId) {
-      const res = await followUpApi.list({ status: 'draft', pregnant_id: pregnantId })
-      pendingFollowUps.value = res.data || []
+      // 获取活跃随访：draft（待开始）和 in_progress（进行中）
+      const [draftRes, inProgressRes] = await Promise.all([
+        followUpApi.list({ status: 'draft', pregnant_id: pregnantId }),
+        followUpApi.list({ status: 'in_progress', pregnant_id: pregnantId }),
+      ])
+      pendingFollowUps.value = [
+        ...((draftRes.data as any[]) || []),
+        ...((inProgressRes.data as any[]) || []),
+      ].sort((a: any, b: any) => {
+        // 按创建时间倒序，最新的在前
+        const da = new Date(a.created_at || 0).getTime()
+        const db = new Date(b.created_at || 0).getTime()
+        return db - da
+      })
     }
   } catch {
     /* ignore */
@@ -298,6 +310,9 @@ function trendName(metric: string): string {
     fetal_movement: '胎动',
     blood_sugar: '血糖',
     heart_rate: '心率',
+    emotion_score: '情绪评分',
+    sleep_hours: '睡眠时长',
+    steps: '运动步数',
   }
   return names[metric] || metric
 }
@@ -564,5 +579,56 @@ onMounted(() => {
 
 :deep(.el-collapse-item__content) {
   padding: 0 0 8px 0;
+}
+
+/* ==================== 移动端响应式 ==================== */
+@media (max-width: 430px) {
+  /* 头部卡片 - 紧凑 */
+  .patient-header-card { padding: 14px 14px; min-height: auto; margin-bottom: 10px; }
+  .patient-header-card__name { font-size: 18px; }
+  .patient-header-card__week { font-size: 13px; }
+  .patient-header-card__baby { margin-top: 6px; }
+  .patient-header-card__baby-icon { width: 36px; height: 36px; font-size: 20px; }
+  .patient-header-card__baby-text { font-size: 12px; }
+
+  /* 随访通知 */
+  .followup-notice-card { padding: 10px 12px; margin-bottom: 8px; }
+  .followup-notice__icon-wrap { width: 40px; height: 40px; }
+  .followup-notice__bell { font-size: 20px; }
+  .followup-notice__title { font-size: 13px; }
+  .followup-notice__action { font-size: 12px; }
+
+  /* AI 问候 */
+  .proactive-greeting-card { padding: 10px 12px; margin-bottom: 8px; }
+  .proactive-greeting__icon { font-size: 20px; }
+  .proactive-greeting__text { font-size: 13px; line-height: 1.4; }
+
+  /* 健康趋势 */
+  .health-trends-card { padding: 10px 12px; margin-bottom: 8px; }
+  .health-trends__title { font-size: 14px; margin-bottom: 8px; }
+  .health-trends__list { gap: 6px; }
+  .trend-item { padding: 8px 10px; }
+  .trend-item__header { gap: 6px; margin-bottom: 2px; }
+  .trend-item__value { font-size: 13px; }
+  .trend-item__summary { font-size: 11px; padding-left: 22px; }
+
+  /* 信息卡片 */
+  .patient-info-card { padding: 12px 14px; margin-bottom: 8px; }
+  .patient-info-card__title { font-size: 14px; margin-bottom: 8px; }
+
+  /* 提醒项 */
+  .reminder-item { padding: 9px 0; gap: 10px; }
+  .reminder-item__icon { width: 32px; height: 32px; }
+  .reminder-item__text { font-size: 13px; }
+
+  /* 工具网格 */
+  .tool-grid { gap: 4px; }
+  .tool-item { padding: 8px 4px; }
+  .tool-item__icon { width: 38px; height: 38px; font-size: 18px; }
+  .tool-item__label { font-size: 10px; }
+
+  /* 本周注意事项 */
+  .info-card__text { font-size: 13px; line-height: 1.5; }
+  :deep(.el-collapse-item__header) { padding: 6px 0; font-size: 13px; }
 }
 </style>

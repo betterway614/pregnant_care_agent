@@ -82,11 +82,9 @@
         <!-- ---- 欢迎信息 ---- -->
         <div v-if="showWelcome" class="welcome-section">
           <div class="welcome-header">
-            <el-avatar :size="64" class="doctor-avatar">
-              <span class="doctor-emoji">👩‍⚕️</span>
-            </el-avatar>
+            <AgentAvatar agent="xiaan" :size="64" />
           </div>
-          <h2 class="welcome-title">您好，我是数智医生小溪</h2>
+          <h2 class="welcome-title">您好，我是孕期助手小安</h2>
           <p class="welcome-desc">在这里，我将为您提供全方位的孕产知识支持，陪伴您度过一个安心、健康的孕期旅程~</p>
         </div>
 
@@ -150,18 +148,24 @@
               'message-row--assistant': msg.role === 'assistant',
             }"
           >
-            <el-avatar
+            <AgentAvatar
               v-if="msg.role === 'assistant'"
+              agent="xiaan"
               :size="34"
-              class="msg-avatar msg-avatar--assistant"
-            >
-              <span class="avatar-emoji-sm">💗</span>
-            </el-avatar>
+            />
 
             <div class="message-body">
+              <!-- 思考中 -->
+              <div
+                v-if="msg.loading && msg.thinking"
+                class="message-bubble message-bubble--assistant message-bubble--thinking"
+              >
+                <AgentAvatar agent="xiaan" :size="20" :thinking="true" />
+                <span class="thinking-text">{{ msg.thinkingMessage || '小安正在思考...' }}</span>
+              </div>
               <!-- 加载中 -->
               <div
-                v-if="msg.loading"
+                v-else-if="msg.loading"
                 class="message-bubble message-bubble--assistant message-bubble--loading"
               >
                 <span class="loading-dot" />
@@ -229,6 +233,24 @@
                   title="重新生成"
                 >
                   <el-icon :size="13"><RefreshRight /></el-icon>
+                </button>
+                <button
+                  v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading"
+                  class="msg-action-btn"
+                  :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_up' }"
+                  @click="handleFeedback(msg, 'thumbs_up')"
+                  title="有帮助"
+                >
+                  👍
+                </button>
+                <button
+                  v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading"
+                  class="msg-action-btn"
+                  :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_down' }"
+                  @click="handleFeedback(msg, 'thumbs_down')"
+                  title="需改进"
+                >
+                  👎
                 </button>
                 <button
                   v-if="msg.role === 'user'"
@@ -367,8 +389,9 @@ import {
   Edit,
   VideoPause,
 } from '@element-plus/icons-vue'
-import { chatApi, postChatStream } from '@/api/endpoints'
+import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
+import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { useChatStore } from '@/stores/chat'
 import type { ChatMessage } from '@/stores/chat'
 import { renderMarkdown } from '@/utils/markdown'
@@ -559,6 +582,27 @@ async function handleCopyMessage(content: string) {
   }
 }
 
+async function handleFeedback(msg: ChatMessage, rating: 'thumbs_up' | 'thumbs_down') {
+  // 切换反馈状态
+  const newRating = msg.feedback === rating ? null : rating
+  chatStore.updateMessage(msg.id, { feedback: newRating })
+
+  // 发送到后端
+  if (newRating) {
+    try {
+      const pregnantId = localStorage.getItem('currentPregnantId') || ''
+      await feedbackApi.submit({
+        pregnant_id: pregnantId,
+        message_id: msg.id,
+        rating: newRating,
+        session_id: chatStore.sessionId || undefined,
+      })
+    } catch {
+      // 静默失败
+    }
+  }
+}
+
 function handleRetry(msg: ChatMessage) {
   const prevUser = chatStore.getPreviousUserMessage(msg.id)
   if (!prevUser) return
@@ -644,10 +688,17 @@ async function handleSend() {
 
     try {
       await postChatStream(req, {
+        onThinking(message: string) {
+          chatStore.updateMessage(loadingMsg.id, {
+            thinking: true,
+            thinkingMessage: message,
+          })
+        },
         onChunk(chunk: string) {
           const msg = chatStore.messages.find((m) => m.id === loadingMsg.id)
           if (msg) {
             msg.content += chunk
+            msg.thinking = false
             chatStore.persist?.()
           }
           if (isAtBottom) scrollToBottom()
@@ -688,6 +739,14 @@ async function handleSend() {
     } finally {
       chatStore.streaming = false
       chatStore.setAbortController(null)
+    }
+
+    // 流式结束后内容仍为空（如非SSE响应无声消耗）时的兜底
+    if (!loadingMsg.content) {
+      chatStore.updateMessage(loadingMsg.id, {
+        content: '抱歉，我暂时无法回复。请稍后再试，或联系您的孕期管理师。',
+        isUrgent: false,
+      })
     }
   }
 
@@ -785,6 +844,11 @@ onMounted(async () => {
   }
 
   await loadPregnantContext()
+
+  // 从后端同步对话历史
+  if (pregnantId.value) {
+    await chatStore.loadFromBackend(pregnantId.value)
+  }
 
   if (chatStore.messages.length > 0) {
     scrollToBottom(false)
@@ -955,6 +1019,26 @@ onMounted(async () => {
 .loading-dot:nth-child(3) { animation-delay: 0s; }
 @keyframes dotBounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; } 40% { transform: scale(1); opacity: 1; } }
 
+/* 思考状态指示器 */
+.message-bubble--thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #fce4ec, #fff);
+  border: 1px solid #f8bbd0;
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
+.thinking-text {
+  font-size: 13px;
+  color: #e91e63;
+  font-weight: 500;
+}
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .bubble-text { font-size: 14px; line-height: 1.55; }
 
 /* ---- Markdown 样式 ---- */
@@ -985,9 +1069,10 @@ onMounted(async () => {
 .message-actions { display: flex; gap: 2px; margin-top: 2px; opacity: 0; transition: opacity 0.2s ease; }
 .message-row:hover .message-actions { opacity: 1; }
 .message-actions--user { justify-content: flex-end; }
-.msg-action-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pt-text-muted); cursor: pointer; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent; }
+.msg-action-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pt-text-muted); cursor: pointer; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent; font-size: 13px; }
 .msg-action-btn:hover { background: var(--pt-primary-light); color: var(--pt-primary-dark); }
 .msg-action-btn:active { transform: scale(0.9); }
+.msg-action-btn--active { background: var(--pt-primary-light); color: var(--pt-primary); }
 
 /* 移动端常驻显示操作栏 */
 @media (hover: none) {
@@ -1062,8 +1147,19 @@ onMounted(async () => {
 
   /* 消息区 */
   .messages-container { padding: 6px 8px 4px; }
-  .messages-inner { gap: 8px; }
-  .message-bubble { padding: 7px 11px; font-size: 13px; }
+  .messages-inner { gap: 6px; }
+  .msg-list { gap: 6px; }
+  .message-body { gap: 2px; }
+  .message-bubble { padding: 6px 10px; font-size: 13px; line-height: 1.4; }
+  .bubble-text { line-height: 1.4; }
+
+  /* Markdown 移动端间距收紧 */
+  .bubble-markdown :deep(p) { margin: 0 0 3px; }
+  .bubble-markdown :deep(p:last-child) { margin-bottom: 0; }
+  .bubble-markdown :deep(ul), .bubble-markdown :deep(ol) { margin: 2px 0; padding-left: 16px; }
+  .bubble-markdown :deep(li) { margin: 1px 0; }
+  .message-time { font-size: 9px; padding: 0 2px; }
+  .message-actions { margin-top: 1px; }
 
   /* 欢迎区 - 紧凑 */
   .welcome-section { padding: 10px 8px 2px; text-align: center; }
@@ -1084,8 +1180,8 @@ onMounted(async () => {
   .function-name { font-size: 11px; }
 
   /* 输入区 */
-  .send-btn { width: 36px; height: 36px; }
-  .toolbar-btn { min-width: 34px; min-height: 34px; }
+  .send-btn { width: 40px; height: 40px; }
+  .toolbar-btn { min-width: 38px; min-height: 38px; }
   .input-area { padding: 3px 10px 6px; }
   .input-hint { display: none; }
 }

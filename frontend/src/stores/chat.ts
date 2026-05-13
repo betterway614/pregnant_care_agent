@@ -1,6 +1,7 @@
-/* 聊天状态管理 - 支持跨页面持久化 */
+/* 聊天状态管理 - 支持跨页面持久化 + 用户隔离 */
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { chatApi } from '@/api/endpoints'
 
 export interface ChatMessage {
   id: string
@@ -9,15 +10,30 @@ export interface ChatMessage {
   timestamp: string
   isUrgent?: boolean
   loading?: boolean
+  thinking?: boolean
+  thinkingMessage?: string
+  feedback?: 'thumbs_up' | 'thumbs_down' | null
 }
 
-const STORAGE_KEY = 'pregnant_chat_history'
-const SESSION_KEY = 'pregnant_chat_session'
 const MAX_MESSAGES = 200
 
-function loadFromStorage(): ChatMessage[] {
+/** 获取当前孕妇ID */
+function getCurrentPregnantId(): string {
+  return localStorage.getItem('currentPregnantId') || 'anonymous'
+}
+
+/** 按用户隔离的存储 key */
+function getStorageKey(pid?: string): string {
+  return `chat_history_${pid || getCurrentPregnantId()}`
+}
+
+function getSessionKey(pid?: string): string {
+  return `chat_session_${pid || getCurrentPregnantId()}`
+}
+
+function loadFromStorage(pid?: string): ChatMessage[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(getStorageKey(pid))
     if (!raw) return []
     return (JSON.parse(raw) as ChatMessage[]).filter((m) => !m.loading)
   } catch {
@@ -25,28 +41,41 @@ function loadFromStorage(): ChatMessage[] {
   }
 }
 
-function saveToStorage(messages: ChatMessage[]) {
+function saveToStorage(messages: ChatMessage[], pid?: string) {
   try {
     const toSave = messages
       .filter((m) => !m.loading)
       .slice(-MAX_MESSAGES)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+    localStorage.setItem(getStorageKey(pid), JSON.stringify(toSave))
   } catch { /* quota exceeded */ }
 }
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>(loadFromStorage())
-  const sessionId = ref<string | null>(localStorage.getItem(SESSION_KEY))
+  const sessionId = ref<string | null>(localStorage.getItem(getSessionKey()))
   const loading = ref(false)
   const streaming = ref(false)
 
   // SSE abort controller
   let abortController: AbortController | null = null
 
+  /** 切换用户时重新加载数据 */
+  function switchUser(newPregnantId: string) {
+    // 保存当前用户数据
+    persist()
+    // 加载新用户数据
+    messages.value = loadFromStorage(newPregnantId)
+    sessionId.value = localStorage.getItem(getSessionKey(newPregnantId))
+    loading.value = false
+    streaming.value = false
+    abortController?.abort()
+    abortController = null
+  }
+
   function persist() {
     saveToStorage(messages.value)
-    if (sessionId.value) localStorage.setItem(SESSION_KEY, sessionId.value)
-    else localStorage.removeItem(SESSION_KEY)
+    if (sessionId.value) localStorage.setItem(getSessionKey(), sessionId.value)
+    else localStorage.removeItem(getSessionKey())
   }
 
   let msgIdCounter = 0
@@ -110,7 +139,7 @@ export const useChatStore = defineStore('chat', () => {
     persist()
   }
 
-  /** 清除所有数据 */
+  /** 清除当前用户的所有数据 */
   function clearAll() {
     messages.value = []
     sessionId.value = null
@@ -118,8 +147,8 @@ export const useChatStore = defineStore('chat', () => {
     streaming.value = false
     abortController?.abort()
     abortController = null
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(getStorageKey())
+    localStorage.removeItem(getSessionKey())
   }
 
   /** 停止生成 */
@@ -132,6 +161,27 @@ export const useChatStore = defineStore('chat', () => {
 
   function setAbortController(controller: AbortController | null) {
     abortController = controller
+  }
+
+  /** 从后端加载对话历史 */
+  async function loadFromBackend(pregnantId: string) {
+    try {
+      const res = await chatApi.getConversation(pregnantId, sessionId.value || undefined)
+      const backendMessages = res.data?.messages || []
+      if (backendMessages.length > 0 && messages.value.length === 0) {
+        // 后端有历史且本地为空时，同步到本地
+        const synced: ChatMessage[] = backendMessages.map((m, idx) => ({
+          id: `backend_${idx}_${Date.now()}`,
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: new Date().toISOString(),
+        }))
+        messages.value = synced
+        persist()
+      }
+    } catch {
+      // 加载失败不影响使用
+    }
   }
 
   return {
@@ -148,5 +198,7 @@ export const useChatStore = defineStore('chat', () => {
     stopGeneration,
     setAbortController,
     persist,
+    loadFromBackend,
+    switchUser,
   }
 })

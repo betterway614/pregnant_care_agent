@@ -65,7 +65,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
     }
 
     # 健康数据摘要：按指标类型汇总最近数据
-    metrics = ["weight", "sbp", "dbp", "fetal_movement", "blood_sugar"]
+    metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar"]
     for metric in metrics:
         points = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == pregnant_id,
@@ -251,15 +251,15 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
     if health_summary:
         analysis_parts.append("## 健康指标趋势")
         for metric, points in health_summary.items():
-            metric_names = {"weight": "体重", "sbp": "收缩压", "dbp": "舒张压",
+            metric_names = {"weight": "体重", "systolic": "收缩压", "diastolic": "舒张压",
                            "fetal_movement": "胎动", "blood_sugar": "血糖"}
             name = metric_names.get(metric, metric)
             latest = points[0]
             if metric == "weight":
                 analysis_parts.append(f"- {name}：最近记录 {latest['value']}{latest['unit']}，建议每周增重0.3-0.5kg")
-            elif metric in ("sbp", "dbp"):
+            elif metric in ("systolic", "diastolic"):
                 analysis_parts.append(f"- {name}：最近值 {latest['value']}{latest['unit']}")
-                if latest['value'] >= 140 and metric == "sbp":
+                if latest['value'] >= 140 and metric == "systolic":
                     analysis_parts.append("  **关注：收缩压≥140mmHg，需警惕妊娠期高血压**")
             elif metric == "fetal_movement":
                 analysis_parts.append(f"- {name}：最近记录 {latest['value']}次/小时，正常范围3-5次/小时")

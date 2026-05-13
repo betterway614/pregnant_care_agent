@@ -3,8 +3,12 @@ import uuid
 import random
 from datetime import datetime, date, timedelta
 from sqlalchemy import text
+from loguru import logger
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, ScheduleNode, FollowUpRecord, FgrAssessment, Alert, MedicalOrder, ConversationMessage, MentalHealthScreening, FetalMovementSession, Feedback
+
+# 存储对话消息ID供反馈关联（seed_feedback 使用）
+_generated_message_ids: list[str] = []
 
 
 def seed_all():
@@ -12,6 +16,7 @@ def seed_all():
     db = SessionLocal()
     try:
         _seed_patients(db)
+        db.flush()  # 确保已添加的孕妇数据对后续查询可见（autoflush=False）
         _seed_health_data(db)
         _seed_schedules(db)
         _seed_fgr_assessments(db)
@@ -24,7 +29,7 @@ def seed_all():
         seed_feedback(db)
         supplement_health_data(db)
         db.commit()
-        print("[OK] Mock数据注入完成")
+        logger.info("Mock数据注入完成")
     except Exception as e:
         db.rollback()
         raise e
@@ -33,14 +38,14 @@ def seed_all():
 
 
 def _seed_patients(db):
-    """生成20条匿名孕妇"""
+    """生成20条匿名孕妇（含BMI分层）"""
     existing = db.query(Pregnant).count()
     if existing > 0:
-        print("   孕妇数据已存在，跳过")
+        logger.info("孕妇数据已存在，跳过")
         return
 
     risk_configs = [
-        ([], "正常"),  # 正常孕妇
+        ([], "正常"),
         ([], "正常"),
         (["FGR高危"], "FGR"),
         (["FGR高危"], "FGR"),
@@ -87,36 +92,99 @@ def _seed_patients(db):
             created_at=base_date + timedelta(days=i * 3),
         )
         db.add(pregnant)
-    print(f"   [OK] 生成 20 条孕妇数据")
+    logger.info("生成20 条孕妇数据")
 
 
 def _seed_health_data(db):
-    """生成健康指标时间序列"""
+    """生成健康指标时间序列（动态孕周 + BMI分层体重 + 血压U形曲线）"""
+    if db.query(HealthDataPoint).count() > 0:
+        logger.info("健康数据已存在，跳过")
+        return
     pregnant = db.query(Pregnant).all()
     count = 0
+
+    # BMI分层配置（按 WS/T 801-2022 中国标准）
+    bmi_configs = [
+        {"pre_weight": 45, "weekly_gain": 0.46},  # 偏瘦
+        {"pre_weight": 55, "weekly_gain": 0.37},  # 正常
+        {"pre_weight": 58, "weekly_gain": 0.37},
+        {"pre_weight": 52, "weekly_gain": 0.37},
+        {"pre_weight": 56, "weekly_gain": 0.37},
+        {"pre_weight": 54, "weekly_gain": 0.37},
+        {"pre_weight": 68, "weekly_gain": 0.30},  # 超重
+        {"pre_weight": 53, "weekly_gain": 0.37},
+        {"pre_weight": 44, "weekly_gain": 0.46},  # 偏瘦
+        {"pre_weight": 57, "weekly_gain": 0.37},
+        {"pre_weight": 70, "weekly_gain": 0.30},  # 超重
+        {"pre_weight": 55, "weekly_gain": 0.37},
+        {"pre_weight": 60, "weekly_gain": 0.37},
+        {"pre_weight": 82, "weekly_gain": 0.22},  # 肥胖
+        {"pre_weight": 52, "weekly_gain": 0.37},
+        {"pre_weight": 46, "weekly_gain": 0.46},  # 偏瘦
+        {"pre_weight": 72, "weekly_gain": 0.30},  # 超重
+        {"pre_weight": 55, "weekly_gain": 0.37},
+        {"pre_weight": 85, "weekly_gain": 0.22},  # 肥胖
+        {"pre_weight": 54, "weekly_gain": 0.37},
+    ]
+
     for pregnant in pregnant:
-        for days_ago in range(0, 56, 2):  # 每2天一条
+        # 根据 display_name 解析索引
+        idx = int(pregnant.display_name.replace("孕妇", "")) - 1 if pregnant.display_name else 0
+        idx = max(0, min(idx, 19))
+        bmi = bmi_configs[idx]
+        pre_weight = bmi["pre_weight"]
+        weekly_gain = bmi["weekly_gain"]
+        init_gw = (pregnant.gestational_age_days or 168) // 7
+
+        fm_value = random.randint(4, 8)  # 胎动初始值
+
+        for days_ago in range(0, 56, 2):
             record_date = datetime.now() - timedelta(days=days_ago)
-            gw = (pregnant.gestational_age_days or 168) // 7
+            # 动态孕周：随记录时间回溯而减小
+            current_gw = max(12, (pregnant.gestational_age_days - days_ago) // 7)
 
-            # 体重：随孕周增加
-            base_weight = 55 + (gw - 12) * 0.3
-            weight = round(base_weight + random.uniform(-1, 1), 1)
+            # === 体重：按孕前BMI分层 + 动态孕周 ===
+            # 孕早期（≤12周）增重约1kg，之后按每周推荐速率
+            early_gain = 1.0  # 孕早期基础增重
+            weeks_after_12 = max(0, current_gw - 12)
+            base_weight = pre_weight + early_gain + weeks_after_12 * weekly_gain
+            weight = round(base_weight + random.uniform(-0.8, 0.8), 1)
 
-            # 血压：正常范围内
-            sbp = round(random.uniform(105, 135), 0)
-            dbp = round(random.uniform(65, 85), 0)
+            # === 血压：生理性U形曲线 ===
+            # 孕中期（16-24周）最低，孕晚期回升
+            bp_dip = 0
+            if 16 <= current_gw <= 28:
+                # 16-24周逐渐降低，24-28周逐渐回升
+                if current_gw <= 22:
+                    dip_factor = (current_gw - 16) / 6  # 0→1
+                    bp_dip = round(dip_factor * 6)  # 最多降6mmHg
+                else:
+                    dip_factor = (current_gw - 22) / 6  # 0→1
+                    bp_dip = round((1 - dip_factor) * 6)
 
-            # FGR高危有较高概率血压偏高
-            if pregnant.risk_tags and "FGR高危" in pregnant.risk_tags:
-                sbp = round(random.uniform(110, 145), 0)
-                dbp = round(random.uniform(70, 92), 0)
+            sbp = round(random.uniform(105, 125) - bp_dip, 0)
+            dbp = round(random.uniform(65, 80) - bp_dip * 0.6, 0)
+
+            # FGR高危：孕晚期（28周后）血压偏高
+            if pregnant.risk_tags and "FGR高危" in pregnant.risk_tags and current_gw >= 28:
+                sbp = round(min(145, sbp + random.uniform(8, 15)), 0)
+                dbp = round(min(92, dbp + random.uniform(5, 10)), 0)
+
+            # 高血压患者：持续偏高
+            if pregnant.risk_tags and "高血压" in pregnant.risk_tags:
+                sbp = round(random.uniform(130, 148), 0)
+                dbp = round(random.uniform(82, 95), 0)
+
+            # === 胎动：前后一致性随机游走 ===
+            if days_ago > 0:
+                fm_delta = random.randint(-2, 2)
+                fm_value = max(3, min(12, fm_value + fm_delta))
 
             for metric, value, unit in [
                 ("weight", weight, "kg"),
-                ("sbp", sbp, "mmHg"),
-                ("dbp", dbp, "mmHg"),
-                ("fetal_movement", random.randint(3, 10), "次/小时"),
+                ("systolic", sbp, "mmHg"),
+                ("diastolic", dbp, "mmHg"),
+                ("fetal_movement", fm_value, "次/小时"),
             ]:
                 point = HealthDataPoint(
                     pregnant_id=pregnant.pregnant_id,
@@ -128,11 +196,14 @@ def _seed_health_data(db):
                 )
                 db.add(point)
                 count += 1
-    print(f"   [OK] 生成 {count} 条健康数据")
+    logger.info("生成 {} 条健康数据", count)
 
 
 def _seed_schedules(db):
     """生成全孕周排期"""
+    if db.query(ScheduleNode).count() > 0:
+        logger.info("排期数据已存在，跳过")
+        return
     pregnant = db.query(Pregnant).all()
     count = 0
     for pregnant in pregnant:
@@ -149,18 +220,23 @@ def _seed_schedules(db):
             if gest_week < current_gw:
                 continue
             node_date = pregnant.lmp_date + timedelta(weeks=gest_week)
+            is_fgr = "FGR" in (pregnant.risk_tags or [])
+            node_type = "fgr_high_risk" if is_fgr else "routine"
             node = ScheduleNode(
                 pregnant_id=pregnant.pregnant_id,
                 gest_week=gest_week,
                 scheduled_date=node_date,
                 item=item,
-                node_type="routine" if gest_week <= 28 else "fgr_high_risk" if "FGR" in (pregnant.risk_tags or []) else "routine",
+                node_type=node_type,
                 status="published" if random.random() > 0.3 else "pending",
                 is_published=1 if random.random() > 0.3 else 0,
             )
-            # FGR高危增加B超节点
-            if "FGR高危" in (pregnant.risk_tags or []):
-                for fgr_week in range(26, 38, 2):
+            # FGR高危增加B超节点（避免与常规排期同一周重叠）
+            standard_weeks = {12, 16, 20, 24, 28, 30, 32, 34, 36, 37, 38, 39, 40}
+            if is_fgr:
+                for fgr_week in range(25, 37, 2):  # 用奇数周避免与常规排期偶数周重叠
+                    if fgr_week < current_gw or fgr_week in standard_weeks:
+                        continue
                     extra_node = ScheduleNode(
                         pregnant_id=pregnant.pregnant_id,
                         gest_week=fgr_week,
@@ -174,11 +250,14 @@ def _seed_schedules(db):
                     count += 1
             db.add(node)
             count += 1
-    print(f"   [OK] 生成 {count} 条排期数据")
+    logger.info("生成 {} 条排期数据", count)
 
 
 def _seed_fgr_assessments(db):
     """生成FGR评估Mock记录"""
+    if db.query(FgrAssessment).count() > 0:
+        logger.info("FGR评估数据已存在，跳过")
+        return
     fgr_patients = db.query(Pregnant).filter(
         Pregnant.risk_tags.contains("FGR高危")
     ).all()
@@ -210,11 +289,14 @@ def _seed_fgr_assessments(db):
             )
             db.add(assessment)
             count += 1
-    print(f"   [OK] 生成 {count} 条FGR评估记录")
+    logger.info("生成 {} 条FGR评估记录", count)
 
 
 def _seed_alerts(db):
     """生成预警记录"""
+    if db.query(Alert).count() > 0:
+        logger.info("预警数据已存在，跳过")
+        return
     pregnant = db.query(Pregnant).all()
     levels = ["RED", "ORANGE", "YELLOW"]
     count = 0
@@ -240,11 +322,14 @@ def _seed_alerts(db):
             )
             db.add(alert)
             count += 1
-    print(f"   [OK] 生成 {count} 条预警记录")
+    logger.info("生成 {} 条预警记录", count)
 
 
 def seed_followup_records(db):
     """为每个孕妇生成2-3条随访记录，覆盖draft/confirmed/archived三态"""
+    if db.query(FollowUpRecord).count() > 0:
+        logger.info("随访记录已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     count = 0
     statuses = ["draft", "confirmed", "archived"]
@@ -275,11 +360,14 @@ def seed_followup_records(db):
             )
             db.add(record)
             count += 1
-    print(f"   [OK] 生成 {count} 条随访记录")
+    logger.info("生成 {} 条随访记录", count)
 
 
 def seed_medical_orders(db):
     """为每个孕妇生成1-2条医嘱，覆盖draft/signed/executed三态"""
+    if db.query(MedicalOrder).count() > 0:
+        logger.info("医嘱数据已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     count = 0
     statuses = ["draft", "signed", "executed"]
@@ -313,13 +401,18 @@ def seed_medical_orders(db):
             )
             db.add(order)
             count += 1
-    print(f"   [OK] 生成 {count} 条医嘱记录")
+    logger.info("生成 {} 条医嘱记录", count)
 
 
 def seed_conversation_messages(db):
     """为每个孕妇生成对话历史，从预设对话模板中随机选择"""
+    global _generated_message_ids
+    if db.query(ConversationMessage).count() > 0:
+        logger.info("对话记录已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     count = 0
+    _generated_message_ids = []
 
     conversation_templates = [
         [
@@ -358,13 +451,19 @@ def seed_conversation_messages(db):
                 created_at=created_at,
             )
             db.add(message)
+            db.flush()  # 刷出ID供反馈关联
+            if msg["role"] == "assistant":
+                _generated_message_ids.append(str(message.id))
             created_at += timedelta(minutes=random.randint(1, 5))
             count += 1
-    print(f"   [OK] 生成 {count} 条对话记录")
+    logger.info("生成 {} 条对话记录", count)
 
 
 def seed_mental_health_screenings(db):
     """为5-8个孕妇生成EPDS记录，10题答案0-3分"""
+    if db.query(MentalHealthScreening).count() > 0:
+        logger.info("心理筛查数据已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     selected_patients = random.sample(pregnant_list, min(random.randint(5, 8), len(pregnant_list)))
     count = 0
@@ -387,9 +486,13 @@ def seed_mental_health_screenings(db):
         else:
             answers = [3] * 10
 
-        # Q3和Q10是反向计分题，需要反转
-        total_score = sum(answers)
-        # 调整风险等级
+        # EPDS反向计分：Q3（自我责备）和Q10（自伤念头）为反向题（3→0, 2→1, 1→2, 0→3）
+        reversed_answers = list(answers)
+        for rev_q in [2, 9]:  # 0-indexed: Q3→index 2, Q10→index 9
+            reversed_answers[rev_q] = 3 - answers[rev_q]
+        total_score = sum(reversed_answers)
+
+        # 风险等级（中国人群临界值9/10）
         if total_score >= 13:
             risk_level = "high"
         elif total_score >= 10:
@@ -409,11 +512,14 @@ def seed_mental_health_screenings(db):
         )
         db.add(screening)
         count += 1
-    print(f"   [OK] 生成 {count} 条心理筛查记录")
+    logger.info("生成 {} 条心理筛查记录", count)
 
 
 def seed_fetal_movement_sessions(db):
     """为5-8个孕妇生成2-3条胎动记录"""
+    if db.query(FetalMovementSession).count() > 0:
+        logger.info("胎动记录已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     selected_patients = random.sample(pregnant_list, min(random.randint(5, 8), len(pregnant_list)))
     count = 0
@@ -423,9 +529,12 @@ def seed_fetal_movement_sessions(db):
         for _ in range(session_count):
             start_time = datetime.now() - timedelta(days=random.randint(0, 14))
             duration = random.choice([30, 60, 120])
-            # 生成胎动时间点列表
+            # 胎动次数与持续时间成正比（按3-10次/小时的合理范围）
+            expected_per_hour = random.randint(4, 8)
+            total_kicks = max(2, round(duration / 60 * expected_per_hour))
+            # 生成胎动时间点列表（间隔至少1分钟，避免连续胎动误计数）
             kick_times = []
-            for _ in range(random.randint(5, 15)):
+            for _ in range(total_kicks):
                 kick_offset = timedelta(minutes=random.randint(0, duration))
                 kick_times.append((start_time + kick_offset).isoformat())
 
@@ -436,15 +545,29 @@ def seed_fetal_movement_sessions(db):
                 duration_minutes=duration,
                 total_count=len(kick_times),
                 kick_times=sorted(kick_times),
-                notes=f"胎动计数{duration}分钟，共{len(kick_times)}次",
+                notes=f"胎动计数{duration}分钟，共{len(kick_times)}次（{expected_per_hour}次/小时）",
             )
             db.add(session)
             count += 1
-    print(f"   [OK] 生成 {count} 条胎动记录")
+    logger.info("生成 {} 条胎动记录", count)
 
 
 def seed_feedback(db):
-    """为部分assistant消息生成反馈"""
+    """为已生成的assistant对话消息生成反馈"""
+    global _generated_message_ids
+    if db.query(Feedback).count() > 0:
+        logger.info("反馈数据已存在，跳过")
+        return
+    if not _generated_message_ids:
+        # 对话已跳过（已存在），从数据库中查询已有的assistant消息ID
+        msgs = db.query(ConversationMessage).filter(
+            ConversationMessage.role == "assistant"
+        ).all()
+        _generated_message_ids = [str(m.id) for m in msgs]
+        if not _generated_message_ids:
+            logger.info("无对话消息可关联反馈，跳过")
+            return
+
     pregnant_list = db.query(Pregnant).all()
     count = 0
 
@@ -452,6 +575,9 @@ def seed_feedback(db):
         # 为每个孕妇生成0-2条反馈
         feedback_count = random.randint(0, 2)
         for _ in range(feedback_count):
+            if not _generated_message_ids:
+                break
+            msg_id = random.choice(_generated_message_ids)
             rating = random.choice(["thumbs_up", "thumbs_up", "thumbs_down"])
             comment = None
             if rating == "thumbs_up":
@@ -461,7 +587,7 @@ def seed_feedback(db):
 
             feedback = Feedback(
                 pregnant_id=p.pregnant_id,
-                message_id=f"MSG_{uuid.uuid4().hex[:12].upper()}",
+                message_id=msg_id,
                 rating=rating,
                 comment=comment,
                 session_id=f"SESS_{uuid.uuid4().hex[:12].upper()}",
@@ -469,11 +595,17 @@ def seed_feedback(db):
             )
             db.add(feedback)
             count += 1
-    print(f"   [OK] 生成 {count} 条反馈记录")
+    logger.info("生成 {} 条反馈记录", count)
 
 
 def supplement_health_data(db):
     """补充blood_sugar/emotion_score/sleep_hours三种指标"""
+    existing_supplement = db.query(HealthDataPoint).filter(
+        HealthDataPoint.source == "SEED_SUPPLEMENT"
+    ).count()
+    if existing_supplement > 0:
+        logger.info("补充健康数据已存在，跳过")
+        return
     pregnant_list = db.query(Pregnant).all()
     count = 0
 
@@ -481,23 +613,37 @@ def supplement_health_data(db):
         is_gdm = "GDM" in (p.risk_tags or [])
         is_hypertension = "高血压" in (p.risk_tags or [])
 
+        # 血糖基线：非GDM按正常空腹标准（<5.3），GDM按控制目标（<6.7餐后）
+        base_bg = 5.5 if is_gdm else 4.6
+        # 情绪评分基线（1-9分自定义量表，非EPDS）
+        base_emotion = 5.5 if is_hypertension else 3.5
+        prev_bg = base_bg
+        prev_emo = base_emotion
+        prev_sleep = round(random.uniform(7.0, 8.0), 1)
+
         for days_ago in range(0, 56, 2):
             record_date = datetime.now() - timedelta(days=days_ago)
 
-            # 血糖：GDM患者偏高
+            # 血糖：GDM患者偏高但控制良好（5.0-7.2），非GDM正常范围（3.8-5.3）
+            bg_delta = random.uniform(-0.3, 0.3)
             if is_gdm:
-                blood_sugar = round(random.uniform(5.5, 7.8), 1)
+                blood_sugar = round(max(5.0, min(7.2, prev_bg + bg_delta)), 1)
             else:
-                blood_sugar = round(random.uniform(4.0, 5.8), 1)
+                blood_sugar = round(max(3.8, min(5.3, prev_bg + bg_delta)), 1)
+            prev_bg = blood_sugar
 
-            # 情绪评分：高血压患者可能偏高
+            # 情绪评分（1-9分）：高血压患者偏高，前后±0.5变化
+            emo_delta = random.uniform(-0.5, 0.5)
             if is_hypertension:
-                emotion_score = round(random.uniform(4.0, 9.0), 1)
+                emotion_score = round(max(3.0, min(9.0, prev_emo + emo_delta)), 1)
             else:
-                emotion_score = round(random.uniform(2.0, 6.0), 1)
+                emotion_score = round(max(1.0, min(7.0, prev_emo + emo_delta)), 1)
+            prev_emo = emotion_score
 
-            # 睡眠时长
-            sleep_hours = round(random.uniform(5.5, 9.0), 1)
+            # 睡眠时长：稳定在7-8.5小时之间，前后±0.5变化
+            sleep_delta = random.uniform(-0.5, 0.5)
+            sleep_hours = round(max(6.5, min(8.5, prev_sleep + sleep_delta)), 1)
+            prev_sleep = sleep_hours
 
             for metric, value, unit in [
                 ("blood_sugar", blood_sugar, "mmol/L"),
@@ -514,7 +660,7 @@ def supplement_health_data(db):
                 )
                 db.add(point)
                 count += 1
-    print(f"   [OK] 补充 {count} 条健康数据")
+    logger.info("补充 {} 条健康数据", count)
 
 
 if __name__ == "__main__":

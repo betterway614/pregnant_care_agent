@@ -1,4 +1,12 @@
-"""随访记录 API"""
+"""随访记录 API
+
+状态机: draft → in_progress → completed → confirmed → archived
+- draft: 护士创建，等待孕妇开始
+- in_progress: 孕妇已开始回答
+- completed: 所有问题回答完毕
+- confirmed: 护士确认审核
+- archived: 长期存档
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -7,7 +15,11 @@ from uuid import UUID
 from ..database import get_db
 from ..models import FollowUpRecord, Pregnant
 from ..database import SessionLocal
-from ..schemas import FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger
+from ..schemas import (
+    FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
+    FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_IN_PROGRESS,
+    FOLLOWUP_STATUS_COMPLETED,
+)
 from ..services import followup_service
 
 router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
@@ -122,10 +134,10 @@ class FollowUpAnswer(BaseModel):
 
 @router.get("/pending/{pregnant_id}", response_model=FollowUpChatResponse)
 def get_pending_followup(pregnant_id: str, db: Session = Depends(get_db)):
-    """获取孕妇待处理的随访对话"""
+    """获取孕妇待处理的随访对话（draft 或 in_progress 状态）"""
     record = db.query(FollowUpRecord).filter(
         FollowUpRecord.pregnant_id == pregnant_id,
-        FollowUpRecord.status == "draft",
+        FollowUpRecord.status.in_(FOLLOWUP_ACTIVE_STATUSES),
     ).order_by(FollowUpRecord.created_at.desc()).first()
 
     if not record:
@@ -172,7 +184,12 @@ def get_pending_followup(pregnant_id: str, db: Session = Depends(get_db)):
 
 @router.post("/respond")
 def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)):
-    """孕妇提交随访回答"""
+    """孕妇提交随访回答
+
+    状态机转换：
+    - draft → in_progress（首次回答）
+    - in_progress → completed（所有问题回答完毕）
+    """
     record = db.query(FollowUpRecord).filter(
         FollowUpRecord.id == UUID(req.record_id)
     ).first()
@@ -180,19 +197,43 @@ def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)):
         raise HTTPException(404, "随访记录不存在")
 
     # 解析回答
-    reported_data = {}
-    chief_complaint = ""
+    reported_data = dict(record.self_reported_data) if record.self_reported_data else {}
+    chief_complaint = record.chief_complaint or ""
     for key, value in req.answers.items():
-        if key == "feeling":
+        if key == "feeling" and not chief_complaint:
             chief_complaint = str(value)
-        elif key in ("weight", "bp", "fetal_movement"):
-            reported_data[key] = value
+        reported_data[key] = value
+
+    # 状态机转换：draft → in_progress
+    if record.status == "draft":
+        record.status = FOLLOWUP_STATUS_IN_PROGRESS
 
     # 更新随访记录
     record.self_reported_data = reported_data
     record.chief_complaint = chief_complaint
-    record.status = "confirmed"
-    record.summary = f"孕妇自动提交随访回答，主诉：{chief_complaint}" if chief_complaint else "孕妇自动提交随访回答"
+
+    # 检查是否所有问题都已回答
+    template = followup_service.get_template_from_questions(reported_data)
+    all_keys = [q["key"] for q in template["questions"]]
+    answered_keys = set(reported_data.keys())
+    all_answered = all(k in answered_keys for k in all_keys)
+
+    if all_answered and record.status == FOLLOWUP_STATUS_IN_PROGRESS:
+        # 所有问题回答完毕 → completed
+        record.status = FOLLOWUP_STATUS_COMPLETED
+        record.summary = followup_service.generate_record_summary(
+            patient_name="",
+            gest_week=record.gestational_week or "?",
+            answers=reported_data,
+        )
+
     db.commit()
 
-    return {"message": "随访回答已提交", "record_id": str(record.id)}
+    return {
+        "message": "随访回答已提交",
+        "record_id": str(record.id),
+        "status": record.status,
+        "answered_count": len(answered_keys),
+        "total_count": len(all_keys),
+        "all_answered": all_answered,
+    }

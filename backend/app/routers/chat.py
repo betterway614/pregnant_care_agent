@@ -1,12 +1,17 @@
 """对话管理 API"""
 import json
 import re
+import os
+import asyncio
+import uuid as _uuid
+from datetime import datetime
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from ..schemas import ChatSendRequest, ChatResponse, ChatNLUResult
+from loguru import logger
 from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
 from ..core.followup_tools import FOLLOWUP_TOOLS, dispatch_tool
 from ..core.agno_client import get_agno_client
@@ -17,14 +22,155 @@ from ..core.prompts import (
     get_followup_system_prompt,
 )
 from ..models import HealthDataPoint, Pregnant, FollowUpRecord
-from ..database import SessionLocal
+from ..database import SessionLocal, db_call
 from ..config import settings
 
+
+def _generate_session_id(pregnant_id: str) -> str:
+    """生成唯一的 session_id
+
+    格式: SESS_{pregnant_id前8位}_{日期}_{随机4位}
+    确保同一孕妇不同时间段的对话隔离
+    """
+    date_str = datetime.now().strftime("%Y%m%d")
+    rand_str = _uuid.uuid4().hex[:4]
+    return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
+
 MAX_AGENT_TURNS = 15
+
+# 文件日志（绕开 stdout 重定向问题）
+_DEBUG_LOG = os.path.join(os.path.dirname(__file__), "../../debug_chat.log")
+
+
+def _debug_log(msg: str):
+    """写入调试日志文件"""
+    try:
+        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(f"{msg}\n")
+            f.flush()
+    except Exception:
+        pass  # 日志写入失败不影响主流程
+
+
+def _query_patient_context(pregnant_id: str) -> str:
+    """同步函数：查询孕妇上下文信息（在 db_call 线程池中执行）"""
+    from datetime import datetime, timedelta
+    from ..models import HealthDataPoint, Pregnant
+    from ..core.trend_engine import trend_engine
+    from ..database import SessionLocal
+
+    patient_context = ""
+    patient_db = SessionLocal()
+    try:
+        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if pregnant and pregnant.gestational_age_days:
+            gw = pregnant.gestational_age_days // 7
+            gd = pregnant.gestational_age_days % 7
+            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
+            if pregnant.risk_tags:
+                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
+            if pregnant.nickname:
+                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
+
+            # 注入健康趋势分析
+            try:
+                two_weeks_ago = datetime.now() - timedelta(days=14)
+                recent_records = patient_db.query(HealthDataPoint).filter(
+                    HealthDataPoint.pregnant_id == pregnant_id,
+                    HealthDataPoint.recorded_at >= two_weeks_ago,
+                ).order_by(HealthDataPoint.recorded_at).all()
+
+                if recent_records:
+                    records_data = [
+                        {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
+                        for r in recent_records
+                    ]
+                    trends = trend_engine.analyze(records_data, gest_week=gw)
+                    if trends:
+                        trend_summaries = [t.summary for t in trends if t.summary]
+                        if trend_summaries:
+                            patient_context += " 【近期健康趋势】" + " ".join(trend_summaries)
+            except Exception:
+                pass  # 趋势分析失败不影响主流程
+    finally:
+        patient_db.close()
+    return patient_context
+
+
+def _get_patient_context_simple(pregnant_id: str) -> str:
+    """同步函数：简单查询孕妇基本信息（在线程池中执行）"""
+    from ..models import Pregnant
+    from ..database import SessionLocal
+
+    patient_context = ""
+    patient_db = SessionLocal()
+    try:
+        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if pregnant and pregnant.gestational_age_days:
+            gw = pregnant.gestational_age_days // 7
+            gd = pregnant.gestational_age_days % 7
+            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
+            if pregnant.risk_tags:
+                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
+            if pregnant.nickname:
+                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
+    finally:
+        patient_db.close()
+    return patient_context
+
+
+def _init_followup_db(record_id: str, pregnant_id: str):
+    """同步函数：随访初始数据库查询（在线程池中执行）"""
+    from uuid import UUID
+    from ..models import FollowUpRecord, Pregnant
+    from ..database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        record = db.query(FollowUpRecord).filter(
+            FollowUpRecord.id == UUID(record_id)
+        ).first()
+        if not record:
+            return ChatResponse(content="随访记录不存在。")
+        if str(record.pregnant_id) != pregnant_id:
+            return ChatResponse(content="孕妇信息不匹配，无法继续随访。")
+
+        # 已归档则直接返回
+        if record.status == "confirmed":
+            return ChatResponse(
+                content=f"本次随访已于 {record.follow_up_date.strftime('%Y-%m-%d %H:%M')} 完成。\n\n摘要：{record.summary or '无'}",
+            )
+
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        system_prompt = _build_followup_system_prompt(pregnant, record, record_id)
+        return system_prompt
+    finally:
+        db.close()
+
 
 router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
 
 from ..core.llm_client import get_pregnant_llm_client
+
+
+@router.get("/ping")
+def ping():
+    """调试：检查服务器是否运行最新代码"""
+    from datetime import datetime
+    return {"pong": datetime.now().isoformat(), "version": "debug_v4"}
+
+
+@router.get("/debug-log")
+def get_debug_log():
+    """读取调试日志"""
+    try:
+        with open(_DEBUG_LOG, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"log": content}
+    except FileNotFoundError:
+        return {"log": f"(log file not found at {_DEBUG_LOG})"}
+    except Exception as e:
+        return {"log": f"(error reading log: {e})"}
 
 
 def _get_chat_llm():
@@ -38,6 +184,11 @@ def _get_chat_llm():
 @router.post("/send", response_model=ChatResponse)
 async def send_message(req: ChatSendRequest):
     """发送对话消息"""
+    import traceback
+    _dbg = f"[SEND] agno_enabled={settings.agno_enabled}, record_id={req.record_id}, pregnant_id={req.pregnant_id}"
+    _debug_log(_dbg)
+    logger.info("send_message 开始 pregnant_id={} record_id={}", req.pregnant_id[:8], req.record_id)
+    _debug_log(f"[SEND] calling agno_enabled={settings.agno_enabled}")
     # Agno Agent 模式
     if settings.agno_enabled:
         from ..core.agno_chat_handler import handle_chat_with_agno, handle_followup_chat_with_agno
@@ -94,46 +245,8 @@ async def send_message(req: ChatSendRequest):
             elif memory_manager.should_ask_bp(req.pregnant_id):
                 follow_up_question = " 另外，记得今天测血压了吗？可以告诉我数值哦。"
 
-    # 1.1 孕周感知上下文注入
-    patient_context = ""
-    patient_db = SessionLocal()
-    try:
-        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
-        if pregnant and pregnant.gestational_age_days:
-            gw = pregnant.gestational_age_days // 7
-            gd = pregnant.gestational_age_days % 7
-            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
-            if pregnant.risk_tags:
-                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
-            if pregnant.nickname:
-                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
-
-            # 注入健康趋势分析
-            try:
-                from datetime import timedelta
-                from ..models import HealthDataPoint
-                from ..core.trend_engine import trend_engine
-
-                two_weeks_ago = datetime.now() - timedelta(days=14)
-                recent_records = patient_db.query(HealthDataPoint).filter(
-                    HealthDataPoint.pregnant_id == req.pregnant_id,
-                    HealthDataPoint.recorded_at >= two_weeks_ago,
-                ).order_by(HealthDataPoint.recorded_at).all()
-
-                if recent_records:
-                    records_data = [
-                        {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
-                        for r in recent_records
-                    ]
-                    trends = trend_engine.analyze(records_data, gest_week=gw)
-                    if trends:
-                        trend_summaries = [t.summary for t in trends if t.summary]
-                        if trend_summaries:
-                            patient_context += " 【近期健康趋势】" + " ".join(trend_summaries)
-            except Exception:
-                pass  # 趋势分析失败不影响主流程
-    finally:
-        patient_db.close()
+    # 1.1 孕周感知上下文注入（在线程池中执行，避免阻塞事件循环）
+    patient_context = await db_call(_query_patient_context, req.pregnant_id)
 
     # 4. 构建对话上下文
     system_prompt_content = get_pregnant_system_prompt(patient_context)
@@ -160,14 +273,11 @@ async def send_message(req: ChatSendRequest):
     if follow_up_question:
         response = response.rstrip() + follow_up_question
 
-    # 持久化对话消息
-    session_id = req.session_id or f"SESS_{req.pregnant_id[:8]}"
-    try:
-        conversation_store.save_single(session_id, req.pregnant_id, "user", req.message)
-        conversation_store.save_single(session_id, req.pregnant_id, "assistant", response)
-    except Exception:
-        pass
+    # 对话原文不入库，仅返回响应
+    session_id = req.session_id or _generate_session_id(req.pregnant_id)
 
+    resp_len = len(response)
+    logger.info("send_message 完成 pregnant_id={} resp_len={}", req.pregnant_id[:8], resp_len)
     return ChatResponse(
         content=response,
         nlu_result=ChatNLUResult(
@@ -182,18 +292,14 @@ async def send_message(req: ChatSendRequest):
 
 @router.get("/conversation/{pregnant_id}")
 async def get_conversation_history(pregnant_id: str, session_id: str = ""):
-    """获取对话历史记录"""
-    sid = session_id or f"SESS_{pregnant_id[:8]}"
-    history = conversation_store.load_history(sid, pregnant_id)
-    return {"session_id": sid, "messages": history}
+    """获取对话历史记录（当前为会话内缓存，不持久化）"""
+    return {"session_id": session_id, "messages": [], "message": "对话历史仅在会话内有效"}
 
 
 @router.delete("/conversation/{pregnant_id}")
 async def clear_conversation_history(pregnant_id: str, session_id: str = ""):
-    """清除对话历史"""
-    sid = session_id or f"SESS_{pregnant_id[:8]}"
-    conversation_store.clear_session(sid, pregnant_id)
-    return {"message": "对话历史已清除"}
+    """清除对话历史（当前为会话内缓存，无需清除）"""
+    return {"message": "对话历史仅在会话内有效，无需清除"}
 
 
 # ==================== SSE 流式输出 ====================
@@ -242,28 +348,15 @@ async def _build_chat_context(req: ChatSendRequest) -> dict:
         elif memory_manager.should_ask_bp(req.pregnant_id):
             follow_up_question = " 另外，记得今天测血压了吗？可以告诉我数值哦。"
 
-    # 5. 孕周感知上下文
-    patient_context = ""
-    patient_db = SessionLocal()
-    try:
-        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
-        if pregnant and pregnant.gestational_age_days:
-            gw = pregnant.gestational_age_days // 7
-            gd = pregnant.gestational_age_days % 7
-            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
-            if pregnant.risk_tags:
-                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
-            if pregnant.nickname:
-                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
-    finally:
-        patient_db.close()
+    # 5. 孕周感知上下文（在线程池中执行，避免阻塞事件循环）
+    patient_context = await db_call(_get_patient_context_simple, req.pregnant_id)
 
     # 6. 构建 system prompt
     system_prompt_content = get_pregnant_system_prompt(patient_context)
 
-    # 7. 加载对话历史
-    session_id = req.session_id or f"SESS_{req.pregnant_id[:8]}"
-    history = conversation_store.load_history(session_id, req.pregnant_id)
+    # 7. 加载对话历史（异步）
+    session_id = req.session_id or _generate_session_id(req.pregnant_id)
+    history = await conversation_store.async_load_history(session_id, req.pregnant_id)
 
     messages = [{"role": "system", "content": system_prompt_content}]
     messages.extend(history)
@@ -281,22 +374,35 @@ async def _build_chat_context(req: ChatSendRequest) -> dict:
     }
 
 
+def _chat_response_to_sse(result: ChatResponse):
+    """将非流式 ChatResponse 包装为 SSE 事件流，确保流式端点始终输出 SSE 格式"""
+    nlu = result.nlu_result
+    async def wrapper():
+        yield {"event": "chunk", "data": result.content}
+        yield {"event": "done", "data": json.dumps({
+            "session_id": result.session_id,
+            "source": result.source or "AI_CARE",
+            "nlu_result": {"intent": nlu.intent, "entities": nlu.entities} if nlu else None,
+            "memory_updated": result.memory_updated or [],
+            "followup_progress": result.followup_progress,
+        })}
+    return EventSourceResponse(wrapper())
+
+
 @router.post("/send/stream")
 async def send_message_stream(req: ChatSendRequest):
     """发送对话消息（SSE 流式输出）"""
-    # Agno Agent 模式
+    # Agno Agent 模式 — 流式 SSE 输出
     if settings.agno_enabled:
-        from ..core.agno_chat_handler import handle_chat_with_agno, handle_followup_chat_with_agno
+        from ..core.agno_chat_handler import handle_chat_with_agno_stream, handle_followup_chat_with_agno_stream
         if req.record_id:
-            result = await handle_followup_chat_with_agno(req)
-            return JSONResponse(result.model_dump())
-        result = await handle_chat_with_agno(req)
-        return JSONResponse(result.model_dump())
+            return EventSourceResponse(handle_followup_chat_with_agno_stream(req))
+        return EventSourceResponse(handle_chat_with_agno_stream(req))
 
-    # 随访模式暂不支持流式，回退到非流式
+    # 随访模式 — 包装为 SSE 格式
     if req.record_id:
         result = await _handle_followup_chat(req)
-        return JSONResponse(result.model_dump())
+        return _chat_response_to_sse(result)
 
     ctx = await _build_chat_context(req)
     session_id = ctx["session_id"]
@@ -371,8 +477,8 @@ async def send_message_stream(req: ChatSendRequest):
         # 持久化对话消息
         try:
             user_msg = ctx["messages"][-1]  # 最后一条是用户消息
-            conversation_store.save_single(session_id, ctx["pregnant_id"], "user", user_msg["content"])
-            conversation_store.save_single(session_id, ctx["pregnant_id"], "assistant", full_response)
+            await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "user", user_msg["content"])
+            await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "assistant", full_response)
         except Exception:
             pass  # 持久化失败不影响主流程
 
@@ -383,30 +489,25 @@ async def send_message_stream(req: ChatSendRequest):
 
 async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
     """随访模式 ReAct 循环：工具感知的智能体对话"""
+    logger.info("FOLLOWUP_CHAT record_id={} pregnant_id={}", req.record_id, req.pregnant_id)
+    llm = _get_chat_llm()
+    _debug_log(f"[FOLLOWUP_CHAT] llm_type={type(llm).__name__}")
+    logger.info("FOLLOWUP_CHAT LLM client: {}", type(llm).__name__)
+
+    # 初始数据库查询（在线程池中执行，避免阻塞事件循环）
+    db_init = await db_call(_init_followup_db, req.record_id, req.pregnant_id)
+    if isinstance(db_init, ChatResponse):
+        return db_init
+    system_prompt = db_init
+
+    messages = [{"role": "system", "content": system_prompt}]
+    # 加载历史消息（异步）
+    fu_session_id = f"FU_{req.record_id[:8]}"
+    history = await conversation_store.async_load_history(fu_session_id, req.pregnant_id)
+
+    # ReAct 循环需要一个共享的 db session 传给 dispatch_tool
     db = SessionLocal()
     try:
-        record = db.query(FollowUpRecord).filter(
-            FollowUpRecord.id == UUID(req.record_id)
-        ).first()
-        if not record:
-            return ChatResponse(content="随访记录不存在。", session_id=req.session_id)
-        if str(record.pregnant_id) != req.pregnant_id:
-            return ChatResponse(content="孕妇信息不匹配，无法继续随访。", session_id=req.session_id)
-
-        # 已归档则直接返回
-        if record.status == "confirmed":
-            return ChatResponse(
-                content=f"本次随访已于 {record.follow_up_date.strftime('%Y-%m-%d %H:%M')} 完成。\n\n摘要：{record.summary or '无'}",
-                session_id=req.session_id,
-            )
-
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
-        system_prompt = _build_followup_system_prompt(pregnant, record, req.record_id)
-
-        messages = [{"role": "system", "content": system_prompt}]
-        # 加载历史消息（使用 conversation_store 持久化）
-        fu_session_id = f"FU_{req.record_id[:8]}"
-        history = conversation_store.load_history(fu_session_id, req.pregnant_id)
         messages.extend(history)
         messages.append({"role": "user", "content": req.message})
 
@@ -414,7 +515,9 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
         final_response = ""
         progress = None
         for turn in range(MAX_AGENT_TURNS):
+            logger.info("FOLLOWUP_CHAT Turn {} llm.chat_with_tools...", turn)
             result = await llm.chat_with_tools(messages, FOLLOWUP_TOOLS)
+            logger.info("FOLLOWUP_CHAT Turn {} tool_calls={} content={}", turn, bool(result.get('tool_calls')), result.get('content', '')[:50])
 
             if result.get("tool_calls"):
                 messages.append(result)
@@ -433,7 +536,7 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
                 # 记录到历史（持久化）
                 try:
                     user_and_assistant = [m for m in messages[-4:] if m.get("role") in ("user", "assistant")]
-                    conversation_store.save_messages(fu_session_id, req.pregnant_id, user_and_assistant)
+                    await conversation_store.async_save_messages(fu_session_id, req.pregnant_id, user_and_assistant)
                 except Exception:
                     pass
             else:
@@ -444,7 +547,7 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
 
         # 持久化最终回复
         try:
-            conversation_store.save_single(fu_session_id, req.pregnant_id, "assistant", final_response)
+            await conversation_store.async_save_single(fu_session_id, req.pregnant_id, "assistant", final_response)
         except Exception:
             pass
 
@@ -455,8 +558,11 @@ async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
             followup_progress=progress,
         )
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("FOLLOWUP_CHAT 异常 {}: {}", type(e).__name__, str(e)[:200])
         return ChatResponse(
-            content="随访对话出现异常，请稍后重试或联系护士。",
+            content=f"随访对话异常（{type(e).__name__}）：{str(e)[:200]}",
             session_id=req.session_id,
         )
     finally:
@@ -573,37 +679,9 @@ def get_pregnant_context(pregnant_id: str):
 
 
 def _save_health_data(pregnant_id: str, entities: dict):
-    """保存健康数据到数据库"""
-    metric_map = {
-        "weight": ("weight", "kg"),
-        "sbp": ("sbp", "mmHg"),
-        "dbp": ("dbp", "mmHg"),
-        "fetal_movement": ("fetal_movement", "次/小时"),
-        "blood_sugar": ("blood_sugar", "mmol/L"),
-        "heart_rate": ("heart_rate", "bpm"),
-        "sleep_hours": ("sleep_hours", "小时"),
-        "steps": ("steps", "步"),
-    }
-    db = SessionLocal()
-    try:
-        for key, value in entities.items():
-            if key in metric_map:
-                code, unit = metric_map[key]
-                if key == "weight" and isinstance(value, (int, float)):
-                    value = float(value)
-                point = HealthDataPoint(
-                    pregnant_id=pregnant_id,
-                    metric_code=code,
-                    value=float(value),
-                    unit=unit,
-                    source="PATIENT_REPORT",
-                )
-                db.add(point)
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
+    """保存健康数据到数据库（调用统一入库服务）"""
+    from ..core.health_data_service import save_health_metrics, HealthDataSource
+    save_health_metrics(pregnant_id, entities, HealthDataSource.PATIENT_CHAT)
 
 
 # ==================== RAG 知识库问答 ====================
@@ -687,7 +765,7 @@ def rag_status():
 @router.get("/trends/{pregnant_id}")
 async def get_health_trends(pregnant_id: str):
     """获取孕妇近期健康趋势"""
-    from datetime import timedelta
+    from datetime import datetime, timedelta
     from ..models import HealthDataPoint
     from ..core.trend_engine import trend_engine
 

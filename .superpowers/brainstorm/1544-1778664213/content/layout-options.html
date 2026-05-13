@@ -1,0 +1,106 @@
+<h2>孕妇端布局重设计</h2>
+<p class="subtitle">当前 PregnantTools.vue 把 5 个大模块挤在一个长页面，手机端滚动过长。以下是 3 种重构方案。</p>
+
+<h3>当前问题</h3>
+<div class="mockup">
+  <div class="mockup-header">当前 /pregnant/tools 页面结构（约 1400 行代码）</div>
+  <div class="mockup-body" style="padding: 0;">
+    <div style="background: linear-gradient(135deg, #fce4ec, #f8bbd0); padding: 16px; text-align: center;">
+      <div style="font-size: 14px; opacity: 0.7;">渐变头部</div>
+      <div style="font-size: 18px; font-weight: 700;">健康工具</div>
+    </div>
+    <div style="padding: 12px 16px; border-bottom: 1px solid #eee;">
+      <div style="font-weight: 600; margin-bottom: 8px;">🔴 胎动记录（约 300 行）</div>
+      <div style="background: #fce4ec; border-radius: 50%; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800;">0</div>
+      <div style="text-align: center; font-size: 12px; color: #999;">+1 胎动按钮 + 计时器 + 历史列表</div>
+    </div>
+    <div style="padding: 12px 16px; border-bottom: 1px solid #eee;">
+      <div style="font-weight: 600; margin-bottom: 8px;">📝 快速录入（约 100 行）</div>
+      <div style="font-size: 12px; color: #666;">体重 / 血压 / 胎动 / 情绪 表单</div>
+    </div>
+    <div style="padding: 12px 16px; border-bottom: 1px solid #eee;">
+      <div style="font-weight: 600; margin-bottom: 8px;">📊 健康趋势（约 80 行 + ECharts）</div>
+      <div style="background: #e3f2fd; height: 60px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #1976d2;">[ECharts 图表区域]</div>
+    </div>
+    <div style="padding: 12px 16px; border-bottom: 1px solid #eee;">
+      <div style="font-weight: 600; margin-bottom: 8px;">👶 胎动历史（约 80 行）</div>
+      <div style="font-size: 12px; color: #666;">历史记录列表</div>
+    </div>
+    <div style="padding: 12px 16px;">
+      <div style="font-weight: 600; margin-bottom: 8px;">🧠 心理筛查（约 200 行）</div>
+      <div style="font-size: 12px; color: #666;">EPDS 10题问卷 + 结果展示</div>
+    </div>
+    <div style="padding: 8px; text-align: center; background: #fff3e0; font-size: 11px; color: #e65100;">
+      ⚠️ 总计约 1400 行，手机需滚动 5-6 屏才能看完
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top: 24px;">重构方案对比</h3>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>方案 A：拆分为多个子页面（推荐）</h3>
+      <p>将 /tools 拆分为独立子页面，底部 tab 保留「工具」入口，点击后展示工具网格导航。</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <div>• <strong>/pregnant/tools</strong> → 工具网格（图标入口）</div>
+        <div>• <strong>/pregnant/tools/fetal-movement</strong> → 胎动计数器</div>
+        <div>• <strong>/pregnant/tools/health-record</strong> → 快速录入</div>
+        <div>• <strong>/pregnant/tools/health-trend</strong> → 健康趋势图表</div>
+        <div>• <strong>/pregnant/tools/mental-health</strong> → 心理筛查</div>
+      </div>
+      <div style="margin-top: 8px;">
+        <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 4px; font-size: 11px;">优点</span>
+        <span style="font-size: 12px; margin-left: 4px;">每个页面聚焦单一功能，手机体验好</span>
+      </div>
+      <div>
+        <span style="background: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 4px; font-size: 11px;">缺点</span>
+        <span style="font-size: 12px; margin-left: 4px;">路由增多，需要导航回退逻辑</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>方案 B：Tab 分组 + 首页快捷入口</h3>
+      <p>保留 /tools 页面但用 el-tabs 分组，同时在首页添加常用工具快捷入口。</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <div>• <strong>Tab 1「记录」</strong>：胎动计数 + 快速录入</div>
+        <div>• <strong>Tab 2「趋势」</strong>：健康趋势图表</div>
+        <div>• <strong>Tab 3「筛查」</strong>：心理健康筛查</div>
+        <div>• <strong>首页快捷入口</strong>：胎动计数一键进入</div>
+      </div>
+      <div style="margin-top: 8px;">
+        <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 4px; font-size: 11px;">优点</span>
+        <span style="font-size: 12px; margin-left: 4px;">改动最小，保持单页面结构</span>
+      </div>
+      <div>
+        <span style="background: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 4px; font-size: 11px;">缺点</span>
+        <span style="font-size: 12px; margin-left: 4px;">Tab 内容仍然较多，图表加载影响整体性能</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>方案 C：首页整合 + 工具下沉</h3>
+      <p>将高频功能（胎动计数、快速录入）提升到首页，低频功能（趋势图表、心理筛查）留在 tools 页。</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <div>• <strong>/pregnant/home</strong>：+ 快速录入卡片 + 胎动快捷入口</div>
+        <div>• <strong>/pregnant/tools</strong>：趋势图表 + 心理筛查 + 胎动历史</div>
+      </div>
+      <div style="margin-top: 8px;">
+        <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 4px; font-size: 11px;">优点</span>
+        <span style="font-size: 12px; margin-left: 4px;">高频操作一步到位，符合使用习惯</span>
+      </div>
+      <div>
+        <span style="background: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 4px; font-size: 11px;">缺点</span>
+        <span style="font-size: 12px; margin-left: 4px;">首页变重，需要精心设计信息层级</span>
+      </div>
+    </div>
+  </div>
+</div>

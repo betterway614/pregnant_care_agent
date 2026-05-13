@@ -3,31 +3,41 @@ from typing import AsyncGenerator, Optional
 from ..config import settings
 
 
+# 模型实例缓存
+_model_instance = None
+
+
 def get_agno_model():
-    """根据配置返回 Agno 模型实例"""
+    """根据配置返回 Agno 模型实例（全局复用）"""
+    global _model_instance
+    if _model_instance is not None:
+        return _model_instance
+
     from agno.models.openai import OpenAIChat
     from agno.models.ollama import Ollama
 
     mode = settings.llm_mode
 
     if mode == "cloud":
-        return OpenAIChat(
+        _model_instance = OpenAIChat(
             id=settings.llm_model,
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url,
+            role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
         )
     elif mode == "local":
-        return Ollama(
+        _model_instance = Ollama(
             id=settings.local_model,
             host=settings.ollama_host,
         )
     else:
-        # Mock 模式：使用 OpenAIChat 指向一个假地址（不会真正调用）
-        return OpenAIChat(
+        _model_instance = OpenAIChat(
             id="mock-model",
             api_key="mock-key",
             base_url="http://localhost:1/v1",
         )
+
+    return _model_instance
 
 
 class AgnoClient:
@@ -70,7 +80,7 @@ class AgnoClient:
         """异步流式对话接口"""
         user_msg, instructions = self._extract_messages(messages)
         agent = self._create_agent(instructions) if instructions else self._agent
-        async for event in agent.arun_stream(user_msg):
+        async for event in agent.arun(input=user_msg, stream=True):
             if hasattr(event, "content") and event.content:
                 yield event.content
 

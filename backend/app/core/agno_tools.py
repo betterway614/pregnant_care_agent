@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from uuid import UUID
@@ -105,26 +106,25 @@ def agno_evaluate_vital_rules(
 # ==================== 健康数据工具 ====================
 
 
-@tool
-def agno_save_health_data(
+def _save_health_data_sync(
     pregnant_id: str,
-    weight: float = 0,
-    sbp: float = 0,
-    dbp: float = 0,
-    fetal_movement: float = 0,
-    blood_sugar: float = 0,
-    heart_rate: float = 0,
-    sleep_hours: float = 0,
-    steps: float = 0,
+    weight: float,
+    sbp: float,
+    dbp: float,
+    fetal_movement: float,
+    blood_sugar: float,
+    heart_rate: float,
+    sleep_hours: float,
+    steps: float,
 ) -> dict:
-    """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。"""
+    """同步保存健康数据（在线程池中执行）"""
     from ..database import SessionLocal
     from ..models import HealthDataPoint
 
     metric_map = {
         "weight": ("weight", "kg"),
-        "sbp": ("sbp", "mmHg"),
-        "dbp": ("dbp", "mmHg"),
+        "sbp": ("systolic", "mmHg"),
+        "dbp": ("diastolic", "mmHg"),
         "fetal_movement": ("fetal_movement", "次/小时"),
         "blood_sugar": ("blood_sugar", "mmol/L"),
         "heart_rate": ("heart_rate", "bpm"),
@@ -155,6 +155,8 @@ def agno_save_health_data(
         db.commit()
     except Exception:
         db.rollback()
+        import logging
+        logging.warning("健康数据保存失败 pregnant_id=%s metrics=%s", pregnant_id, saved, exc_info=True)
     finally:
         db.close()
 
@@ -162,8 +164,27 @@ def agno_save_health_data(
 
 
 @tool
-def agno_get_patient_context(pregnant_id: str) -> dict:
-    """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。用于理解患者当前状况。"""
+async def agno_save_health_data(
+    pregnant_id: str,
+    weight: float = 0,
+    sbp: float = 0,
+    dbp: float = 0,
+    fetal_movement: float = 0,
+    blood_sugar: float = 0,
+    heart_rate: float = 0,
+    sleep_hours: float = 0,
+    steps: float = 0,
+) -> dict:
+    """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。异步安全，不阻塞事件循环。"""
+    return await asyncio.to_thread(
+        _save_health_data_sync,
+        pregnant_id, weight, sbp, dbp, fetal_movement,
+        blood_sugar, heart_rate, sleep_hours, steps,
+    )
+
+
+def _get_patient_context_sync(pregnant_id: str) -> dict:
+    """同步获取患者上下文（在线程池中执行）"""
     from ..database import SessionLocal
     from ..models import Pregnant, HealthDataPoint
     from sqlalchemy import desc
@@ -179,7 +200,6 @@ def agno_get_patient_context(pregnant_id: str) -> dict:
         gest_week = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
         gest_day = pregnant.gestational_age_days % 7 if pregnant.gestational_age_days else 0
 
-        # 最近 10 条健康数据
         recent = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == pregnant_id
         ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
@@ -198,6 +218,12 @@ def agno_get_patient_context(pregnant_id: str) -> dict:
         }
     finally:
         db.close()
+
+
+@tool
+async def agno_get_patient_context(pregnant_id: str) -> dict:
+    """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。异步安全。"""
+    return await asyncio.to_thread(_get_patient_context_sync, pregnant_id)
 
 
 # ==================== 记忆查询工具 ====================
@@ -222,9 +248,8 @@ def agno_should_ask_bp(pregnant_id: str) -> dict:
 # ==================== 趋势分析工具 ====================
 
 
-@tool
-def agno_analyze_health_trends(pregnant_id: str) -> dict:
-    """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。"""
+def _analyze_health_trends_sync(pregnant_id: str) -> dict:
+    """同步分析健康趋势（在线程池中执行）"""
     from datetime import timedelta
     from ..database import SessionLocal
     from ..models import Pregnant, HealthDataPoint
@@ -259,6 +284,12 @@ def agno_analyze_health_trends(pregnant_id: str) -> dict:
         }
     finally:
         db.close()
+
+
+@tool
+async def agno_analyze_health_trends(pregnant_id: str) -> dict:
+    """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。异步安全。"""
+    return await asyncio.to_thread(_analyze_health_trends_sync, pregnant_id)
 
 
 # ==================== 知识搜索工具 ====================
@@ -356,12 +387,22 @@ def _try_save_health_data(pregnant_id: str, question_key: str, text: str, db) ->
 
     source = "FOLLOWUP"
 
-    if question_key == "bp":
+    # 处理血压（拆分为 sbp/dbp）- bp, bp_morning, bp_evening
+    if question_key in ("bp", "bp_morning", "bp_evening"):
         if "sbp" in parsed and "dbp" in parsed:
-            _insert_health_point(db, pregnant_id, "sbp", parsed["sbp"], "mmHg", source)
-            _insert_health_point(db, pregnant_id, "dbp", parsed["dbp"], "mmHg", source)
+            _insert_health_point(db, pregnant_id, "systolic", parsed["sbp"], "mmHg", source)
+            _insert_health_point(db, pregnant_id, "diastolic", parsed["dbp"], "mmHg", source)
             return True
 
+    # 血糖指标
+    if question_key in ("blood_sugar_fasting", "blood_sugar_postprandial"):
+        if "metric_code" in parsed:
+            _insert_health_point(
+                db, pregnant_id, parsed["metric_code"], parsed["value"], parsed.get("unit", ""), source
+            )
+            return True
+
+    # 其他单值指标
     if "metric_code" in parsed:
         _insert_health_point(
             db, pregnant_id, parsed["metric_code"], parsed["value"], parsed.get("unit", ""), source
@@ -445,10 +486,14 @@ async def _get_followup_context_impl(record_id: str) -> dict:
 async def _record_answer_impl(
     record_id: str, question_key: str, answer_text: str
 ) -> dict:
-    """记录孕妇回答，自动解析并保存健康数据"""
+    """记录孕妇回答，自动解析并保存健康数据
+
+    状态机: draft → in_progress（首次回答时自动转换）
+    """
     from ..database import SessionLocal
     from ..services import followup_service
     from ..models import FollowUpRecord
+    from ..schemas import FOLLOWUP_STATUS_IN_PROGRESS, FOLLOWUP_ACTIVE_STATUSES
 
     db = SessionLocal()
     try:
@@ -461,8 +506,12 @@ async def _record_answer_impl(
 
         if not record:
             return {"error": "随访记录不存在"}
-        if record.status == "confirmed":
-            return {"error": "该随访已归档，无法继续记录"}
+        if record.status not in FOLLOWUP_ACTIVE_STATUSES:
+            return {"error": f"该随访状态为 {record.status}，无法继续记录"}
+
+        # 状态机: draft → in_progress
+        if record.status == "draft":
+            record.status = FOLLOWUP_STATUS_IN_PROGRESS
 
         current_data = dict(record.self_reported_data) if record.self_reported_data else {}
         current_data[question_key] = answer_text
@@ -491,6 +540,7 @@ async def _record_answer_impl(
             "all_questions_answered": answered_count >= total,
             "answered_count": answered_count,
             "total_count": total,
+            "status": record.status,
             "next_question": (
                 _find_question_text(template, remaining[0]) if remaining else None
             ),
@@ -500,10 +550,14 @@ async def _record_answer_impl(
 
 
 async def _complete_followup_impl(record_id: str, summary: str = "") -> dict:
-    """完成随访，归档记录"""
+    """完成随访，归档记录
+
+    状态机: in_progress → completed（自动归档）
+    """
     from ..database import SessionLocal
     from ..services import followup_service
     from ..models import FollowUpRecord, Pregnant
+    from ..schemas import FOLLOWUP_STATUS_COMPLETED, FOLLOWUP_ACTIVE_STATUSES
 
     db = SessionLocal()
     try:
@@ -516,8 +570,8 @@ async def _complete_followup_impl(record_id: str, summary: str = "") -> dict:
 
         if not record:
             return {"error": "随访记录不存在"}
-        if record.status == "confirmed":
-            return {"error": "该随访已归档", "record_id": record_id, "status": "confirmed"}
+        if record.status not in FOLLOWUP_ACTIVE_STATUSES:
+            return {"error": f"该随访状态为 {record.status}，无法完成", "record_id": record_id, "status": record.status}
 
         pregnant = db.query(Pregnant).filter(
             Pregnant.pregnant_id == record.pregnant_id
@@ -532,14 +586,14 @@ async def _complete_followup_impl(record_id: str, summary: str = "") -> dict:
             final_summary = f"{final_summary} | 小结：{summary}"
 
         record.summary = final_summary
-        record.status = "confirmed"
+        record.status = FOLLOWUP_STATUS_COMPLETED
         db.commit()
 
         return {
             "success": True,
             "record_id": str(record.id),
             "summary": final_summary,
-            "status": "confirmed",
+            "status": FOLLOWUP_STATUS_COMPLETED,
             "follow_up_date": record.follow_up_date.isoformat()
             if record.follow_up_date
             else None,

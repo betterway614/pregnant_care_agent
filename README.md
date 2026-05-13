@@ -66,7 +66,6 @@ medical_agent1/
 │   │   │   ├── fgr.py                #   FGR风险评估
 │   │   │   ├── orders.py             #   医嘱管理
 │   │   │   ├── dashboard.py          #   数据统计看板
-│   │   │   ├── monitor.py            #   健康监测数据
 │   │   │   ├── fetal_movement.py     #   胎动记录管理
 │   │   │   ├── recommend.py          #   健康建议推荐
 │   │   │   ├── nurse_ai.py           #   护士端AI助手

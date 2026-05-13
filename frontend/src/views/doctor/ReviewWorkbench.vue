@@ -214,10 +214,87 @@
               <p>选择孕妇后查看</p>
             </div>
 
-            <div v-if="selectedAlert && !pregnantFollowUps.length && !pregnantInfoLoading" class="empty-state">
+            <div v-if="selectedAlert && !pregnantFollowUps.length && !pregnantInfoLoading && !aiAnalysisResult" class="empty-state">
               <el-icon :size="40" color="var(--text-light)"><ChatDotSquare /></el-icon>
               <p>暂无随访记录</p>
             </div>
+
+            <!-- AI分析按钮 -->
+            <div v-if="selectedAlert" style="margin-bottom: 16px">
+              <el-button
+                type="primary"
+                :icon="MagicStick"
+                :loading="aiAnalyzing"
+                @click="runDoctorAiAnalysis"
+                style="width: 100%"
+              >
+                Dr.智 AI 分析
+              </el-button>
+            </div>
+
+            <!-- AI分析结果 -->
+            <template v-if="aiAnalysisResult">
+              <!-- 推理链 -->
+              <section v-if="aiAnalysisResult.reasoning_chain?.length" class="detail-section">
+                <h4 class="detail-section__title">
+                  <el-icon><Guide /></el-icon> 推理链
+                </h4>
+                <div class="chain-steps">
+                  <div
+                    v-for="(step, idx) in aiAnalysisResult.reasoning_chain"
+                    :key="idx"
+                    class="chain-step"
+                  >
+                    <span class="chain-step__num">{{ idx + 1 }}</span>
+                    <span class="chain-step__text">{{ step }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 鉴别诊断 -->
+              <section v-if="aiAnalysisResult.differential_diagnosis?.length" class="detail-section">
+                <h4 class="detail-section__title">
+                  <el-icon><FirstAidKit /></el-icon> 鉴别诊断
+                </h4>
+                <div class="diagnosis-list">
+                  <div
+                    v-for="(dx, idx) in aiAnalysisResult.differential_diagnosis"
+                    :key="idx"
+                    class="diagnosis-item"
+                  >
+                    <div class="diagnosis-item__header">
+                      <span class="diagnosis-item__condition">{{ dx.condition }}</span>
+                      <el-tag
+                        :type="confidenceType(dx.confidence)"
+                        size="small"
+                        effect="plain"
+                      >
+                        {{ (dx.confidence * 100).toFixed(0) }}%
+                      </el-tag>
+                    </div>
+                    <p v-if="dx.reasoning" class="diagnosis-item__reasoning">{{ dx.reasoning }}</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 建议医嘱 -->
+              <section v-if="aiAnalysisResult.suggested_orders" class="detail-section">
+                <h4 class="detail-section__title">建议医嘱</h4>
+                <div class="suggested-orders">
+                  {{ aiAnalysisResult.suggested_orders }}
+                </div>
+              </section>
+
+              <!-- 循证参考 -->
+              <section v-if="aiAnalysisResult.evidence_references?.length" class="detail-section">
+                <h4 class="detail-section__title">循证参考</h4>
+                <ul class="evidence-list">
+                  <li v-for="(ref, idx) in aiAnalysisResult.evidence_references" :key="idx">
+                    {{ ref }}
+                  </li>
+                </ul>
+              </section>
+            </template>
           </div>
         </div>
       </el-col>
@@ -308,8 +385,9 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Refresh, WarningFilled, Edit, FolderAdd,
   Select, ChatDotSquare, User, CircleCheck,
+  MagicStick, Guide, FirstAidKit,
 } from '@element-plus/icons-vue'
-import { alertApi, orderApi, followUpApi } from '@/api/endpoints'
+import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
 import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
@@ -334,6 +412,10 @@ const downgradeReason = ref('')
 const orderDialogVisible = ref(false)
 const orderGenerating = ref(false)
 const generatedOrder = ref<MedicalOrder | null>(null)
+
+// AI分析状态
+const aiAnalyzing = ref(false)
+const aiAnalysisResult = ref<any>(null)
 
 /** 风险级别映射 */
 function mapRiskLevel(level: string): string {
@@ -450,6 +532,7 @@ async function selectAlert(alert: Alert) {
   detailLoading.value = false
   pregnantInfoLoading.value = true
   pregnantFollowUps.value = []
+  aiAnalysisResult.value = null
 
   // 更新URL
   router.replace(`/doctor/review/${alert.id}`)
@@ -566,6 +649,28 @@ function writeManually() {
   orderDialogVisible.value = false
   // 跳转到医嘱管理页面
   router.push('/doctor/orders')
+}
+
+/** 触发AI分析 */
+async function runDoctorAiAnalysis() {
+  if (!selectedAlert.value) return
+  aiAnalyzing.value = true
+  aiAnalysisResult.value = null
+  try {
+    const res = await doctorAiApi.analyze(selectedAlert.value.pregnant_id)
+    aiAnalysisResult.value = res.data
+  } catch (err) {
+    console.error('AI分析失败:', err)
+  } finally {
+    aiAnalyzing.value = false
+  }
+}
+
+/** 鉴别诊断置信度颜色 */
+function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
+  if (confidence >= 0.7) return 'danger'
+  if (confidence >= 0.4) return 'warning'
+  return 'info'
 }
 
 // 根据路由参数选中预警
@@ -835,5 +940,89 @@ onMounted(async () => {
 
 .dialog-body {
   padding: 8px 0;
+}
+
+/* 推理链 */
+.chain-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chain-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chain-step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 鉴别诊断 */
+.diagnosis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnosis-item {
+  background: var(--bg-page);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+
+.diagnosis-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.diagnosis-item__condition {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnosis-item__reasoning {
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* 建议医嘱 */
+.suggested-orders {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  background: var(--bg-page);
+  border-radius: 6px;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+/* 循证参考 */
+.evidence-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.8;
 }
 </style>

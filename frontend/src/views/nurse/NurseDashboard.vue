@@ -111,16 +111,24 @@
     <!-- AI 智能助手面板 -->
     <div class="content-card" style="margin-top: 16px">
       <div class="content-card__header">
-        <span class="content-card__title">
-          <el-icon style="margin-right: 6px"><MagicStick /></el-icon>
-          小护 AI 智能分析
+        <span class="content-card__title" style="display: flex; align-items: center; gap: 8px">
+          <AgentAvatar agent="xiaohu" :size="24" />
+          小护 AI 智能助手
         </span>
-        <el-button text type="primary" size="small" @click="showAiPanel = !showAiPanel">
-          {{ showAiPanel ? '收起' : '展开' }}
-        </el-button>
+        <div style="display: flex; gap: 8px">
+          <el-button text type="primary" size="small" @click="showAiChat = !showAiChat">
+            {{ showAiChat ? '分析' : '对话' }}
+          </el-button>
+          <el-button text type="primary" size="small" @click="showAiPanel = !showAiPanel">
+            {{ showAiPanel ? '收起' : '展开' }}
+          </el-button>
+        </div>
       </div>
       <div class="content-card__body" v-if="showAiPanel">
-        <div class="ai-panel">
+        <!-- 对话模式 -->
+        <NurseAIChat v-if="showAiChat" />
+        <!-- 分析模式 -->
+        <div v-else class="ai-panel">
           <div class="ai-panel__input">
             <el-select
               v-model="aiPatientId"
@@ -205,6 +213,8 @@ import { dashboardApi, alertApi, followUpApi, nurseAiApi } from '@/api/endpoints
 import type { DashboardStats, Alert, FollowUpRecord, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
+import AgentAvatar from '@/components/common/AgentAvatar.vue'
+import NurseAIChat from './NurseAIChat.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -292,6 +302,7 @@ function handleAlertClick(alert: Alert) {
 
 // ==================== AI 智能分析 ====================
 const showAiPanel = ref(false)
+const showAiChat = ref(false)
 const aiPatientId = ref('')
 const aiLoading = ref(false)
 const aiResult = ref<any>(null)

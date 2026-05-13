@@ -1,4 +1,6 @@
 """数据库连接与会话管理"""
+import asyncio
+from typing import TypeVar, Callable
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import settings
@@ -38,3 +40,15 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+T = TypeVar("T")
+
+
+async def db_call(func: Callable[..., T], *args, **kwargs) -> T:
+    """在默认线程池中执行同步 DB 操作，避免阻塞 async 事件循环
+
+    用法:
+        result = await db_call(some_sync_function, arg1, arg2)
+    """
+    return await asyncio.to_thread(lambda: func(*args, **kwargs))

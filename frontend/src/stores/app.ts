@@ -1,8 +1,8 @@
 /* 全局状态管理 */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { UserRole, DashboardStats, HardwareMonitor, Pregnant } from '@/types'
-import { dashboardApi, monitorApi } from '@/api/endpoints'
+import type { UserRole, DashboardStats, Pregnant } from '@/types'
+import { dashboardApi } from '@/api/endpoints'
 
 export const useAppStore = defineStore('app', () => {
   const currentRole = ref<UserRole>('nurse')
@@ -11,8 +11,6 @@ export const useAppStore = defineStore('app', () => {
     total_pregnant: 0, pending_alerts: 0, today_followups: 0,
     pending_reviews: 0, high_risk_count: 0, weekly_new_pregnant: 0,
   })
-  const hardwareMonitor = ref<HardwareMonitor | null>(null)
-
   // ===== 认证相关状态 =====
   const currentPregnantId = ref(localStorage.getItem('currentPregnantId') || '')
   const currentPregnant = ref<Pregnant | null>(null)
@@ -36,13 +34,6 @@ export const useAppStore = defineStore('app', () => {
     try {
       const res = await dashboardApi.stats()
       stats.value = res.data
-    } catch { /* 忽略错误 */ }
-  }
-
-  async function fetchHardwareMonitor() {
-    try {
-      const res = await monitorApi.hardware()
-      hardwareMonitor.value = res.data
     } catch { /* 忽略错误 */ }
   }
 
@@ -85,9 +76,9 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     // 原有
-    currentRole, sidebarCollapsed, stats, hardwareMonitor,
+    currentRole, sidebarCollapsed, stats,
     roleName, roleIcon,
-    fetchStats, fetchHardwareMonitor, toggleSidebar, setRole,
+    fetchStats, toggleSidebar, setRole,
     // 新增认证相关
     currentPregnantId, currentPregnant, isLoggedIn,
     setPregnant, login, logout,

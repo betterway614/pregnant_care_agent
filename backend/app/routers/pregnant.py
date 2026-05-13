@@ -1,6 +1,9 @@
 """孕妇管理 API"""
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
+from datetime import datetime
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, ScheduleNode
 from ..schemas import PregnantResponse, PregnantUpdateRequest, PregnantHomeData
@@ -187,11 +190,11 @@ def _get_health_summary(db: Session, pregnant_id: str, week: int) -> dict:
     # 最近血压
     sbp = db.query(HealthDataPoint).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
-        HealthDataPoint.metric_code == "sbp"
+        HealthDataPoint.metric_code == "systolic"
     ).order_by(HealthDataPoint.recorded_at.desc()).first()
     dbp = db.query(HealthDataPoint).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
-        HealthDataPoint.metric_code == "dbp"
+        HealthDataPoint.metric_code == "diastolic"
     ).order_by(HealthDataPoint.recorded_at.desc()).first()
     if sbp and dbp:
         summary["bp"] = f"{int(sbp.value)}/{int(dbp.value)}"
@@ -205,3 +208,75 @@ def _get_health_summary(db: Session, pregnant_id: str, week: int) -> dict:
         summary["fetal_movement"] = int(fm.value)
 
     return summary
+
+
+# ==================== 健康数据直接提交 API ====================
+
+class HealthDataSubmit(BaseModel):
+    """孕妇端健康数据提交（直接入库，不经过NLU）"""
+    weight: Optional[float] = None              # 体重 kg
+    systolic: Optional[float] = None            # 收缩压 mmHg
+    diastolic: Optional[float] = None           # 舒张压 mmHg
+    fetal_movement: Optional[float] = None      # 胎动 次/小时
+    blood_sugar: Optional[float] = None         # 血糖 mmol/L
+    blood_sugar_type: Optional[str] = None      # 血糖类型: fasting/postprandial
+    heart_rate: Optional[float] = None          # 心率 bpm
+    sleep_hours: Optional[float] = None         # 睡眠 小时
+    steps: Optional[int] = None                 # 步数
+    mood: Optional[str] = None                  # 情绪: good/neutral/bad
+
+
+class HealthDataSubmitResponse(BaseModel):
+    success: bool
+    saved_metrics: list[str] = []
+    count: int = 0
+    message: str = ""
+
+
+@router.post("/{pregnant_id}/health-data", response_model=HealthDataSubmitResponse)
+def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
+    """孕妇端直接提交健康数据（不经过NLU，确保100%入库）"""
+    from ..core.health_data_service import save_health_metrics, HealthDataSource
+
+    # 验证孕妇存在
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if not pregnant:
+            raise HTTPException(404, "孕妇不存在")
+    finally:
+        db.close()
+
+    # 构建指标数据
+    metrics = {}
+    if req.weight is not None:
+        metrics["weight"] = req.weight
+    if req.systolic is not None:
+        metrics["systolic"] = req.systolic
+    if req.diastolic is not None:
+        metrics["diastolic"] = req.diastolic
+    if req.fetal_movement is not None:
+        metrics["fetal_movement"] = req.fetal_movement
+    if req.heart_rate is not None:
+        metrics["heart_rate"] = req.heart_rate
+    if req.sleep_hours is not None:
+        metrics["sleep_hours"] = req.sleep_hours
+    if req.steps is not None:
+        metrics["steps"] = req.steps
+    if req.mood:
+        metrics["mood"] = req.mood
+
+    # 血糖特殊处理
+    if req.blood_sugar is not None:
+        sugar_type = req.blood_sugar_type or "fasting"
+        metrics[f"blood_sugar_{sugar_type}"] = req.blood_sugar
+
+    # 调用统一入库服务
+    saved = save_health_metrics(pregnant_id, metrics, HealthDataSource.PATIENT_DIRECT)
+
+    return HealthDataSubmitResponse(
+        success=True,
+        saved_metrics=saved,
+        count=len(saved),
+        message=f"成功保存 {len(saved)} 项数据" if saved else "没有需要保存的数据",
+    )

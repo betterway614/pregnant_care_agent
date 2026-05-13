@@ -21,6 +21,8 @@ class EmergencyGuardrail:
     检测到紧急情况时抛出 InputCheckError，终止 Agent 循环。
     """
 
+    __name__ = "EmergencyGuardrail"
+
     def __call__(self, run_input=None, **kwargs):
         """同步 guardrail 检查"""
         user_message = self._extract_message(run_input, kwargs)
@@ -61,13 +63,31 @@ class EmergencyGuardrail:
 
 
 class MedicalSafetyGuardrail:
-    """输出层安全防护 - 拦截诊断性结论或用药建议"""
+    """输出层安全防护 - 拦截诊断性结论或用药建议
+
+    作为 Agent post_hook 使用，在 LLM 输出后检查内容安全性。
+    """
+
+    __name__ = "MedicalSafetyGuardrail"
 
     BLOCKED_PATTERNS = [
         "诊断为", "诊断是", "确诊",
         "建议用药", "建议服用", "处方",
         "可以吃药", "应该吃药", "用药方案",
     ]
+
+    def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
+        """检查 LLM 输出是否包含违规内容
+
+        Returns:
+            拦截提示词（如果检测到违规）
+            None（如果安全）
+        """
+        return self.check(response_content)
+
+    async def async_check(self, response_content: str = "", **kwargs) -> Optional[str]:
+        """异步版本的安全检查"""
+        return self.check(response_content)
 
     def check(self, response: str) -> Optional[str]:
         """检查 LLM 输出是否包含违规内容
@@ -76,6 +96,8 @@ class MedicalSafetyGuardrail:
             拦截提示词（如果检测到违规）
             None（如果安全）
         """
+        if not response:
+            return None
         for pattern in self.BLOCKED_PATTERNS:
             if pattern in response:
                 return "小安不能提供诊断或用药建议。请咨询医生获取专业意见。"

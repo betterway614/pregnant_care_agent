@@ -131,7 +131,12 @@ async def execute_get_followup_context(record_id: str, db: Session) -> dict:
 async def execute_record_answer(
     record_id: str, question_key: str, answer_text: str, db: Session
 ) -> dict:
-    """记录孕妇回答，自动解析并保存健康数据"""
+    """记录孕妇回答，自动解析并保存健康数据
+
+    状态机: draft → in_progress（首次回答时自动转换）
+    """
+    from ..schemas import FOLLOWUP_STATUS_IN_PROGRESS, FOLLOWUP_ACTIVE_STATUSES
+
     try:
         record = db.query(FollowUpRecord).filter(
             FollowUpRecord.id == UUID(record_id)
@@ -141,8 +146,12 @@ async def execute_record_answer(
 
     if not record:
         return {"error": "随访记录不存在"}
-    if record.status == "confirmed":
-        return {"error": "该随访已归档，无法继续记录"}
+    if record.status not in FOLLOWUP_ACTIVE_STATUSES:
+        return {"error": f"该随访状态为 {record.status}，无法继续记录"}
+
+    # 状态机: draft → in_progress
+    if record.status == "draft":
+        record.status = FOLLOWUP_STATUS_IN_PROGRESS
 
     # 1. 保存到 self_reported_data
     current_data = dict(record.self_reported_data) if record.self_reported_data else {}
@@ -178,6 +187,7 @@ async def execute_record_answer(
         "all_questions_answered": answered_count >= total,
         "answered_count": answered_count,
         "total_count": total,
+        "status": record.status,
         "next_question": (
             _find_question_text(template, remaining[0]) if remaining else None
         ),
@@ -187,7 +197,12 @@ async def execute_record_answer(
 async def execute_complete_followup(
     record_id: str, summary: str, db: Session
 ) -> dict:
-    """完成随访，归档记录"""
+    """完成随访，归档记录
+
+    状态机: in_progress → completed
+    """
+    from ..schemas import FOLLOWUP_STATUS_COMPLETED, FOLLOWUP_ACTIVE_STATUSES
+
     try:
         record = db.query(FollowUpRecord).filter(
             FollowUpRecord.id == UUID(record_id)
@@ -197,8 +212,8 @@ async def execute_complete_followup(
 
     if not record:
         return {"error": "随访记录不存在"}
-    if record.status == "confirmed":
-        return {"error": "该随访已归档", "record_id": record_id, "status": "confirmed"}
+    if record.status not in FOLLOWUP_ACTIVE_STATUSES:
+        return {"error": f"该随访状态为 {record.status}，无法完成", "record_id": record_id, "status": record.status}
 
     pregnant = db.query(Pregnant).filter(
         Pregnant.pregnant_id == record.pregnant_id
@@ -214,14 +229,14 @@ async def execute_complete_followup(
         final_summary = f"{final_summary} | 小结：{summary}"
 
     record.summary = final_summary
-    record.status = "confirmed"
+    record.status = FOLLOWUP_STATUS_COMPLETED
     db.commit()
 
     return {
         "success": True,
         "record_id": str(record.id),
         "summary": final_summary,
-        "status": "confirmed",
+        "status": FOLLOWUP_STATUS_COMPLETED,
         "follow_up_date": record.follow_up_date.isoformat()
         if record.follow_up_date
         else None,
@@ -249,11 +264,19 @@ def _try_save_health_data(pregnant_id: str, question_key: str, text: str, db: Se
 
     source = "FOLLOWUP"
 
-    # 处理血压（拆分为 sbp/dbp）
-    if question_key == "bp":
+    # 处理血压（拆分为 sbp/dbp）- bp, bp_morning, bp_evening
+    if question_key in ("bp", "bp_morning", "bp_evening"):
         if "sbp" in parsed and "dbp" in parsed:
-            _insert_health_point(db, pregnant_id, "sbp", parsed["sbp"], "mmHg", source)
-            _insert_health_point(db, pregnant_id, "dbp", parsed["dbp"], "mmHg", source)
+            _insert_health_point(db, pregnant_id, "systolic", parsed["sbp"], "mmHg", source)
+            _insert_health_point(db, pregnant_id, "diastolic", parsed["dbp"], "mmHg", source)
+            return True
+
+    # 血糖指标
+    if question_key in ("blood_sugar_fasting", "blood_sugar_postprandial"):
+        if "metric_code" in parsed:
+            _insert_health_point(
+                db, pregnant_id, parsed["metric_code"], parsed["value"], parsed.get("unit", ""), source
+            )
             return True
 
     # 其他单值指标
@@ -325,7 +348,7 @@ def _evaluate_rules_after_answer(pregnant_id: str, db: Session):
         metric_values[point.metric_code].append(point.value)
 
     for metric, values in metric_values.items():
-        if metric in ("sbp", "dbp", "weight", "fetal_movement", "blood_sugar",
+        if metric in ("systolic", "diastolic", "weight", "fetal_movement", "blood_sugar",
                        "emotion_score", "sleep_hours"):
             context[metric] = values[0]  # 最新值
 

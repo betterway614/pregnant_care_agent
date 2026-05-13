@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, date
 from sqlalchemy import (
     Column, String, Integer, Float, DateTime, Date,
-    Text, ForeignKey, JSON, TypeDecorator
+    Text, ForeignKey, JSON, TypeDecorator, Index
 )
 from ..database import Base
 
@@ -61,11 +61,15 @@ class HealthDataPoint(Base):
 
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
-    metric_code = Column(String(32), nullable=False, comment="指标代码: weight/sbp/dbp/fetal_movement/...")
+    metric_code = Column(String(32), nullable=False, comment="指标代码: weight/systolic/diastolic/fetal_movement/...")
     value = Column(Float, nullable=False)
     unit = Column(String(16), nullable=False)
     recorded_at = Column(DateTime, default=datetime.utcnow)
     source = Column(String(32), default="PATIENT_REPORT", comment="数据来源")
+
+    __table_args__ = (
+        Index('idx_health_pregnant_metric_date', 'pregnant_id', 'metric_code', 'recorded_at'),
+    )
 
 
 class ScheduleNode(Base):
@@ -161,3 +165,64 @@ class MedicalOrder(Base):
     created_by = Column(String(64), nullable=True, comment="医生ID")
     signed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """AI 回复反馈"""
+    __tablename__ = "feedback"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    message_id = Column(String(64), nullable=False, comment="前端消息ID")
+    rating = Column(String(8), nullable=False, comment="thumbs_up/thumbs_down")
+    comment = Column(Text, nullable=True, comment="可选评论")
+    session_id = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MentalHealthScreening(Base):
+    """心理健康筛查（EPDS量表）"""
+    __tablename__ = "mental_health_screenings"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    screening_type = Column(String(32), default="EPDS", comment="EPDS/PHQ9/GAD7")
+    answers = Column(JSON, nullable=False, comment="10题答案，0-3分")
+    total_score = Column(Integer, nullable=False, comment="总分0-30")
+    risk_level = Column(String(16), nullable=False, comment="low/moderate/high/severe")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConversationMessage(Base):
+    """对话消息持久化"""
+    __tablename__ = "conversation_messages"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String(64), nullable=False, comment="会话ID")
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    role = Column(String(16), nullable=False, comment="system/user/assistant")
+    content = Column(Text, nullable=False, comment="消息内容")
+    extra_data = Column(JSON, default=dict, comment="附加元数据：nlu_result等")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DailyHealthSummary(Base):
+    """每日健康摘要（用于快速查询某天整体健康状况）"""
+    __tablename__ = "daily_health_summaries"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    date = Column(Date, nullable=False, comment="日期")
+    weight = Column(Float, nullable=True, comment="体重 kg")
+    systolic = Column(Float, nullable=True, comment="收缩压 mmHg")
+    diastolic = Column(Float, nullable=True, comment="舒张压 mmHg")
+    fetal_movement_avg = Column(Float, nullable=True, comment="胎动平均 次/小时")
+    blood_sugar_fasting = Column(Float, nullable=True, comment="空腹血糖 mmol/L")
+    blood_sugar_postprandial = Column(Float, nullable=True, comment="餐后血糖 mmol/L")
+    mood_score = Column(Float, nullable=True, comment="情绪评分 1-3")
+    data_source = Column(String(32), nullable=True, comment="主要数据来源")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_daily_summary_pregnant_date', 'pregnant_id', 'date', unique=True),
+    )

@@ -575,11 +575,29 @@ def _determine_base_interval(gest_week: int, risk_tags: list, has_critical: bool
 
 
 def _select_template(risk_tags: list, gest_week: int) -> str:
-    """根据风险标签和孕周选择随访模板"""
-    if any(t in risk_tags for t in ("FGR高危", "高血压")):
+    """根据风险标签和孕周选择随访模板
+
+    选择逻辑（基于医学指南）：
+    - 孕周 < 12: early_pregnancy
+    - 孕周 >= 36: late_pregnancy
+    - GDM: gdm
+    - 高血压: hypertension
+    - FGR高危: fgr_high_risk
+    - 心理健康: mental_health
+    - 其他: standard
+    """
+    if gest_week < 12:
+        return "early_pregnancy"
+    if gest_week >= 36:
+        return "late_pregnancy"
+    if "GDM" in risk_tags:
+        return "gdm"
+    if any(t in risk_tags for t in ("高血压", "子痫前期")):
+        return "hypertension"
+    if any(t in risk_tags for t in ("FGR高危", "FGR")):
         return "fgr_high_risk"
-    if gest_week >= 37:
-        return "post_discharge"
+    if any(t in risk_tags for t in ("心理健康", "抑郁风险")):
+        return "mental_health"
     return "standard"
 
 

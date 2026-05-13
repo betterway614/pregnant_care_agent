@@ -1,6 +1,10 @@
 """应用配置管理"""
+import os
 from pydantic_settings import BaseSettings
 from typing import Literal, Optional
+
+# .env 文件路径相对于 config.py 所在目录（backend/），而非 CWD
+_env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 
 
 class Settings(BaseSettings):
@@ -35,7 +39,8 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         if self.db_type == "sqlite":
-            return f"sqlite:///./{self.db_name}.db"
+            db_path = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(__file__)), f"{self.db_name}.db"))
+            return f"sqlite:///{db_path}"
         return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     @property
@@ -63,12 +68,12 @@ class Settings(BaseSettings):
     seed_data: bool = True
 
     # Agno 配置
-    agno_enabled: bool = False
+    agno_enabled: bool = True
     agno_model_id: str = "gpt-4o"
     agno_knowledge_dir: str = "data/knowledge"
     agno_knowledge_table: str = "knowledge_chunks"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": _env_path, "env_file_encoding": "utf-8"}
 
 
 settings = Settings()

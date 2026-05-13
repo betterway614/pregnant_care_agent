@@ -404,6 +404,12 @@
   .patient-tab-item { min-width: 44px; padding: 4px 8px; }
   .patient-tab-icon { font-size: 20px; }
   .patient-tab-label { font-size: 10px; }
+
+  .health-trends-card { padding: 10px 12px; margin-bottom: 8px; }
+  .followup-notice-card { padding: 10px 12px; margin-bottom: 8px; }
+  .proactive-greeting-card { padding: 10px 12px; margin-bottom: 8px; }
+  .reminder-item { padding: 8px 0; }
+  .reminder-item__icon { width: 30px; height: 30px; }
 }
 
 /* 标准手机 (iPhone 12/13/14, 375-389px) */
@@ -435,6 +441,10 @@
 
   .patient-tab-icon { font-size: 20px; }
   .patient-tab-label { font-size: 10px; }
+
+  .health-trends-card { padding: 12px 14px; margin-bottom: 10px; }
+  .followup-notice-card { padding: 12px 14px; margin-bottom: 10px; }
+  .reminder-item { padding: 10px 0; }
 }
 
 /* 大屏手机 (iPhone 14 Pro Max, 390-430px) */
@@ -443,6 +453,9 @@
     padding: 14px 16px;
     padding-bottom: 0;
   }
+
+  .health-trends-card { padding: 14px 16px; margin-bottom: 10px; }
+  .patient-info-card { margin-bottom: 10px; }
 }
 
 /* 平板及以上 (431px+) */
