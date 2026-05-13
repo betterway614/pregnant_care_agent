@@ -65,6 +65,21 @@
               :height="450"
               @point-click="handlePointClick"
             />
+
+            <!-- 数据点详情 -->
+            <div v-if="pointDetail" class="point-detail-card">
+              <div class="point-detail__header">
+                <span class="point-detail__name">{{ pointDetail.name }}</span>
+                <el-tag v-if="pointDetail.isNormal === true" type="success" size="small">正常</el-tag>
+                <el-tag v-else-if="pointDetail.isNormal === false" type="danger" size="small">异常</el-tag>
+                <button class="point-detail__close" @click="pointDetail = null">✕</button>
+              </div>
+              <div class="point-detail__body">
+                <span class="point-detail__value">{{ pointDetail.value }}</span>
+                <span class="point-detail__unit">{{ pointDetail.unit }}</span>
+                <span class="point-detail__date">{{ pointDetail.date }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -157,8 +172,20 @@ function handleFollowUpSelect(record: FollowUpHistoryRecord) {
   }
 }
 
+const pointDetail = ref<{ metric: string; name: string; date: string; value: number; unit: string; isNormal: boolean | null } | null>(null)
+
 function handlePointClick(data: { metric: string; date: string; value: number }) {
-  console.log('Point clicked:', data)
+  const s = trendSeries.value.find(s => s.metric === data.metric)
+  if (s) {
+    pointDetail.value = {
+      metric: data.metric,
+      name: s.name,
+      date: data.date,
+      value: data.value,
+      unit: s.unit,
+      isNormal: s.is_normal,
+    }
+  }
 }
 
 onMounted(() => {
@@ -201,5 +228,61 @@ onMounted(() => {
 
 .abnormal-item:not(:last-child) {
   border-bottom: 1px solid #ebeef5;
+}
+
+.point-detail-card {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+}
+
+.point-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.point-detail__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.point-detail__close {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  color: #909399;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.point-detail__body {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.point-detail__value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #409eff;
+}
+
+.point-detail__unit {
+  font-size: 14px;
+  color: #606266;
+}
+
+.point-detail__date {
+  font-size: 12px;
+  color: #909399;
+  margin-left: auto;
 }
 </style>
