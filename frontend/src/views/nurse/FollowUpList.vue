@@ -60,10 +60,13 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column label="操作" width="220" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click.stop="viewDetail(row)">
                 查看详情
+              </el-button>
+              <el-button text type="warning" size="small" @click.stop="goPregnantDetail(row)">
+                孕妇详情
               </el-button>
               <el-button
                 v-if="row.status !== 'confirmed'"
@@ -287,6 +290,13 @@ async function fetchPatients() {
 function viewDetail(row: FollowUpRecord) {
   selectedRecord.value = row
   detailVisible.value = true
+}
+
+/** 跳转到孕妇详情页 */
+function goPregnantDetail(row: FollowUpRecord) {
+  if (row.pregnant_id) {
+    router.push({ name: 'NursePregnantDetail', params: { pregnantId: row.pregnant_id } })
+  }
 }
 
 /** 确认归档 */
