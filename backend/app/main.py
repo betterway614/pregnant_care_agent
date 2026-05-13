@@ -4,38 +4,55 @@ import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 # 确保 backend 目录在 path 中
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from .config import settings
 from .database import engine, Base
-from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard, monitor
-from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement
+from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
+from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
+
+# 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
+from .core.log_config import setup_logging
+from loguru import logger
+setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动：创建表
-    Base.metadata.create_all(bind=engine)
-    print(f"[OK] {settings.app_name} v{settings.app_version} 启动成功")
-    print(f"  LLM模式: {settings.llm_mode}")
-    print(f"  FGR模式: {settings.fgr_mode}")
-    print(f"  数据库: {settings.db_host}:{settings.db_port}/{settings.db_name}")
+    import logging as _logging
+    _logging.getLogger("sqlalchemy.engine").setLevel(_logging.WARNING)
 
-    # 启动后自动填充Mock数据
+    if settings.db_type == "sqlite":
+        db_path = settings.database_url.replace("sqlite:///", "")
+        db_exists = os.path.exists(db_path)
+    else:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        db_exists = len(inspector.get_table_names()) > 0
+
+    if not db_exists:
+        Base.metadata.create_all(bind=engine)
+        logger.info("数据库初始化完成")
+    else:
+        logger.info("数据库已存在，跳过初始化")
+
+    logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
+    logger.info("  LLM模式: {}", settings.llm_mode)
+    logger.info("  FGR模式: {}", settings.fgr_mode)
+    logger.info("  数据库: {}:{}/{}", settings.db_host, settings.db_port, settings.db_name)
+
     if settings.seed_data:
         try:
             from .scripts.seed_data import seed_all
             seed_all()
         except Exception as e:
-            print(f"   Mock数据注入: {e}")
+            logger.error("Mock数据注入失败: {}", e)
 
     yield
-    # 关闭：清理资源
-    print("应用关闭")
+    logger.info("应用关闭")
 
 
 app = FastAPI(
@@ -62,13 +79,15 @@ app.include_router(alerts.router)
 app.include_router(fgr.router)
 app.include_router(orders.router)
 app.include_router(dashboard.router)
-app.include_router(monitor.router)
 app.include_router(pregnant.router)
 app.include_router(recommend.router)
 app.include_router(nurse_ai.router)
 app.include_router(doctor_ai.router)
 app.include_router(auth.router)
 app.include_router(fetal_movement.router)
+app.include_router(feedback.router)
+app.include_router(mental_health.router)
+app.include_router(health_trends.router)
 
 
 @app.get("/")
