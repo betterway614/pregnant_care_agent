@@ -34,6 +34,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'fgr-board', name: 'FGRBoard', component: () => import('@/views/doctor/FGRBoard.vue'), meta: { title: 'FGR看板' } },
       { path: 'review/:alertId?', name: 'ReviewWorkbench', component: () => import('@/views/doctor/ReviewWorkbench.vue'), meta: { title: '审核工作台' } },
       { path: 'orders', name: 'OrderManage', component: () => import('@/views/doctor/OrderManage.vue'), meta: { title: '医嘱管理' } },
+      { path: 'pregnant/:pregnantId', name: 'DoctorPregnantDetail', component: () => import('@/views/doctor/PregnantDetail.vue'), meta: { title: '孕妇详情' } },
     ],
   },
   // 孕妇端
