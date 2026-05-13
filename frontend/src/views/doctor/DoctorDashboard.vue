@@ -116,8 +116,8 @@
     <!-- Dr.智 AI 会诊面板 -->
     <div class="content-card" style="margin-top: 16px">
       <div class="content-card__header">
-        <span class="content-card__title">
-          <el-icon style="margin-right: 6px"><MagicStick /></el-icon>
+        <span class="content-card__title" style="display: flex; align-items: center; gap: 8px">
+          <AgentAvatar agent="zhiyi" :size="24" />
           Dr.智 AI 智能会诊
         </span>
         <el-button text type="primary" size="small" @click="showAiPanel = !showAiPanel">
@@ -176,6 +176,50 @@
               :closable="false"
               style="margin-bottom: 12px"
             />
+
+            <!-- 鉴别诊断推理链 -->
+            <div v-if="aiResult.reasoning_chain?.length" class="reasoning-chain">
+              <h4 class="section-title">
+                <el-icon><Guide /></el-icon> 推理链
+              </h4>
+              <div class="chain-steps">
+                <div
+                  v-for="(step, idx) in aiResult.reasoning_chain"
+                  :key="idx"
+                  class="chain-step"
+                >
+                  <span class="chain-step__num">{{ idx + 1 }}</span>
+                  <span class="chain-step__text">{{ step }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 鉴别诊断 -->
+            <div v-if="aiResult.differential_diagnosis?.length" class="differential-diagnosis">
+              <h4 class="section-title">
+                <el-icon><FirstAidKit /></el-icon> 鉴别诊断
+              </h4>
+              <div class="diagnosis-list">
+                <div
+                  v-for="(dx, idx) in aiResult.differential_diagnosis"
+                  :key="idx"
+                  class="diagnosis-item"
+                >
+                  <div class="diagnosis-item__header">
+                    <span class="diagnosis-item__condition">{{ dx.condition }}</span>
+                    <el-tag
+                      :type="dx.confidence >= 0.7 ? 'danger' : dx.confidence >= 0.4 ? 'warning' : 'info'"
+                      size="small"
+                      effect="plain"
+                    >
+                      {{ (dx.confidence * 100).toFixed(0) }}%
+                    </el-tag>
+                  </div>
+                  <p v-if="dx.reasoning" class="diagnosis-item__reasoning">{{ dx.reasoning }}</p>
+                </div>
+              </div>
+            </div>
+
             <el-alert
               v-if="aiResult.suggested_orders"
               title="建议医嘱"
@@ -183,7 +227,7 @@
               type="warning"
               show-icon
               :closable="false"
-              style="margin-bottom: 12px"
+              style="margin-bottom: 12px; margin-top: 12px"
             />
             <div v-if="aiResult.evidence_references?.length" class="evidence-refs">
               <p class="refs-title">循证参考：</p>
@@ -206,12 +250,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Bell, Document, MagicStick } from '@element-plus/icons-vue'
+import { Refresh, Bell, Document, MagicStick, Guide, FirstAidKit } from '@element-plus/icons-vue'
 import { dashboardApi, alertApi, orderApi, doctorAiApi } from '@/api/endpoints'
 import type { Pregnant } from '@/types'
 import type { Alert, MedicalOrder, DashboardStats } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
+import AgentAvatar from '@/components/common/AgentAvatar.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -321,9 +366,11 @@ async function loadAllData() {
   }
 }
 
-/** 点击预警行跳转到审核工作台 */
+/** 点击预警行跳转到孕妇详情页 */
 function handleAlertClick(alert: Alert) {
-  router.push(`/doctor/review/${alert.id}`)
+  if (alert.pregnant_id) {
+    router.push({ name: 'DoctorPregnantDetail', params: { pregnantId: alert.pregnant_id } })
+  }
 }
 
 /** 签署医嘱 */
@@ -479,5 +526,94 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.8;
+}
+
+/* 推理链 */
+.reasoning-chain {
+  background: var(--bg-page);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--primary);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.chain-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chain-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chain-step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 鉴别诊断 */
+.differential-diagnosis {
+  background: var(--bg-page);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.diagnosis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnosis-item {
+  background: var(--bg-card);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+
+.diagnosis-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.diagnosis-item__condition {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnosis-item__reasoning {
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.6;
+  margin: 0;
 }
 </style>
