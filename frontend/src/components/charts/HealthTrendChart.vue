@@ -8,6 +8,7 @@
       ref="chartRef"
       :option="chartOption"
       :autoresize="true"
+      :update-options="{ notMerge: true, lazyUpdate: true }"
       @click="handleClick"
     />
   </div>
@@ -38,7 +39,10 @@ const emit = defineEmits<{
 
 const chartRef = ref()
 
-// 指标颜色映射
+// 稳定的函数引用，避免每次 computed 重新创建
+function axisMin(val: any) { return Math.floor(val.min * 0.9) }
+function axisMax(val: any) { return Math.ceil(val.max * 1.1) }
+
 const METRIC_COLORS: Record<string, string> = {
   weight: '#8B5CF6',
   systolic: '#EF4444',
@@ -52,7 +56,6 @@ const METRIC_COLORS: Record<string, string> = {
   emotion_score: '#8B5CF6',
 }
 
-// 需要双线组合的指标对
 const BP_METRICS = ['systolic', 'diastolic']
 const SUGAR_METRICS = ['blood_sugar_fasting', 'blood_sugar_postprandial']
 
@@ -64,17 +67,13 @@ const chartOption = computed(() => {
   const sList = props.series
   if (!sList.length) return {}
 
-  // 判断是否为血压或血糖组合
   const metricCodes = sList.map(s => s.metric)
   const isBP = BP_METRICS.every(m => metricCodes.includes(m))
   const isSugar = SUGAR_METRICS.every(m => metricCodes.includes(m))
-  const isCombo = isBP || isSugar
 
-  if (isCombo) {
+  if (isBP || isSugar) {
     return buildComboOption(sList, isBP)
   }
-
-  // 单指标或多指标独立图表（grid 叠加）
   return buildSingleOption(sList)
 })
 
@@ -96,8 +95,8 @@ function buildComboOption(sList: TrendSeries[], isBP: boolean) {
     yAxis: {
       type: 'value',
       name: primary.unit,
-      min: (val: any) => Math.floor(val.min * 0.9),
-      max: (val: any) => Math.ceil(val.max * 1.1),
+      min: axisMin,
+      max: axisMax,
     },
     series: [
       buildLineSeries(primary, markAreaData),
@@ -107,7 +106,6 @@ function buildComboOption(sList: TrendSeries[], isBP: boolean) {
 }
 
 function buildSingleOption(sList: TrendSeries[]) {
-  // 单指标
   if (sList.length === 1) {
     const s = sList[0]
     const xAxisData = getAxisData(s)
@@ -123,14 +121,13 @@ function buildSingleOption(sList: TrendSeries[]) {
       yAxis: {
         type: 'value',
         name: s.unit,
-        min: (val: any) => Math.floor(val.min * 0.9),
-        max: (val: any) => Math.ceil(val.max * 1.1),
+        min: axisMin,
+        max: axisMax,
       },
       series: [buildLineSeries(s, markAreaData)],
     }
   }
 
-  // 多指标：使用多 Y 轴
   const first = sList[0]
   const xAxisData = getAxisData(first)
   return {
@@ -180,7 +177,6 @@ function buildMarkArea(s: TrendSeries, isBP: boolean): any[] {
   if (!props.showNormalRange) return []
   if (!s.normal_range || s.normal_range.min == null) return []
 
-  // 血压特殊：只标异常区域
   if (isBP) {
     if (s.metric === 'systolic') {
       return [[
@@ -194,7 +190,6 @@ function buildMarkArea(s: TrendSeries, isBP: boolean): any[] {
     ]]
   }
 
-  // 通用：正常范围区域
   return [[
     { yAxis: s.normal_range.min, itemStyle: { color: 'rgba(16, 185, 129, 0.06)' } },
     { yAxis: s.normal_range.max },
@@ -215,7 +210,6 @@ function handleClick(params: any) {
   }
 }
 
-/** 外部调用：跳转到指定日期范围 */
 function zoomToRange(startDate: string, endDate: string) {
   emit('range-change', { startDate, endDate })
 }
