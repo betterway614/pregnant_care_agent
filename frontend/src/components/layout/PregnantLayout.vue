@@ -10,7 +10,7 @@
     </main>
 
     <!-- 底部导航栏 - 5个标签 -->
-    <nav class="patient-tab-bar">
+    <nav v-if="!hideTabBar" class="patient-tab-bar">
       <div
         v-for="tab in tabs"
         :key="tab.path"
@@ -28,13 +28,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const hideTabBar = computed(() => route.meta.hideTabBar === true)
 
 const tabs = [
   { path: '/pregnant/home', label: '首页', icon: 'HomeFilled', size: 22 },
@@ -69,7 +70,8 @@ onMounted(() => {
 .patient-layout__content {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .fade-enter-active,
