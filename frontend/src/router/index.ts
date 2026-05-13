@@ -46,7 +46,17 @@ const routes: RouteRecordRaw[] = [
       { path: 'home', name: 'PregnantHome', component: () => import('@/views/pregnant/PregnantHome.vue'), meta: { title: '孕期首页' } },
       { path: 'chat', name: 'PregnantChat', component: () => import('@/views/pregnant/PregnantChat.vue'), meta: { title: '百科知识' } },
       { path: 'schedule', name: 'PregnantSchedule', component: () => import('@/views/pregnant/PregnantSchedule.vue'), meta: { title: '推荐' } },
-      { path: 'tools', name: 'PregnantTools', component: () => import('@/views/pregnant/PregnantTools.vue'), meta: { title: '工具' } },
+      {
+        path: 'tools',
+        component: () => import('@/views/pregnant/PregnantTools.vue'),
+        children: [
+          { path: '', name: 'ToolGrid', component: () => import('@/views/pregnant/tools/ToolGrid.vue'), meta: { title: '健康工具' } },
+          { path: 'fetal-movement', name: 'FetalMovement', component: () => import('@/views/pregnant/tools/FetalMovement.vue'), meta: { title: '胎动计数', hideTabBar: true } },
+          { path: 'health-record', name: 'HealthRecord', component: () => import('@/views/pregnant/tools/HealthRecord.vue'), meta: { title: '快速录入', hideTabBar: true } },
+          { path: 'health-trend', name: 'HealthTrend', component: () => import('@/views/pregnant/tools/HealthTrend.vue'), meta: { title: '健康趋势', hideTabBar: true } },
+          { path: 'mental-health', name: 'MentalHealth', component: () => import('@/views/pregnant/tools/MentalHealth.vue'), meta: { title: '心理筛查', hideTabBar: true } },
+        ],
+      },
       { path: 'profile', name: 'PregnantProfile', component: () => import('@/views/pregnant/PregnantProfile.vue'), meta: { title: '我的' } },
     ],
   },
