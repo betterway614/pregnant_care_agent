@@ -22,6 +22,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'followup', name: 'FollowUpList', component: () => import('@/views/nurse/FollowUpList.vue'), meta: { title: '随访管理' } },
       { path: 'schedule', name: 'ScheduleManage', component: () => import('@/views/nurse/ScheduleManage.vue'), meta: { title: '排期管理' } },
       { path: 'alerts', name: 'AlertList', component: () => import('@/views/nurse/AlertList.vue'), meta: { title: '预警管理' } },
+      { path: 'pregnant/:pregnantId', name: 'NursePregnantDetail', component: () => import('@/views/nurse/PregnantDetail.vue'), meta: { title: '孕妇详情' } },
     ],
   },
   // 医生端
