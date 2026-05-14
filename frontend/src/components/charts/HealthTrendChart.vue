@@ -8,7 +8,7 @@
       ref="chartRef"
       :option="chartOption"
       :autoresize="true"
-      :update-options="{ notMerge: true, lazyUpdate: true }"
+      :update-options="UPDATE_OPTIONS"
       @click="handleClick"
     />
   </div>
@@ -18,6 +18,9 @@
 import { computed, ref } from 'vue'
 import VChart from 'vue-echarts'
 import type { TrendSeries } from '@/types'
+
+// 模块级常量，确保引用稳定
+const UPDATE_OPTIONS = { notMerge: false, lazyUpdate: true, replaceMerge: ['series'] }
 
 const props = withDefaults(defineProps<{
   series: TrendSeries[]
@@ -39,7 +42,7 @@ const emit = defineEmits<{
 
 const chartRef = ref()
 
-// 稳定的函数引用，避免每次 computed 重新创建
+// 稳定的函数引用
 function axisMin(val: any) { return Math.floor(val.min * 0.9) }
 function axisMax(val: any) { return Math.ceil(val.max * 1.1) }
 
