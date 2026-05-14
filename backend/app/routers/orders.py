@@ -150,6 +150,19 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
     )
 
 
+@router.put("/{order_id}/acknowledge")
+def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
+    """孕妇确认阅读医嘱"""
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+    if order.acknowledged_at:
+        return {"success": True, "message": "已确认阅读"}
+    order.acknowledged_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": "已确认阅读"}
+
+
 @router.put("/{order_id}", response_model=OrderResponse)
 def update_order(order_id: str, data: dict, db: Session = Depends(get_db)):
     """更新医嘱"""
@@ -174,19 +187,6 @@ def update_order(order_id: str, data: dict, db: Session = Depends(get_db)):
 def get_order_templates():
     """获取医嘱模板列表"""
     return {"templates": order_service.get_all_templates()}
-
-
-@router.put("/{order_id}/acknowledge")
-def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
-    """孕妇确认阅读医嘱"""
-    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
-    if not order:
-        raise HTTPException(404, "医嘱不存在")
-    if order.acknowledged_at:
-        return {"success": True, "message": "已确认阅读"}
-    order.acknowledged_at = datetime.utcnow()
-    db.commit()
-    return {"success": True, "message": "已确认阅读"}
 
 
 @router.post("/{order_id}/explain", response_model=OrderExplainResponse)
