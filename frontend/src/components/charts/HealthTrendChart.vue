@@ -6,21 +6,18 @@
     <v-chart
       v-else
       ref="chartRef"
-      :option="chartOption"
+      :option="INIT_OPTION"
       :autoresize="true"
-      :update-options="UPDATE_OPTIONS"
+      manual-update
       @click="handleClick"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import VChart from 'vue-echarts'
 import type { TrendSeries } from '@/types'
-
-// 模块级常量，确保引用稳定
-const UPDATE_OPTIONS = { notMerge: false, lazyUpdate: true, replaceMerge: ['series'] }
 
 const props = withDefaults(defineProps<{
   series: TrendSeries[]
@@ -41,6 +38,9 @@ const emit = defineEmits<{
 }>()
 
 const chartRef = ref()
+
+// 初始空 option，仅用于首次渲染
+const INIT_OPTION = {}
 
 // 稳定的函数引用
 function axisMin(val: any) { return Math.floor(val.min * 0.9) }
@@ -66,7 +66,7 @@ function getAxisData(s: TrendSeries): string[] {
   return s.data.map(d => props.axisMode === 'gest_week' ? `孕${d.gest_week}周` : d.date)
 }
 
-const chartOption = computed(() => {
+function buildOption() {
   const sList = props.series
   if (!sList.length) return {}
 
@@ -74,11 +74,9 @@ const chartOption = computed(() => {
   const isBP = BP_METRICS.every(m => metricCodes.includes(m))
   const isSugar = SUGAR_METRICS.every(m => metricCodes.includes(m))
 
-  if (isBP || isSugar) {
-    return buildComboOption(sList, isBP)
-  }
+  if (isBP || isSugar) return buildComboOption(sList, isBP)
   return buildSingleOption(sList)
-})
+}
 
 function buildComboOption(sList: TrendSeries[], isBP: boolean) {
   const primary = sList.find(s => s.metric === (isBP ? 'systolic' : 'blood_sugar_fasting'))!
@@ -90,21 +88,9 @@ function buildComboOption(sList: TrendSeries[], isBP: boolean) {
     tooltip: { trigger: 'axis' },
     legend: { data: [primary.name, secondary.name], bottom: 0 },
     grid: { left: 50, right: 20, top: 20, bottom: 40 },
-    xAxis: {
-      type: 'category',
-      data: xAxisData,
-      axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 },
-    },
-    yAxis: {
-      type: 'value',
-      name: primary.unit,
-      min: axisMin,
-      max: axisMax,
-    },
-    series: [
-      buildLineSeries(primary, markAreaData),
-      buildLineSeries(secondary),
-    ],
+    xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
+    yAxis: { type: 'value', name: primary.unit, min: axisMin, max: axisMax },
+    series: [buildLineSeries(primary, markAreaData), buildLineSeries(secondary)],
   }
 }
 
@@ -116,17 +102,8 @@ function buildSingleOption(sList: TrendSeries[]) {
     return {
       tooltip: { trigger: 'axis' },
       grid: { left: 50, right: 20, top: 20, bottom: 40 },
-      xAxis: {
-        type: 'category',
-        data: xAxisData,
-        axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 },
-      },
-      yAxis: {
-        type: 'value',
-        name: s.unit,
-        min: axisMin,
-        max: axisMax,
-      },
+      xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
+      yAxis: { type: 'value', name: s.unit, min: axisMin, max: axisMax },
       series: [buildLineSeries(s, markAreaData)],
     }
   }
@@ -137,20 +114,9 @@ function buildSingleOption(sList: TrendSeries[]) {
     tooltip: { trigger: 'axis' },
     legend: { data: sList.map(s => s.name), bottom: 0 },
     grid: { left: 50, right: 50, top: 20, bottom: 40 },
-    xAxis: {
-      type: 'category',
-      data: xAxisData,
-      axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 },
-    },
-    yAxis: sList.map((s, i) => ({
-      type: 'value',
-      name: s.unit,
-      position: i % 2 === 0 ? 'left' : 'right',
-    })),
-    series: sList.map((s, i) => ({
-      ...buildLineSeries(s),
-      yAxisIndex: i,
-    })),
+    xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
+    yAxis: sList.map((s, i) => ({ type: 'value', name: s.unit, position: i % 2 === 0 ? 'left' : 'right' })),
+    series: sList.map((s, i) => ({ ...buildLineSeries(s), yAxisIndex: i })),
   }
 }
 
@@ -181,23 +147,26 @@ function buildMarkArea(s: TrendSeries, isBP: boolean): any[] {
   if (!s.normal_range || s.normal_range.min == null) return []
 
   if (isBP) {
-    if (s.metric === 'systolic') {
-      return [[
-        { yAxis: 140, itemStyle: { color: 'rgba(239, 68, 68, 0.08)' } },
-        { yAxis: 200 },
-      ]]
-    }
-    return [[
-      { yAxis: 90, itemStyle: { color: 'rgba(239, 68, 68, 0.08)' } },
-      { yAxis: 150 },
-    ]]
+    if (s.metric === 'systolic') return [[{ yAxis: 140, itemStyle: { color: 'rgba(239, 68, 68, 0.08)' } }, { yAxis: 200 }]]
+    return [[{ yAxis: 90, itemStyle: { color: 'rgba(239, 68, 68, 0.08)' } }, { yAxis: 150 }]]
   }
 
-  return [[
-    { yAxis: s.normal_range.min, itemStyle: { color: 'rgba(16, 185, 129, 0.06)' } },
-    { yAxis: s.normal_range.max },
-  ]]
+  return [[{ yAxis: s.normal_range.min, itemStyle: { color: 'rgba(16, 185, 129, 0.06)' } }, { yAxis: s.normal_range.max }]]
 }
+
+// 手动更新图表 — 仅在 series 或 axisMode 实际变化时调用
+function updateChart() {
+  if (!chartRef.value) return
+  const option = buildOption()
+  if (Object.keys(option).length > 0) {
+    chartRef.value.setOption(option, { notMerge: false, replaceMerge: ['series'] })
+  }
+}
+
+// watch series 和 axisMode，手动触发更新
+watch(() => [props.series, props.axisMode], () => {
+  nextTick(() => updateChart())
+}, { deep: true })
 
 function handleClick(params: any) {
   if (!props.interactive || !params.data) return
