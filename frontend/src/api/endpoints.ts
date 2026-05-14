@@ -6,6 +6,7 @@ import type {
   DashboardStats, ChatRequest, ChatResponse,
   HomeResponse, RecommendResponse,
   HealthTrendResponse, FollowUpHistoryResponse,
+  FollowUpPendingResponse,
 } from '@/types'
 
 // 对话
@@ -51,9 +52,9 @@ export const followUpApi = {
   update: (recordId: string, data: any) =>
     client.put(`/followup/records/${recordId}`, data),
   getPending: (pregnantId: string) =>
-    client.get<any>(`/followup/pending/${pregnantId}`),
-  respond: (recordId: string, answers: Record<string, any>) =>
-    client.post('/followup/respond', { record_id: recordId, answers }),
+    client.get<FollowUpPendingResponse>(`/followup/pending/${pregnantId}`),
+  respond: (recordId: string, answers: Record<string, any>, totalCount?: number) =>
+    client.post('/followup/respond', { record_id: recordId, answers, total_count: totalCount || 0 }),
 }
 
 // 预警
@@ -61,7 +62,7 @@ export const alertApi = {
   list: (params?: { status?: string; level?: string; pregnant_id?: string }) =>
     client.get<Alert[]>('/alerts', { params }),
   evaluate: (pregnantId: string, data: any) =>
-    client.get('/alerts/evaluate', { params: { pregnant_id: pregnantId }, data }),
+    client.post('/alerts/evaluate', { data }, { params: { pregnant_id: pregnantId } }),
   review: (alertId: string, action: string, reason?: string) =>
     client.put(`/alerts/${alertId}/review`, { action, reason }),
 }
@@ -87,6 +88,8 @@ export const orderApi = {
   templates: () => client.get('/orders/templates'),
   getPregnantOrders: (pregnantId: string) =>
     client.get(`/orders/pregnant/${pregnantId}`),
+  acknowledge: (orderId: string) =>
+    client.put(`/orders/${orderId}/acknowledge`),
 }
 
 // 统计
@@ -137,6 +140,16 @@ export const pregnantApi = {
 // AI 推荐
 export const recommendApi = {
   get: (pregnantId: string) => client.get<RecommendResponse>(`/recommend/${pregnantId}`),
+}
+
+// AI 分析相关
+export const aiAnalysisApi = {
+  save: (data: { pregnant_id: string; result_data: any; analysis_type: string }) =>
+    client.post('/nurse/ai-analysis', data),
+  getHistory: (pregnantId: string) =>
+    client.get<Array<{ id: string; pregnant_id: string; result_data: any; analysis_type: string; created_at: string }>>(
+      `/nurse/ai-analysis/${pregnantId}`
+    ),
 }
 
 // 护士AI

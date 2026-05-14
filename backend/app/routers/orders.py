@@ -176,6 +176,19 @@ def get_order_templates():
     return {"templates": order_service.get_all_templates()}
 
 
+@router.put("/{order_id}/acknowledge")
+def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
+    """孕妇确认阅读医嘱"""
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+    if order.acknowledged_at:
+        return {"success": True, "message": "已确认阅读"}
+    order.acknowledged_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": "已确认阅读"}
+
+
 @router.post("/{order_id}/explain", response_model=OrderExplainResponse)
 async def explain_order(order_id: str):
     """用LLM将医嘱翻译成孕妇易懂的通俗语言"""

@@ -55,9 +55,11 @@ const routes: RouteRecordRaw[] = [
           { path: 'health-record', name: 'HealthRecord', component: () => import('@/views/pregnant/tools/HealthRecord.vue'), meta: { title: '快速录入', hideTabBar: true } },
           { path: 'health-trend', name: 'HealthTrend', component: () => import('@/views/pregnant/tools/HealthTrend.vue'), meta: { title: '健康趋势', hideTabBar: true } },
           { path: 'mental-health', name: 'MentalHealth', component: () => import('@/views/pregnant/tools/MentalHealth.vue'), meta: { title: '心理筛查', hideTabBar: true } },
+          { path: 'followup/:recordId', name: 'FollowUpForm', component: () => import('@/views/pregnant/tools/FollowUpForm.vue'), meta: { title: '随访', hideTabBar: true } },
         ],
       },
       { path: 'profile', name: 'PregnantProfile', component: () => import('@/views/pregnant/PregnantProfile.vue'), meta: { title: '我的' } },
+      { path: 'orders/:orderId', name: 'OrderDetail', component: () => import('@/views/pregnant/OrderDetail.vue'), meta: { title: '医嘱详情', hideTabBar: true } },
     ],
   },
 ]

@@ -264,6 +264,7 @@ class OrderResponse(BaseModel):
     source: str
     status: str
     created_at: Optional[datetime] = None
+    acknowledged_at: Optional[datetime] = None
     patient_name: Optional[str] = None
 
     model_config = {"from_attributes": True}

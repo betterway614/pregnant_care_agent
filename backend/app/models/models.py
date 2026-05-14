@@ -164,6 +164,7 @@ class MedicalOrder(Base):
     status = Column(String(16), default="draft", comment="draft/signed/executed")
     created_by = Column(String(64), nullable=True, comment="医生ID")
     signed_at = Column(DateTime, nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True, comment="孕妇确认阅读时间")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -226,3 +227,14 @@ class DailyHealthSummary(Base):
     __table_args__ = (
         Index('idx_daily_summary_pregnant_date', 'pregnant_id', 'date', unique=True),
     )
+
+
+class AiAnalysisResult(Base):
+    """AI 分析结果记录"""
+    __tablename__ = "ai_analysis_results"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    analysis_type = Column(String(32), nullable=False, comment="分析类型: general/followup_summary/risk_assessment")
+    result_data = Column(JSON, nullable=False, comment="分析结果数据")
+    created_at = Column(DateTime, default=datetime.utcnow)
