@@ -6,6 +6,7 @@ import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
+import './echarts' // 注册 ECharts 渲染器和组件
 import './styles/global.css'
 import './styles/patient-theme.css'
 
