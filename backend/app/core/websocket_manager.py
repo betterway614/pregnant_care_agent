@@ -15,7 +15,7 @@ class WebSocketManager:
         """接受新的 WebSocket 连接"""
         # 如果医生已连接，先关闭旧连接
         if doctor_id in self.active_connections:
-            old_ws = self.active_connections[doctor_id]
+            old_ws = self.active_connections.pop(doctor_id)  # 先从字典移除
             try:
                 await old_ws.close()
                 logger.info(f"医生 {doctor_id} 的旧连接已关闭")
