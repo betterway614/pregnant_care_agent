@@ -12,6 +12,7 @@ from .config import settings
 from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
+from .routers import websocket
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -25,19 +26,8 @@ async def lifespan(app: FastAPI):
     import logging as _logging
     _logging.getLogger("sqlalchemy.engine").setLevel(_logging.WARNING)
 
-    if settings.db_type == "sqlite":
-        db_path = settings.database_url.replace("sqlite:///", "")
-        db_exists = os.path.exists(db_path)
-    else:
-        from sqlalchemy import inspect
-        inspector = inspect(engine)
-        db_exists = len(inspector.get_table_names()) > 0
-
-    if not db_exists:
-        Base.metadata.create_all(bind=engine)
-        logger.info("数据库初始化完成")
-    else:
-        logger.info("数据库已存在，跳过初始化")
+    Base.metadata.create_all(bind=engine)
+    logger.info("数据库表同步完成（仅创建缺失表）")
 
     logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
     logger.info("  LLM模式: {}", settings.llm_mode)
@@ -88,6 +78,7 @@ app.include_router(fetal_movement.router)
 app.include_router(feedback.router)
 app.include_router(mental_health.router)
 app.include_router(health_trends.router)
+app.include_router(websocket.router)
 
 
 @app.get("/")
