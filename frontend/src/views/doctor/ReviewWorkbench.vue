@@ -441,7 +441,7 @@ const pregnantFollowUps = ref<FollowUpRecord[]>([])
 // WebSocket 相关状态
 const wsConnected = ref(false)
 const pendingNewAlerts = ref<Alert[]>([])
-const newAlertIds = ref<Set<string>>(new Set())
+const newAlertIds = ref<Record<string, boolean>>({})
 const wsClient = ref<ReturnType<typeof getWebSocketClient> | null>(null)
 
 // 降级状态
@@ -714,6 +714,31 @@ function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
   return 'info'
 }
 
+/** WebSocket 预警回调 */
+const handleNewAlert = (alert: Alert) => {
+  console.log('审核工作台收到新预警:', alert)
+
+  // 添加到待处理列表
+  pendingNewAlerts.value.push(alert)
+  newAlertIds.value[alert.id] = true
+
+  // 添加到预警列表顶部
+  alertList.value.unshift(alert)
+
+  // 显示通知
+  ElNotification({
+    title: '新预警通知',
+    message: `${alert.patient_name}: ${alert.message}`,
+    type: getAlertType(alert.level),
+    duration: 5000,
+  })
+}
+
+/** WebSocket 连接状态回调 */
+const handleStateChange = (state: string) => {
+  wsConnected.value = state === 'OPEN'
+}
+
 /**
  * 初始化 WebSocket
  */
@@ -722,29 +747,10 @@ function initWebSocket() {
   wsClient.value = getWebSocketClient(doctorId)
 
   // 注册预警回调
-  wsClient.value.onAlert((alert: Alert) => {
-    console.log('审核工作台收到新预警:', alert)
-
-    // 添加到待处理列表
-    pendingNewAlerts.value.push(alert)
-    newAlertIds.value.add(alert.id)
-
-    // 添加到预警列表顶部
-    alertList.value.unshift(alert)
-
-    // 显示通知
-    ElNotification({
-      title: '新预警通知',
-      message: `${alert.patient_name}: ${alert.message}`,
-      type: getAlertType(alert.level),
-      duration: 5000,
-    })
-  })
+  wsClient.value.onAlert(handleNewAlert)
 
   // 注册连接状态回调
-  wsClient.value.onStateChange((state: string) => {
-    wsConnected.value = state === 'OPEN'
-  })
+  wsClient.value.onStateChange(handleStateChange)
 
   // 连接 WebSocket
   wsClient.value.connect()
@@ -754,7 +760,7 @@ function initWebSocket() {
  * 判断是否是新预警
  */
 function isNewAlert(alertId: string): boolean {
-  return newAlertIds.value.has(alertId)
+  return !!newAlertIds.value[alertId]
 }
 
 /**
@@ -763,11 +769,11 @@ function isNewAlert(alertId: string): boolean {
 function handleNewAlerts() {
   // 选中第一个新预警
   if (pendingNewAlerts.value.length > 0) {
-    const firstNewAlert = pendingNewAlerts.value[0]
-    selectAlert(firstNewAlert)
-
+    selectAlert(pendingNewAlerts.value[0])
     // 清空待处理列表
     pendingNewAlerts.value = []
+    // 清除新预警标记
+    newAlertIds.value = {}
   }
 }
 
@@ -801,6 +807,8 @@ onMounted(async () => {
 onUnmounted(() => {
   // 清理 WebSocket 连接
   if (wsClient.value) {
+    wsClient.value.offAlert(handleNewAlert)
+    wsClient.value.offStateChange(handleStateChange)
     wsClient.value.disconnect()
   }
 })
