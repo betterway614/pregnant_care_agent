@@ -24,12 +24,21 @@ class WebSocketClient {
    * 连接 WebSocket
    */
   connect(): void {
+    // 清理旧的重连 timeout (C2 修复)
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
+    // 重置重连次数 (M1 修复)
+    this.reconnectAttempts = 0;
+
     // 如果已连接，先断开
     if (this.ws) {
       this.disconnect();
     }
 
-    this.intentionalClose = false;
+    // intentionalClose 不在此处重置，移到 onopen 中 (C1 修复)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/alerts/${this.doctorId}`;
 
@@ -38,6 +47,7 @@ class WebSocketClient {
 
       this.ws.onopen = () => {
         console.log('WebSocket 连接成功');
+        this.intentionalClose = false;  // 新连接成功后才重置 (C1 修复)
         this.reconnectAttempts = 0;
         this.startHeartbeat();
       };
