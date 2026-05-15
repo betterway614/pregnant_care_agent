@@ -4,6 +4,15 @@
     <div class="page-header">
       <h1 class="page-title">异常审核工作台</h1>
       <div class="page-header__actions">
+        <!-- WebSocket 连接状态 -->
+        <el-tag
+          :type="wsConnected ? 'success' : 'danger'"
+          size="small"
+          effect="plain"
+        >
+          {{ wsConnected ? '实时连接' : '连接断开' }}
+        </el-tag>
+
         <el-tag v-if="selectedAlert" type="danger" effect="plain" size="default">
           审核中: {{ selectedAlert.patient_name }}
         </el-tag>
@@ -12,6 +21,25 @@
         </el-button>
       </div>
     </div>
+
+    <!-- 新预警通知 -->
+    <el-alert
+      v-if="pendingNewAlerts.length > 0"
+      :title="`收到 ${pendingNewAlerts.length} 条新预警`"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 16px"
+    >
+      <template #default>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span>有新的预警需要处理</span>
+          <el-button type="primary" size="small" @click="handleNewAlerts">
+            查看新预警
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
 
     <!-- 三栏布局 -->
     <el-row :gutter="16" style="height: calc(100vh - 180px)">
@@ -27,7 +55,10 @@
               v-for="alert in alertList"
               :key="alert.id"
               class="alert-list-item"
-              :class="{ 'alert-list-item--active': selectedAlert?.id === alert.id }"
+              :class="{
+                'alert-list-item--active': selectedAlert?.id === alert.id,
+                'alert-list-item--new': isNewAlert(alert.id)
+              }"
               @click="selectAlert(alert)"
             >
               <div class="alert-list-item__header">
@@ -41,6 +72,8 @@
                 </span>
                 <span class="text-light">{{ formatTime(alert.created_at) }}</span>
               </div>
+              <!-- 新预警标记 -->
+              <div v-if="isNewAlert(alert.id)" class="new-alert-badge">新</div>
             </div>
             <div v-if="!alertList.length && !loading" class="empty-state">
               <el-icon :size="40" color="var(--text-light)"><CircleCheck /></el-icon>
@@ -380,7 +413,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Refresh, WarningFilled, Edit, FolderAdd,
@@ -388,8 +421,10 @@ import {
   MagicStick, Guide, FirstAidKit,
 } from '@element-plus/icons-vue'
 import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
+import { getWebSocketClient } from '@/utils/websocket'
 import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
+import { ElNotification } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
@@ -402,6 +437,12 @@ const submitting = ref(false)
 const alertList = ref<Alert[]>([])
 const selectedAlert = ref<Alert | null>(null)
 const pregnantFollowUps = ref<FollowUpRecord[]>([])
+
+// WebSocket 相关状态
+const wsConnected = ref(false)
+const pendingNewAlerts = ref<Alert[]>([])
+const newAlertIds = ref<Set<string>>(new Set())
+const wsClient = ref<ReturnType<typeof getWebSocketClient> | null>(null)
 
 // 降级状态
 const downgradeDialogVisible = ref(false)
@@ -673,15 +714,94 @@ function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
   return 'info'
 }
 
+/**
+ * 初始化 WebSocket
+ */
+function initWebSocket() {
+  const doctorId = 'current-doctor'
+  wsClient.value = getWebSocketClient(doctorId)
+
+  // 注册预警回调
+  wsClient.value.onAlert((alert: Alert) => {
+    console.log('审核工作台收到新预警:', alert)
+
+    // 添加到待处理列表
+    pendingNewAlerts.value.push(alert)
+    newAlertIds.value.add(alert.id)
+
+    // 添加到预警列表顶部
+    alertList.value.unshift(alert)
+
+    // 显示通知
+    ElNotification({
+      title: '新预警通知',
+      message: `${alert.patient_name}: ${alert.message}`,
+      type: getAlertType(alert.level),
+      duration: 5000,
+    })
+  })
+
+  // 注册连接状态回调
+  wsClient.value.onStateChange((state: string) => {
+    wsConnected.value = state === 'OPEN'
+  })
+
+  // 连接 WebSocket
+  wsClient.value.connect()
+}
+
+/**
+ * 判断是否是新预警
+ */
+function isNewAlert(alertId: string): boolean {
+  return newAlertIds.value.has(alertId)
+}
+
+/**
+ * 处理新预警
+ */
+function handleNewAlerts() {
+  // 选中第一个新预警
+  if (pendingNewAlerts.value.length > 0) {
+    const firstNewAlert = pendingNewAlerts.value[0]
+    selectAlert(firstNewAlert)
+
+    // 清空待处理列表
+    pendingNewAlerts.value = []
+  }
+}
+
+/**
+ * 获取预警类型
+ */
+function getAlertType(level: string): 'success' | 'warning' | 'info' | 'error' {
+  const map: Record<string, 'success' | 'warning' | 'info' | 'error'> = {
+    RED: 'error',
+    ORANGE: 'warning',
+    YELLOW: 'info',
+  }
+  return map[level] || 'info'
+}
+
 // 根据路由参数选中预警
 onMounted(async () => {
   await loadAlerts()
+  initWebSocket()
+
+  // 根据路由参数选中预警
   const alertId = route.params.alertId as string
   if (alertId) {
     const found = alertList.value.find((a) => a.id === alertId)
     if (found) {
       await selectAlert(found)
     }
+  }
+})
+
+onUnmounted(() => {
+  // 清理 WebSocket 连接
+  if (wsClient.value) {
+    wsClient.value.disconnect()
   }
 })
 </script>
@@ -699,6 +819,7 @@ onMounted(async () => {
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: var(--transition);
+  position: relative;
 }
 
 .alert-list-item:hover {
@@ -708,6 +829,24 @@ onMounted(async () => {
 .alert-list-item--active {
   background: var(--primary-bg);
   border-left: 3px solid var(--primary);
+}
+
+/* 新预警样式 */
+.alert-list-item--new {
+  border-left: 3px solid var(--warning);
+  background: var(--warning-light);
+}
+
+.new-alert-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--warning);
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
 }
 
 .alert-list-item__header {
