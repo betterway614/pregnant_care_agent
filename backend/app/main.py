@@ -26,8 +26,19 @@ async def lifespan(app: FastAPI):
     import logging as _logging
     _logging.getLogger("sqlalchemy.engine").setLevel(_logging.WARNING)
 
-    Base.metadata.create_all(bind=engine)
-    logger.info("数据库表同步完成（仅创建缺失表）")
+    if settings.db_type == "sqlite":
+        db_path = settings.database_url.replace("sqlite:///", "")
+        db_exists = os.path.exists(db_path)
+    else:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        db_exists = len(inspector.get_table_names()) > 0
+
+    if not db_exists:
+        Base.metadata.create_all(bind=engine)
+        logger.info("数据库初始化完成")
+    else:
+        logger.info("数据库已存在，跳过初始化")
 
     logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
     logger.info("  LLM模式: {}", settings.llm_mode)

@@ -27,9 +27,9 @@ async def websocket_alerts(websocket: WebSocket, doctor_id: str):
             if data == "ping":
                 await websocket.send_text("pong")
                 logger.debug(f"收到来自医生 {doctor_id} 的心跳")
-
-            # 可以处理其他客户端消息
-            # 例如：确认收到预警、标记已读等
+            else:
+                # 记录未知消息，便于调试
+                logger.debug(f"收到医生 {doctor_id} 的未知消息: {data}")
 
     except WebSocketDisconnect:
         logger.info(f"医生 {doctor_id} 主动断开 WebSocket 连接")

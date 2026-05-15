@@ -13,6 +13,15 @@ class WebSocketManager:
 
     async def connect(self, websocket: WebSocket, doctor_id: str):
         """接受新的 WebSocket 连接"""
+        # 如果医生已连接，先关闭旧连接
+        if doctor_id in self.active_connections:
+            old_ws = self.active_connections[doctor_id]
+            try:
+                await old_ws.close()
+                logger.info(f"医生 {doctor_id} 的旧连接已关闭")
+            except Exception as e:
+                logger.warning(f"关闭医生 {doctor_id} 的旧连接失败: {e}")
+
         await websocket.accept()
         self.active_connections[doctor_id] = websocket
         logger.info(f"医生 {doctor_id} 已连接 WebSocket")
