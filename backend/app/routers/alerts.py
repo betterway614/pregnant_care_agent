@@ -1,5 +1,6 @@
 """预警管理 API"""
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
@@ -8,8 +9,24 @@ from ..database import get_db
 from ..models import Alert, Pregnant
 from ..schemas import AlertResponse, AlertReviewRequest
 from ..core import rule_engine
+from ..core.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
+
+
+class AlertEvaluateRequest(BaseModel):
+    """预警评估请求"""
+    data: dict
+
+
+class CreateAlertRequest(BaseModel):
+    """创建预警请求"""
+    pregnant_id: str
+    level: str  # RED, ORANGE, YELLOW
+    message: str
+    trigger_source: str = "MANUAL"  # MANUAL, RULE_ENGINE, FGR_ALGORITHM
+    rule_id: Optional[str] = None
+    details: Optional[dict] = None
 
 
 @router.get("", response_model=list[AlertResponse])
@@ -39,10 +56,63 @@ def get_alerts(status: Optional[str] = None,
     return result
 
 
-@router.get("/evaluate")
-def evaluate_alerts(pregnant_id: str, data: dict, db: Session = Depends(get_db)):
+@router.post("", response_model=AlertResponse)
+async def create_alert(
+    req: CreateAlertRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    创建预警记录并推送给医生端
+
+    护士确认后调用此接口创建预警
+    """
+    # 1. 创建预警记录
+    alert = Alert(
+        pregnant_id=req.pregnant_id,
+        trigger_source=req.trigger_source,
+        rule_id=req.rule_id,
+        level=req.level,
+        message=req.message,
+        details=req.details or {},
+        status="PENDING",
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+
+    # 2. 获取孕妇信息
+    pregnant = db.query(Pregnant).filter(
+        Pregnant.pregnant_id == req.pregnant_id
+    ).first()
+
+    # 3. 构建推送数据
+    alert_data = {
+        "id": str(alert.id),
+        "pregnant_id": req.pregnant_id,
+        "patient_name": pregnant.display_name if pregnant else "未知",
+        "level": req.level,
+        "message": req.message,
+        "trigger_source": req.trigger_source,
+        "status": alert.status,
+        "created_at": alert.created_at.isoformat() if alert.created_at else None,
+        "gestational_age_days": pregnant.gestational_age_days if pregnant else None,
+    }
+
+    # 4. 实时推送给医生端
+    await ws_manager.broadcast_alert(alert_data)
+
+    # 5. 返回预警响应
+    return AlertResponse(
+        **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
+        patient_name=pregnant.display_name if pregnant else "未知",
+        gestational_age_days=pregnant.gestational_age_days if pregnant else None,
+    )
+
+
+@router.post("/evaluate")
+def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = Depends(get_db)):
     """手动评估某孕妇的规则"""
-    hits = rule_engine.evaluate_all(data)
+    hits = rule_engine.evaluate_all(req.data)
 
     created = []
     for hit in hits:
@@ -52,7 +122,7 @@ def evaluate_alerts(pregnant_id: str, data: dict, db: Session = Depends(get_db))
             rule_id=hit["rule_id"],
             level=hit["level"],
             message=hit["message"],
-            details={"trigger_data": data},
+            details={"trigger_data": req.data},
         )
         db.add(alert)
         created.append(alert)
