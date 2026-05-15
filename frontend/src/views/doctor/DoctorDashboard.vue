@@ -459,6 +459,34 @@ async function runAiAnalysis() {
 }
 
 /**
+ * 处理新预警回调（命名函数以便注销）
+ */
+function handleNewAlert(alert: Alert) {
+  console.log('收到新预警:', alert)
+
+  // 更新状态
+  newAlert.value = alert
+  newAlertIds.value.add(alert.id)
+
+  // 添加到列表顶部
+  recentAlerts.value.unshift(alert)
+
+  // 更新统计
+  stats.value.pending_alerts++
+  if (alert.level === 'RED' || alert.level === 'ORANGE') {
+    stats.value.high_risk_count++
+  }
+
+  // 显示通知
+  ElNotification({
+    title: '新预警通知',
+    message: `${alert.patient_name}: ${alert.message}`,
+    type: getAlertType(alert.level),
+    duration: 5000,
+  })
+}
+
+/**
  * 初始化 WebSocket
  */
 function initWebSocket() {
@@ -466,46 +494,15 @@ function initWebSocket() {
   wsClient.value = getWebSocketClient(doctorId)
 
   // 注册预警回调
-  wsClient.value.onAlert((alert: Alert) => {
-    console.log('收到新预警:', alert)
+  wsClient.value.onAlert(handleNewAlert)
 
-    // 更新状态
-    newAlert.value = alert
-    newAlertIds.value.add(alert.id)
-
-    // 添加到列表顶部
-    recentAlerts.value.unshift(alert)
-
-    // 更新统计
-    stats.value.pending_alerts++
-    if (alert.level === 'RED' || alert.level === 'ORANGE') {
-      stats.value.high_risk_count++
-    }
-
-    // 显示通知
-    ElNotification({
-      title: '新预警通知',
-      message: `${alert.patient_name}: ${alert.message}`,
-      type: getAlertType(alert.level),
-      duration: 5000,
-    })
+  // 注册连接状态回调
+  wsClient.value.onStateChange((state: string) => {
+    wsConnected.value = state === 'OPEN'
   })
 
   // 连接 WebSocket
   wsClient.value.connect()
-
-  // 监听连接状态
-  checkConnectionState()
-}
-
-/**
- * 检查连接状态
- */
-function checkConnectionState() {
-  if (wsClient.value) {
-    const state = wsClient.value.getConnectionState()
-    wsConnected.value = state === 'OPEN'
-  }
 }
 
 /**
@@ -541,8 +538,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // 清理 WebSocket 连接
+  // 清理 WebSocket 连接和回调
   if (wsClient.value) {
+    wsClient.value.offAlert(handleNewAlert)
     wsClient.value.disconnect()
   }
 })

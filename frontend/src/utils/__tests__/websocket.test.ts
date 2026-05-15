@@ -37,6 +37,27 @@ describe('WebSocketClient', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
+  it('should register and call state change callback', () => {
+    const callback = vi.fn();
+    client.onStateChange(callback);
+
+    // 模拟触发状态变化
+    (client as any).notifyStateChange();
+
+    expect(callback).toHaveBeenCalledWith('CLOSED');
+  });
+
+  it('should remove state change callback', () => {
+    const callback = vi.fn();
+    client.onStateChange(callback);
+    client.offStateChange(callback);
+
+    // 模拟触发状态变化
+    (client as any).notifyStateChange();
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it('should return connection state', () => {
     expect(client.getConnectionState()).toBe('CLOSED');
   });

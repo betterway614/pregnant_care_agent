@@ -4,6 +4,7 @@
  */
 
 type AlertCallback = (alert: any) => void;
+type StateChangeCallback = (state: string) => void;
 
 class WebSocketClient {
   private ws: WebSocket | null = null;
@@ -12,6 +13,7 @@ class WebSocketClient {
   private maxReconnectAttempts = 5;
   private reconnectInterval = 3000; // 3秒
   private alertCallbacks: AlertCallback[] = [];
+  private stateChangeCallbacks: StateChangeCallback[] = [];
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private intentionalClose = false;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +53,7 @@ class WebSocketClient {
         console.log('WebSocket 连接成功');
         this.reconnectAttempts = 0;  // 连接成功后重置重连次数
         this.startHeartbeat();
+        this.notifyStateChange();
       };
 
       this.ws.onmessage = (event) => {
@@ -69,6 +72,7 @@ class WebSocketClient {
       this.ws.onclose = (event) => {
         console.log('WebSocket 连接关闭:', event.code, event.reason);
         this.stopHeartbeat();
+        this.notifyStateChange();
         if (!this.intentionalClose) {
           this.attemptReconnect();
         }
@@ -148,6 +152,28 @@ class WebSocketClient {
    */
   offAlert(callback: AlertCallback): void {
     this.alertCallbacks = this.alertCallbacks.filter(cb => cb !== callback);
+  }
+
+  /**
+   * 注册连接状态变化回调
+   */
+  onStateChange(callback: StateChangeCallback): void {
+    this.stateChangeCallbacks.push(callback);
+  }
+
+  /**
+   * 移除连接状态变化回调
+   */
+  offStateChange(callback: StateChangeCallback): void {
+    this.stateChangeCallbacks = this.stateChangeCallbacks.filter(cb => cb !== callback);
+  }
+
+  /**
+   * 通知连接状态变化
+   */
+  private notifyStateChange(): void {
+    const state = this.getConnectionState();
+    this.stateChangeCallbacks.forEach(cb => cb(state));
   }
 
   /**
