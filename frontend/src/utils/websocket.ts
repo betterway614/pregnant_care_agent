@@ -30,15 +30,17 @@ class WebSocketClient {
       this.reconnectTimeout = null;
     }
 
-    // 重置重连次数 (M1 修复)
-    this.reconnectAttempts = 0;
-
-    // 如果已连接，先断开
+    // 关闭旧连接，但不使用 disconnect() 避免设置 intentionalClose (C1 修复)
     if (this.ws) {
-      this.disconnect();
+      this.stopHeartbeat();
+      this.ws.onclose = null;  // 移除旧 ws 的 onclose 处理器
+      this.ws.close();
+      this.ws = null;
     }
 
-    // intentionalClose 不在此处重置，移到 onopen 中 (C1 修复)
+    this.intentionalClose = false;
+    // 不要在此处重置 reconnectAttempts (M1 修复)
+    // reconnectAttempts 的重置保留在 onopen 中即可
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/alerts/${this.doctorId}`;
 
@@ -47,8 +49,7 @@ class WebSocketClient {
 
       this.ws.onopen = () => {
         console.log('WebSocket 连接成功');
-        this.intentionalClose = false;  // 新连接成功后才重置 (C1 修复)
-        this.reconnectAttempts = 0;
+        this.reconnectAttempts = 0;  // 连接成功后重置重连次数
         this.startHeartbeat();
       };
 
