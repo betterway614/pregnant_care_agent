@@ -10,7 +10,9 @@ from ..schemas import (
     FollowupScheduleResponse, FollowupScheduleRecommendation, FollowupScheduleContext,
 )
 from ..core import get_llm_client
+from ..core.json_parser import parse_llm_json
 from ..core.prompts import get_nurse_system_prompt
+from ..core.websocket_manager import ws_manager
 from ..config import settings
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
@@ -43,11 +45,33 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
 
         # 分析完成后自动创建预警（如果检测到高风险）
         if "高风险" in (result.risk_assessment or "") or "异常" in (result.risk_assessment or ""):
-            tool_create_alert(
-                db, req.pregnant_id, "ORANGE",
-                f"护士AI分析提示：{result.risk_assessment[:100]}",
-                "MANUAL"
+            # 创建预警记录
+            alert = Alert(
+                pregnant_id=req.pregnant_id,
+                trigger_source="MANUAL",
+                level="ORANGE",
+                message=f"护士AI分析提示：{result.risk_assessment[:100]}",
+                status="PENDING",
             )
+            db.add(alert)
+            db.commit()
+            db.refresh(alert)
+
+            # 构建推送数据
+            alert_data = {
+                "id": str(alert.id),
+                "pregnant_id": req.pregnant_id,
+                "patient_name": pregnant.display_name,
+                "level": "ORANGE",
+                "message": f"护士AI分析提示：{result.risk_assessment[:100]}",
+                "trigger_source": "MANUAL",
+                "status": alert.status,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "gestational_age_days": pregnant.gestational_age_days,
+            }
+
+            # 推送给医生端
+            await ws_manager.broadcast_alert(alert_data)
 
         # 生成随访排期推荐
         schedule_result = tool_recommend_followup_schedule(db, req.pregnant_id)
@@ -152,7 +176,7 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
         if not response or not response.strip():
             return None
 
-        data = _parse_llm_json(response)
+        data = parse_llm_json(response)
         if not data:
             return None
 
@@ -329,7 +353,7 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
         if not response or not response.strip():
             return None
 
-        data = _parse_llm_json(response)
+        data = parse_llm_json(response)
         if not data:
             return None
 
@@ -399,30 +423,6 @@ def _fallback_followup_generate(pregnant: Pregnant, gest_week: int, gest_day: in
     )
 
 
-def _parse_llm_json(response: str) -> dict | None:
-    """解析LLM返回的JSON，支持多种格式"""
-    import re
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        pass
-    # 尝试提取代码块中的JSON
-    match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', response, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except (json.JSONDecodeError, KeyError):
-            pass
-    # 尝试提取花括号包裹的JSON
-    match = re.search(r'\{.*\}', response, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
 # ==================== 护士 AI 持续对话 ====================
 
 from fastapi.responses import JSONResponse
@@ -463,7 +463,7 @@ async def nurse_chat_stream(req: dict):
                 # 获取活跃告警
                 alerts = db.query(Alert).filter(
                     Alert.pregnant_id == pregnant_id,
-                    Alert.status == "pending"
+                    Alert.status == "PENDING"
                 ).all()
                 if alerts:
                     alert_lines = [f"  - [{a.level}] {a.message}" for a in alerts]
@@ -789,3 +789,69 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
             "risk_tags": risk_tags,
         },
     }
+
+
+# ==================== AI 分析结果持久化 ====================
+
+from pydantic import BaseModel
+from fastapi import Depends
+from sqlalchemy.orm import Session
+from ..database import get_db
+
+
+class SaveAiAnalysisRequest(BaseModel):
+    pregnant_id: str
+    result_data: dict
+    analysis_type: str = "general"
+
+
+class AiAnalysisResponse(BaseModel):
+    id: str
+    pregnant_id: str
+    result_data: dict
+    analysis_type: str
+    created_at: datetime
+
+
+@router.post("/ai-analysis", response_model=AiAnalysisResponse)
+async def save_ai_analysis(req: SaveAiAnalysisRequest, db: Session = Depends(get_db)):
+    """保存 AI 分析结果"""
+    from ..models import AiAnalysisResult
+
+    result = AiAnalysisResult(
+        pregnant_id=req.pregnant_id,
+        result_data=req.result_data,
+        analysis_type=req.analysis_type,
+    )
+    db.add(result)
+    db.commit()
+    db.refresh(result)
+
+    return AiAnalysisResponse(
+        id=str(result.id),
+        pregnant_id=result.pregnant_id,
+        result_data=result.result_data,
+        analysis_type=result.analysis_type,
+        created_at=result.created_at,
+    )
+
+
+@router.get("/ai-analysis/{pregnant_id}", response_model=list[AiAnalysisResponse])
+async def get_ai_analysis_history(pregnant_id: str, db: Session = Depends(get_db)):
+    """获取孕妇的 AI 分析历史"""
+    from ..models import AiAnalysisResult
+
+    results = db.query(AiAnalysisResult).filter(
+        AiAnalysisResult.pregnant_id == pregnant_id
+    ).order_by(desc(AiAnalysisResult.created_at)).limit(20).all()
+
+    return [
+        AiAnalysisResponse(
+            id=str(r.id),
+            pregnant_id=r.pregnant_id,
+            result_data=r.result_data,
+            analysis_type=r.analysis_type,
+            created_at=r.created_at,
+        )
+        for r in results
+    ]
