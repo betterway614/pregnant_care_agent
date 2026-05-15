@@ -459,6 +459,13 @@ async function runAiAnalysis() {
 }
 
 /**
+ * 处理连接状态变化回调（命名函数以便注销）
+ */
+function handleStateChange(state: string) {
+  wsConnected.value = state === 'OPEN'
+}
+
+/**
  * 处理新预警回调（命名函数以便注销）
  */
 function handleNewAlert(alert: Alert) {
@@ -497,9 +504,7 @@ function initWebSocket() {
   wsClient.value.onAlert(handleNewAlert)
 
   // 注册连接状态回调
-  wsClient.value.onStateChange((state: string) => {
-    wsConnected.value = state === 'OPEN'
-  })
+  wsClient.value.onStateChange(handleStateChange)
 
   // 连接 WebSocket
   wsClient.value.connect()
@@ -541,6 +546,7 @@ onUnmounted(() => {
   // 清理 WebSocket 连接和回调
   if (wsClient.value) {
     wsClient.value.offAlert(handleNewAlert)
+    wsClient.value.offStateChange(handleStateChange)
     wsClient.value.disconnect()
   }
 })
