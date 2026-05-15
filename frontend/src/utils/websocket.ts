@@ -13,6 +13,8 @@ class WebSocketClient {
   private reconnectInterval = 3000; // 3秒
   private alertCallbacks: AlertCallback[] = [];
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private intentionalClose = false;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(doctorId: string) {
     this.doctorId = doctorId;
@@ -22,6 +24,12 @@ class WebSocketClient {
    * 连接 WebSocket
    */
   connect(): void {
+    // 如果已连接，先断开
+    if (this.ws) {
+      this.disconnect();
+    }
+
+    this.intentionalClose = false;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/alerts/${this.doctorId}`;
 
@@ -50,7 +58,9 @@ class WebSocketClient {
       this.ws.onclose = (event) => {
         console.log('WebSocket 连接关闭:', event.code, event.reason);
         this.stopHeartbeat();
-        this.attemptReconnect();
+        if (!this.intentionalClose) {
+          this.attemptReconnect();
+        }
       };
 
       this.ws.onerror = (error) => {
@@ -66,7 +76,12 @@ class WebSocketClient {
    * 断开连接
    */
   disconnect(): void {
+    this.intentionalClose = true;
     this.stopHeartbeat();
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -81,7 +96,7 @@ class WebSocketClient {
       this.reconnectAttempts++;
       console.log(`尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
-      setTimeout(() => {
+      this.reconnectTimeout = setTimeout(() => {
         this.connect();
       }, this.reconnectInterval);
     } else {
@@ -143,6 +158,13 @@ class WebSocketClient {
         return 'UNKNOWN';
     }
   }
+
+  /**
+   * 获取 doctorId
+   */
+  getDoctorId(): string {
+    return this.doctorId;
+  }
 }
 
 // 创建单例实例
@@ -153,6 +175,10 @@ let wsClient: WebSocketClient | null = null;
  */
 export function getWebSocketClient(doctorId: string): WebSocketClient {
   if (!wsClient) {
+    wsClient = new WebSocketClient(doctorId);
+  } else if (wsClient.getDoctorId() !== doctorId) {
+    // 如果 doctorId 变化，断开旧连接并创建新实例
+    wsClient.disconnect();
     wsClient = new WebSocketClient(doctorId);
   }
   return wsClient;
