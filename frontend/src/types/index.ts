@@ -224,3 +224,27 @@ export interface FollowUpHistoryResponse {
   pregnant_id: string
   records: FollowUpHistoryRecord[]
 }
+
+// 随访表单
+export interface FollowUpQuestion {
+  key: string
+  question: string
+  type: 'text' | 'number'
+  unit?: string
+  target?: string
+  format?: string
+  answered?: boolean
+  answer?: any
+}
+
+export interface FollowUpPendingResponse {
+  record_id: string
+  patient_name: string
+  template_id: string
+  template_name: string
+  questions: FollowUpQuestion[]
+  answered_count: number
+  total_count: number
+  has_pending: boolean
+  health_education: string[]
+}

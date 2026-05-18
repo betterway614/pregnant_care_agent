@@ -7,6 +7,7 @@
         <router-view />
       </main>
     </div>
+    <NurseAIFab />
   </div>
 </template>
 
@@ -14,6 +15,7 @@
 import { onMounted } from 'vue'
 import Sidebar from './Sidebar.vue'
 import HeaderBar from './HeaderBar.vue'
+import NurseAIFab from '@/views/nurse/components/NurseAIFab.vue'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()

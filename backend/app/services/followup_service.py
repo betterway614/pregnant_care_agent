@@ -129,6 +129,31 @@ class FollowUpService:
         """获取随访模板"""
         return FOLLOWUP_TEMPLATES.get(template_id, FOLLOWUP_TEMPLATES["standard"])
 
+    def select_template(self, risk_tags: list[str] = None, gest_week: int = 20) -> tuple[str, dict]:
+        """根据风险标签和孕周自动选择最合适的随访模板
+
+        返回 (template_id, template_dict)
+        """
+        risk_tags = risk_tags or []
+
+        # 按优先级匹配
+        if any(t in risk_tags for t in ("GDM", "妊娠期糖尿病")):
+            return "gdm", FOLLOWUP_TEMPLATES["gdm"]
+        if any(t in risk_tags for t in ("高血压", "妊娠期高血压", "子痫前期")):
+            return "hypertension", FOLLOWUP_TEMPLATES["hypertension"]
+        if any(t in risk_tags for t in ("FGR", "FGR高危")):
+            return "fgr_high_risk", FOLLOWUP_TEMPLATES["fgr_high_risk"]
+        if any(t in risk_tags for t in ("心理健康", "抑郁风险")):
+            return "mental_health", FOLLOWUP_TEMPLATES["mental_health"]
+
+        # 按孕周匹配
+        if gest_week < 12:
+            return "early_pregnancy", FOLLOWUP_TEMPLATES["early_pregnancy"]
+        if gest_week >= 36:
+            return "late_pregnancy", FOLLOWUP_TEMPLATES["late_pregnancy"]
+
+        return "standard", FOLLOWUP_TEMPLATES["standard"]
+
     def get_template_from_questions(self, answered: dict) -> dict:
         """根据已回答的 key 反向推断最适合的模板"""
         keys = set(answered.keys())

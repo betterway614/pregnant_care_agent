@@ -30,7 +30,7 @@
         :axis-mode="trendAxisMode === 'gestational_week' ? 'gest_week' : 'date'"
         :show-normal-range="true"
         :interactive="true"
-        :height="350"
+        :height="420"
         @point-click="handlePointClick"
         @range-change="handleRangeChange"
       />
@@ -108,10 +108,10 @@ onMounted(() => { loadTrendData() })
 
 <style scoped>
 .page-container { overflow-y: auto; -webkit-overflow-scrolling: touch; height: 100%; box-sizing: border-box; padding-bottom: 24px; }
-.sub-page-header { padding: 12px 16px; border-bottom: 1px solid #eee; background: #fff; position: sticky; top: 0; z-index: 10; }
-.trend-metric-selector { margin-bottom: 12px; }
+.sub-page-header { margin: 12px 16px; padding: 12px 16px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); position: sticky; top: 12px; z-index: 10; }
+.trend-metric-selector { margin-bottom: 12px; --el-color-primary: var(--pt-primary); }
 .trend-metric-selector .el-checkbox { margin-right: 12px; margin-bottom: 4px; }
-.trend-axis-toggle { display: flex; justify-content: center; margin-bottom: 12px; }
+.trend-axis-toggle { display: flex; justify-content: center; margin-bottom: 12px; --el-color-primary: var(--pt-primary); }
 .point-detail-card { margin-top: 12px; padding: 12px 16px; background: linear-gradient(135deg, #e3f2fd, #f3e5f5); border-radius: 12px; border: 1px solid rgba(66, 165, 245, 0.2); }
 .point-detail__header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .point-detail__name { font-size: 14px; font-weight: 600; color: #303133; }

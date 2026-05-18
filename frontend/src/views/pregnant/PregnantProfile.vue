@@ -8,7 +8,7 @@
           <p class="page-subtitle">请输入您的医院ID卡号和密码</p>
         </div>
 
-        <el-card shadow="hover" class="login-inline-card">
+        <div class="soft-card login-card">
           <el-form
             ref="loginFormRef"
             :model="loginForm"
@@ -26,108 +26,106 @@
                 <template #prefix><el-icon><Lock /></el-icon></template>
               </el-input>
             </el-form-item>
-            <el-button type="primary" size="large" :loading="loginLoading" class="login-inline-btn" @click="handleInlineLogin">
+            <el-button type="primary" size="large" :loading="loginLoading" class="login-btn interactive-card" @click="handleInlineLogin">
               {{ loginLoading ? '登录中...' : '登 录' }}
             </el-button>
           </el-form>
-        </el-card>
+        </div>
       </template>
 
       <!-- ===== 已登录状态 ===== -->
       <template v-else>
         <!-- 加载状态 -->
         <div v-if="loading" class="page-loading">
-          <el-icon class="loading-icon" :size="36"><Loading /></el-icon>
+          <el-icon class="is-loading" :size="36" color="#FB7185"><Loading /></el-icon>
           <p>正在加载资料...</p>
         </div>
 
         <template v-else>
-        <!-- 头像区（顶部，退出按钮在右上角） -->
-        <div class="profile-top-bar">
-          <div class="avatar-section">
-            <div class="avatar-wrapper" @click="handleAvatarClick">
-              <el-avatar :size="72" :src="avatarUrl" class="profile-avatar">
-                <span class="avatar-fallback">{{ avatarFallback }}</span>
-              </el-avatar>
-              <div class="avatar-edit-badge">
-                <el-icon :size="14"><Edit /></el-icon>
+          <!-- 头像区 -->
+          <div class="profile-top-bar">
+            <div class="avatar-section">
+              <div class="avatar-wrapper interactive-card" @click="handleAvatarClick">
+                <el-avatar :size="72" :src="avatarUrl" class="profile-avatar">
+                  <span class="avatar-fallback">{{ avatarFallback }}</span>
+                </el-avatar>
+                <div class="avatar-edit-badge">
+                  <el-icon :size="14"><Edit /></el-icon>
+                </div>
+              </div>
+              <div class="avatar-info">
+                <span class="avatar-name">{{ formData.nickname || formData.display_name || '孕妇' }}</span>
+                <span class="avatar-id">{{ formData.hospital_id || '' }}</span>
               </div>
             </div>
-            <div class="avatar-info">
-              <span class="avatar-name">{{ formData.nickname || formData.display_name || '孕妇' }}</span>
-              <span class="avatar-id">{{ formData.hospital_id || '' }}</span>
-            </div>
+            <el-button text type="danger" size="large" class="logout-btn interactive-card" @click="handleLogout">退出</el-button>
           </div>
-          <el-button text type="danger" size="small" @click="handleLogout">退出</el-button>
-        </div>
 
-        <!-- 资料表单 -->
-        <el-card shadow="hover" class="profile-form-card">
-          <template #header>
+          <!-- 资料表单 -->
+          <div class="soft-card form-card">
             <div class="card-header">
-              <el-icon color="var(--primary)" :size="18"><User /></el-icon>
+              <el-icon color="#FB7185" :size="20"><User /></el-icon>
               <span>基本信息</span>
             </div>
-          </template>
 
-          <el-form
-            ref="formRef"
-            :model="formData"
-            :rules="formRules"
-            label-position="top"
-            size="large"
-            class="profile-form"
-          >
-            <el-form-item label="显示名" prop="display_name">
-              <el-input
-                v-model="formData.display_name"
-                disabled
-                placeholder="系统设定显示名"
-              />
-            </el-form-item>
+            <el-form
+              ref="formRef"
+              :model="formData"
+              :rules="formRules"
+              label-position="top"
+              size="large"
+              class="profile-form"
+            >
+              <el-form-item label="显示名" prop="display_name">
+                <el-input
+                  v-model="formData.display_name"
+                  disabled
+                  placeholder="系统设定显示名"
+                />
+              </el-form-item>
 
-            <el-form-item label="昵称" prop="nickname">
-              <el-input
-                v-model="formData.nickname"
-                placeholder="请输入昵称"
-                maxlength="20"
-                show-word-limit
-              />
-            </el-form-item>
+              <el-form-item label="昵称" prop="nickname">
+                <el-input
+                  v-model="formData.nickname"
+                  placeholder="请输入昵称"
+                  maxlength="20"
+                  show-word-limit
+                />
+              </el-form-item>
 
-            <el-form-item label="手机号" prop="phone">
-              <el-input
-                v-model="formData.phone"
-                placeholder="请输入手机号"
-                maxlength="11"
-                @focus="handlePhoneFocus"
-              />
-            </el-form-item>
+              <el-form-item label="手机号" prop="phone">
+                <el-input
+                  v-model="formData.phone"
+                  placeholder="请输入手机号"
+                  maxlength="11"
+                  @focus="handlePhoneFocus"
+                />
+              </el-form-item>
 
-            <el-form-item label="医院ID卡号" prop="hospital_id">
-              <el-input
-                v-model="formData.hospital_id"
-                placeholder="请输入医院就诊卡号"
-                maxlength="30"
-              />
-            </el-form-item>
-          </el-form>
-        </el-card>
+              <el-form-item label="医院ID卡号" prop="hospital_id">
+                <el-input
+                  v-model="formData.hospital_id"
+                  placeholder="请输入医院就诊卡号"
+                  maxlength="30"
+                />
+              </el-form-item>
+            </el-form>
+          </div>
 
-        <!-- 保存按钮 -->
-        <div class="save-section">
-          <el-button
-            type="primary"
-            size="large"
-            class="save-btn"
-            :loading="saving"
-            @click="handleSave"
-          >
-            <el-icon v-if="!saving"><Check /></el-icon>
-            {{ saving ? '保存中...' : '保存修改' }}
-          </el-button>
-        </div>
-      </template>
+          <!-- 保存按钮 -->
+          <div class="save-section">
+            <el-button
+              type="primary"
+              size="large"
+              class="save-btn interactive-card"
+              :loading="saving"
+              @click="handleSave"
+            >
+              <el-icon v-if="!saving"><Check /></el-icon>
+              {{ saving ? '保存中...' : '保存修改' }}
+            </el-button>
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -135,7 +133,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Loading, Edit, User, Calendar, Check, Lock } from '@element-plus/icons-vue'
+import { Loading, Edit, User, Check, Lock } from '@element-plus/icons-vue'
 import { pregnantApi } from '@/api/endpoints'
 import { useAppStore } from '@/stores/app'
 import type { Pregnant } from '@/types'
@@ -218,46 +216,6 @@ const avatarFallback = computed(() => {
 })
 
 /* ============ 工具函数 ============ */
-function calcGestationalWeek(days?: number): string {
-  if (!days && days !== 0) return '--'
-  const w = Math.floor(days / 7)
-  const d = days % 7
-  return d > 0 ? `${w}+${d}` : `${w}`
-}
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '--'
-  const d = new Date(dateStr)
-  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
-}
-
-function formatDateTime(dateStr?: string): string {
-  if (!dateStr) return '--'
-  const d = new Date(dateStr)
-  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-}
-
-function getRiskTagType(tag: string): 'danger' | 'warning' | 'success' | 'info' {
-  const lower = tag.toLowerCase()
-  if (['red', 'fgr_high_risk', 'high'].includes(lower)) return 'danger'
-  if (['orange', 'medium'].includes(lower)) return 'warning'
-  if (['green', 'low', 'normal'].includes(lower)) return 'success'
-  return 'info'
-}
-
-function getRiskTagLabel(tag: string): string {
-  const labelMap: Record<string, string> = {
-    RED: '高风险',
-    ORANGE: '中风险',
-    YELLOW: '注意事项',
-    GREEN: '低风险',
-    fgr_high_risk: 'FGR高风险',
-    routine: '常规',
-  }
-  return labelMap[tag] || tag
-}
-
-/* ============ 手机号脱敏 ============ */
 function maskPhone(phone?: string): string {
   if (!phone || phone.length < 11) return phone || '--'
   return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
@@ -276,7 +234,6 @@ function handleAvatarClick() {
 }
 
 async function handleSave() {
-  // 表单校验
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -289,7 +246,6 @@ async function handleSave() {
     }
     await pregnantApi.update(pregnantId.value, updateData)
     ElMessage.success('资料保存成功')
-    // 恢复脱敏显示
     phoneVisible.value = false
     formData.phone = maskPhone(formData.phone)
   } catch (err) {
@@ -328,34 +284,52 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ========== 全局变量 (Soft UI Colors) ========== */
 .patient-profile {
+  --c-rose: #FB7185;
+  --c-rose-light: #FFF1F2;
+  --c-sky: #38BDF8;
+  --c-slate-800: #1E293B;
+  --c-slate-600: #475569;
+  --c-slate-400: #94A3B8;
+  --c-bg: #F8FAFC;
+  --card-shadow: 0 4px 16px rgba(148, 163, 184, 0.1);
+
+  background: var(--c-bg);
   min-height: 100vh;
-  background: var(--bg-page);
+  font-family: 'Nunito Sans', 'PingFang SC', sans-serif;
 }
 
 .profile-container {
-  max-width: 600px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 28px 20px 60px;
+  padding: 32px 16px 60px;
+}
+
+/* ========== 交互动画基础 ========== */
+.interactive-card {
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+.interactive-card:active {
+  transform: scale(0.96);
 }
 
 /* ========== 页面头部 ========== */
 .profile-header {
   margin-bottom: 28px;
+  text-align: center;
 }
-
 .profile-header .page-title {
-  font-family: 'Figtree', sans-serif;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
+  color: var(--c-slate-800);
+  margin-bottom: 8px;
 }
-
 .page-subtitle {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0;
+  font-size: 14px;
+  color: var(--c-slate-600);
 }
 
 /* ========== 加载状态 ========== */
@@ -366,17 +340,16 @@ onMounted(() => {
   justify-content: center;
   min-height: 300px;
   gap: 16px;
-  color: var(--text-muted);
+  color: var(--c-slate-600);
 }
 
-.loading-icon {
-  animation: spin 1.2s linear infinite;
-  color: var(--primary);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* ========== 通用软卡片 ========== */
+.soft-card {
+  background: white;
+  border-radius: 20px;
+  box-shadow: var(--card-shadow);
+  margin-bottom: 24px;
+  padding: 24px 20px;
 }
 
 /* ========== 顶部头像栏 ========== */
@@ -384,171 +357,105 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding: 0 4px;
+  margin-bottom: 32px;
+  padding: 0 8px;
 }
-
 .avatar-section {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
-
 .avatar-wrapper {
   position: relative;
-  cursor: pointer;
-  flex-shrink: 0;
 }
-
-.avatar-wrapper:hover .avatar-edit-badge {
-  opacity: 1;
-}
-
 .profile-avatar {
-  box-shadow: var(--shadow-md);
-  border: 3px solid var(--primary-lighter);
-  font-size: 26px;
+  background: var(--c-rose-light) !important;
+  color: var(--c-rose);
   font-weight: 700;
-  color: var(--primary);
-  background: var(--primary-bg) !important;
+  font-size: 24px;
+  border: 4px solid white;
+  box-shadow: var(--card-shadow);
 }
-
-.avatar-fallback {
-  font-family: 'Figtree', sans-serif;
-}
-
 .avatar-edit-badge {
   position: absolute;
   bottom: 0;
-  right: 0;
-  width: 24px;
-  height: 24px;
+  right: -4px;
+  width: 28px;
+  height: 28px;
+  background: var(--c-rose);
+  color: white;
   border-radius: 50%;
-  background: var(--primary-gradient);
-  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  box-shadow: var(--shadow-sm);
+  border: 2px solid white;
 }
-
 .avatar-info {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
-
 .avatar-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--c-slate-800);
 }
-
 .avatar-id {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: 13px;
+  color: var(--c-slate-600);
+}
+.logout-btn {
+  border-radius: 12px;
 }
 
 /* ========== 表单卡片 ========== */
-.profile-form-card {
-  margin-bottom: 16px;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border) !important;
-  transition: var(--transition);
+.form-card {
+  padding: 0;
+  overflow: hidden;
 }
-
-.profile-form-card:hover {
-  box-shadow: var(--shadow-hover);
-}
-
-.profile-form-card :deep(.el-card__header) {
-  padding: 16px 20px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.profile-form-card :deep(.el-card__body) {
-  padding: 24px 20px 8px;
-}
-
 .card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: 'Figtree', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.profile-form :deep(.el-form-item__label) {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.profile-form :deep(.el-input.is-disabled .el-input__inner) {
-  background: var(--bg-surface);
-  color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-/* ========== 保存按钮区 ========== */
-.save-section {
-  padding: 0 0 40px;
-}
-
-.save-btn {
-  width: 100%;
-  height: 48px;
+  gap: 10px;
+  padding: 20px;
+  background: var(--c-bg);
+  border-bottom: 1px solid white;
   font-size: 16px;
+  font-weight: 700;
+  color: var(--c-slate-800);
+}
+.profile-form {
+  padding: 24px 20px 8px;
+}
+
+/* 覆盖 Element Plus 样式为圆润风格 */
+:deep(.el-input__wrapper) {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--c-slate-400) inset;
+}
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px var(--c-rose) inset;
+}
+:deep(.el-form-item__label) {
   font-weight: 600;
-  border-radius: var(--radius);
-  letter-spacing: 0.3px;
+  color: var(--c-slate-800);
 }
 
-.save-btn .el-icon {
-  margin-right: 6px;
+/* ========== 按钮区 ========== */
+.save-section {
+  padding-top: 16px;
 }
-
-/* ========== 内联登录卡片 ========== */
-.login-inline-card {
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border) !important;
-}
-
-.login-inline-card :deep(.el-card__body) {
-  padding: 24px 20px;
-}
-
-.login-inline-btn {
+.save-btn, .login-btn {
   width: 100%;
-  margin-top: 8px;
-  height: 44px;
+  height: 52px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  background-color: var(--c-rose);
+  border-color: var(--c-rose);
 }
-
-/* ========== 响应式（移动端适配） ========== */
-@media (max-width: 480px) {
-  .profile-container {
-    padding: 16px 12px 60px;
-  }
-
-  .profile-avatar {
-    width: 56px !important;
-    height: 56px !important;
-    font-size: 20px;
-  }
-
-  .avatar-name {
-    font-size: 15px;
-  }
-
-  .save-btn {
-    height: 44px;
-    font-size: 15px;
-  }
+.save-btn:hover, .login-btn:hover {
+  background-color: #f43f5e; /* rose-500 */
+  border-color: #f43f5e;
 }
 </style>

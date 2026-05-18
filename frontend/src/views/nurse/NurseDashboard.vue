@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1 class="page-title">护士工作台</h1>
-      <el-button type="primary" :icon="Refresh" @click="fetchData" :loading="loading">
+      <el-button type="primary" class="brand-gradient-btn" :icon="Refresh" @click="fetchData" :loading="loading">
         刷新数据
       </el-button>
     </div>
@@ -40,7 +40,7 @@
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">最近预警</span>
-            <el-button text type="primary" size="small" @click="$router.push('/nurse/alerts')">
+            <el-button type="primary" class="brand-gradient-btn" size="small" @click="$router.push('/nurse/alerts')">
               查看全部
             </el-button>
           </div>
@@ -76,7 +76,7 @@
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">最近随访</span>
-            <el-button text type="primary" size="small" @click="$router.push('/nurse/followups')">
+            <el-button type="primary" class="brand-gradient-btn" size="small" @click="$router.push('/nurse/followups')">
               查看全部
             </el-button>
           </div>
@@ -107,114 +107,17 @@
         </div>
       </el-col>
     </el-row>
-
-    <!-- AI 智能助手面板 -->
-    <div class="content-card" style="margin-top: 16px">
-      <div class="content-card__header">
-        <span class="content-card__title" style="display: flex; align-items: center; gap: 8px">
-          <AgentAvatar agent="xiaohu" :size="24" />
-          小护 AI 智能助手
-        </span>
-        <div style="display: flex; gap: 8px">
-          <el-button text type="primary" size="small" @click="showAiChat = !showAiChat">
-            {{ showAiChat ? '分析' : '对话' }}
-          </el-button>
-          <el-button text type="primary" size="small" @click="showAiPanel = !showAiPanel">
-            {{ showAiPanel ? '收起' : '展开' }}
-          </el-button>
-        </div>
-      </div>
-      <div class="content-card__body" v-if="showAiPanel">
-        <!-- 对话模式 -->
-        <NurseAIChat v-if="showAiChat" />
-        <!-- 分析模式 -->
-        <div v-else class="ai-panel">
-          <div class="ai-panel__input">
-            <el-select
-              v-model="aiPatientId"
-              filterable
-              placeholder="选择孕妇进行分析"
-              style="flex: 1"
-              clearable
-            >
-              <el-option
-                v-for="p in pregnantList"
-                :key="p.pregnant_id"
-                :label="`${p.display_name} (孕${(p.gestational_age_days||0)/7|0}周)`"
-                :value="p.pregnant_id"
-              />
-            </el-select>
-            <el-button
-              type="primary"
-              :loading="aiLoading"
-              :disabled="!aiPatientId"
-              @click="runAiAnalysis"
-            >
-              <el-icon><MagicStick /></el-icon> AI 分析
-            </el-button>
-          </div>
-
-          <!-- AI分析结果 -->
-          <div v-if="aiResult" class="ai-result" v-loading="aiLoading">
-            <el-alert
-              v-if="aiResult.summary"
-              title="综合分析"
-              :description="aiResult.summary"
-              type="info"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px"
-            />
-            <el-alert
-              v-if="aiResult.risk_assessment"
-              title="风险评估"
-              :description="aiResult.risk_assessment"
-              :type="aiResult.risk_assessment.includes('高危') ? 'error' : 'warning'"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px"
-            />
-            <el-alert
-              v-if="aiResult.nursing_suggestions"
-              title="护理建议"
-              :description="aiResult.nursing_suggestions"
-              type="success"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px"
-            />
-            <div v-if="aiResult.followup_focus?.length" class="followup-focus">
-              <p class="focus-title">随访重点关注：</p>
-              <el-tag
-                v-for="(item, idx) in aiResult.followup_focus"
-                :key="idx"
-                size="large"
-                style="margin: 4px"
-              >{{ item }}</el-tag>
-            </div>
-          </div>
-
-          <!-- 空状态 -->
-          <div v-if="!aiResult && !aiLoading" class="ai-empty">
-            <el-icon :size="40" color="var(--text-muted)"><MagicStick /></el-icon>
-            <p>选择孕妇后点击"AI分析"，小护将为您提供智能护理分析建议</p>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Bell, Document, MagicStick } from '@element-plus/icons-vue'
-import { dashboardApi, alertApi, followUpApi, nurseAiApi } from '@/api/endpoints'
+import { Refresh, Bell, Document } from '@element-plus/icons-vue'
+import { dashboardApi, alertApi, followUpApi } from '@/api/endpoints'
 import type { DashboardStats, Alert, FollowUpRecord, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
-import AgentAvatar from '@/components/common/AgentAvatar.vue'
-import NurseAIChat from './NurseAIChat.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -229,6 +132,26 @@ const stats = ref<DashboardStats>({
 })
 const recentAlerts = ref<Alert[]>([])
 const recentFollowUps = ref<FollowUpRecord[]>([])
+
+/** 轮询间隔（毫秒） */
+const POLL_INTERVAL = 30000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+/** 开始轮询 */
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    fetchData()
+  }, POLL_INTERVAL)
+}
+
+/** 停止轮询 */
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
 /** 统计卡片配置 */
 const statCards = computed(() => [
@@ -300,43 +223,13 @@ function handleAlertClick(alert: Alert) {
   router.push(`/nurse/alerts?highlight=${alert.id}`)
 }
 
-// ==================== AI 智能分析 ====================
-const showAiPanel = ref(false)
-const showAiChat = ref(false)
-const aiPatientId = ref('')
-const aiLoading = ref(false)
-const aiResult = ref<any>(null)
-const pregnantList = ref<Pregnant[]>([])
-
-async function loadPatientList() {
-  try {
-    const res = await dashboardApi.pregnant()
-    pregnantList.value = res.data || []
-  } catch { /* ignore */ }
-}
-
-async function runAiAnalysis() {
-  if (!aiPatientId.value) return
-  aiLoading.value = true
-  aiResult.value = null
-  try {
-    const res = await nurseAiApi.analyze(aiPatientId.value)
-    aiResult.value = res.data
-  } catch (err: any) {
-    aiResult.value = {
-      summary: 'AI分析暂时不可用，请联系管理员',
-      nursing_suggestions: '',
-      risk_assessment: '',
-      followup_focus: [],
-    }
-  } finally {
-    aiLoading.value = false
-  }
-}
-
 onMounted(() => {
   fetchData()
-  loadPatientList()
+  startPolling()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
@@ -405,39 +298,5 @@ onMounted(() => {
 .empty-state p {
   color: var(--text-light);
   font-size: 14px;
-}
-
-/* AI 面板 */
-.ai-panel__input {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.ai-result {
-  min-height: 100px;
-}
-
-.ai-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.followup-focus {
-  background: var(--primary-bg);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-}
-
-.focus-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
 }
 </style>

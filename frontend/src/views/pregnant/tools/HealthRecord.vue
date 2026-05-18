@@ -99,7 +99,7 @@ async function saveAll() {
 
 <style scoped>
 .page-container { overflow-y: auto; -webkit-overflow-scrolling: touch; height: 100%; box-sizing: border-box; padding-bottom: 24px; }
-.sub-page-header { padding: 12px 16px; border-bottom: 1px solid #eee; background: #fff; position: sticky; top: 0; z-index: 10; }
+.sub-page-header { margin: 12px 16px; padding: 12px 16px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); position: sticky; top: 12px; z-index: 10; }
 .health-form { display: flex; flex-direction: column; gap: 16px; }
 .health-field { display: flex; flex-direction: column; gap: 6px; }
 .health-field__label { font-size: 13px; font-weight: 600; color: var(--pt-text-secondary); }

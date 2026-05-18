@@ -24,7 +24,10 @@
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
         <el-option label="草稿" value="draft" />
+        <el-option label="进行中" value="in_progress" />
+        <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
+        <el-option label="已归档" value="archived" />
       </el-select>
       <el-button :icon="Refresh" @click="fetchRecords" :loading="loading" circle />
     </div>
@@ -36,7 +39,7 @@
         <span class="text-light">共 {{ total }} 条</span>
       </div>
       <div class="content-card__body" v-loading="loading">
-        <el-table :data="paginatedRecords" stripe style="width: 100%" size="small" @row-click="viewDetail">
+        <el-table :data="paginatedRecords" stripe style="width: 100%" size="small">
           <el-table-column label="随访日期" width="110" align="center">
             <template #default="{ row }">
               {{ formatDate(row.follow_up_date) }}
@@ -55,28 +58,36 @@
           </el-table-column>
           <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.status === 'confirmed' ? 'success' : 'info'" size="small">
-                {{ row.status === 'confirmed' ? '已确认' : '草稿' }}
+              <el-tag :type="statusType(row.status)" size="small">
+                {{ statusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="操作" width="240" fixed="right" align="left" header-align="left">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="viewDetail(row)">
-                查看详情
-              </el-button>
-              <el-button text type="warning" size="small" @click.stop="goPregnantDetail(row)">
-                孕妇详情
-              </el-button>
-              <el-button
-                v-if="row.status !== 'confirmed'"
-                text
-                type="success"
-                size="small"
-                @click.stop="confirmRecord(row)"
-              >
-                确认归档
-              </el-button>
+              <div class="table-row-actions">
+                <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="goPregnantDetail(row)">
+                  孕妇详情
+                </el-button>
+                <el-button
+                  v-if="row.status === 'completed' || row.status === 'in_progress'"
+                  type="primary"
+                  class="brand-gradient-btn"
+                  size="small"
+                  @click.stop="confirmRecord(row)"
+                >
+                  确认审核
+                </el-button>
+                <el-button
+                  v-else-if="row.status === 'draft'"
+                  type="primary"
+                  class="brand-gradient-btn"
+                  size="small"
+                  @click.stop="confirmRecord(row)"
+                >
+                  确认归档
+                </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -100,65 +111,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 随访详情抽屉 -->
-    <el-drawer
-      v-model="detailVisible"
-      :title="`随访详情 - ${selectedRecord?.patient_name || ''}`"
-      size="500px"
-      destroy-on-close
-    >
-      <template v-if="selectedRecord">
-        <div class="detail-section">
-          <div class="detail-row">
-            <span class="detail-label">孕妇</span>
-            <span class="detail-value">{{ selectedRecord.patient_name || selectedRecord.pregnant_id }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">孕周</span>
-            <span class="detail-value">{{ selectedRecord.gestational_week || '--' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">随访日期</span>
-            <span class="detail-value">{{ formatDate(selectedRecord.follow_up_date) }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">状态</span>
-            <el-tag :type="selectedRecord.status === 'confirmed' ? 'success' : 'info'" size="small">
-              {{ selectedRecord.status === 'confirmed' ? '已确认' : '草稿' }}
-            </el-tag>
-          </div>
-        </div>
-
-        <el-divider />
-
-        <div class="detail-section">
-          <h4 class="detail-section__title">主诉</h4>
-          <p class="detail-section__content">{{ selectedRecord.chief_complaint || '无主诉内容' }}</p>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="detail-section__title">自我报告数据</h4>
-          <pre class="detail-section__pre" v-if="Object.keys(selectedRecord.self_reported_data || {}).length">
-{{ JSON.stringify(selectedRecord.self_reported_data, null, 2) }}
-          </pre>
-          <p v-else class="text-light">暂无自我报告数据</p>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="detail-section__title">健康教育</h4>
-          <ul v-if="selectedRecord.health_education?.length" class="detail-list">
-            <li v-for="(item, idx) in selectedRecord.health_education" :key="idx">{{ item }}</li>
-          </ul>
-          <p v-else class="text-light">暂无健康教育内容</p>
-        </div>
-
-        <div class="detail-section" v-if="selectedRecord.summary">
-          <h4 class="detail-section__title">随访摘要</h4>
-          <p class="detail-section__content">{{ selectedRecord.summary }}</p>
-        </div>
-      </template>
-    </el-drawer>
 
     <!-- 触发随访对话框 -->
     <el-dialog v-model="showTriggerDialog" title="触发随访" width="480px" destroy-on-close>
@@ -198,12 +150,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, Refresh, Document } from '@element-plus/icons-vue'
 import { followUpApi, dashboardApi } from '@/api/endpoints'
 import { ElMessage } from 'element-plus'
 import type { FollowUpRecord, Pregnant } from '@/types'
+
+/** 轮询间隔（毫秒） */
+const POLL_INTERVAL = 30000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+/** 开始轮询 */
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    fetchRecords()
+  }, POLL_INTERVAL)
+}
+
+/** 停止轮询 */
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
 const router = useRouter()
 const loading = ref(false)
@@ -212,10 +184,6 @@ const records = ref<FollowUpRecord[]>([])
 const filterStatus = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
-
-/** 详情抽屉 */
-const detailVisible = ref(false)
-const selectedRecord = ref<FollowUpRecord | null>(null)
 
 /** 触发随访 */
 const showTriggerDialog = ref(false)
@@ -245,6 +213,30 @@ const paginatedRecords = computed(() => {
 function handleFilterChange() {
   currentPage.value = 1
   fetchRecords()
+}
+
+/** 状态标签类型 */
+function statusType(status: string): string {
+  const map: Record<string, string> = {
+    archived: 'success',
+    confirmed: 'success',
+    completed: 'primary',
+    in_progress: 'warning',
+    draft: 'info',
+  }
+  return map[status] || 'info'
+}
+
+/** 状态标签文本 */
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    archived: '已归档',
+    confirmed: '已确认',
+    completed: '已完成',
+    in_progress: '进行中',
+    draft: '草稿',
+  }
+  return map[status] || status
 }
 
 /** 日期格式化 */
@@ -284,12 +276,6 @@ async function fetchPatients() {
   } finally {
     pregnantLoading.value = false
   }
-}
-
-/** 查看详情 */
-function viewDetail(row: FollowUpRecord) {
-  selectedRecord.value = row
-  detailVisible.value = true
 }
 
 /** 跳转到孕妇详情页 */
@@ -334,7 +320,14 @@ async function doTrigger() {
   }
 }
 
-onMounted(fetchRecords)
+onMounted(() => {
+  fetchRecords()
+  startPolling()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>
@@ -352,71 +345,6 @@ onMounted(fetchRecords)
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
-}
-
-/* 详情抽屉 */
-.detail-section {
-  margin-bottom: 16px;
-}
-
-.detail-section__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.detail-section__content {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0;
-}
-
-.detail-section__pre {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-x: auto;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  margin: 0;
-}
-
-.detail-row {
-  display: flex;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-label {
-  width: 80px;
-  font-size: 13px;
-  color: var(--text-light);
-  flex-shrink: 0;
-}
-
-.detail-value {
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.detail-list {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.detail-list li {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.8;
 }
 
 .text-light {

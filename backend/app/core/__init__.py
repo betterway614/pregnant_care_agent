@@ -1,12 +1,9 @@
-from .agno_agent import create_main_agent, create_followup_agent, get_main_agent
+from .agno_agent import create_main_agent, get_main_agent
 from .agno_client import get_agno_client, AgnoClient, get_agno_model, reset_agno_client
-from .agno_tools import (
-    AGNO_FOLLOWUP_TOOLS, MEDICAL_TOOLS,
-    agno_get_followup_context, agno_record_answer, agno_complete_followup,
-)
+from .agno_tools import MEDICAL_TOOLS
 from .agno_knowledge import AgnoKnowledgeAdapter, agno_knowledge
 from .agno_team import create_care_team, get_care_team
-from .agno_workflow import create_prenatal_workflow, create_followup_workflow, get_prenatal_workflow, get_followup_workflow
+from .agno_workflow import create_prenatal_workflow, get_prenatal_workflow
 from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient, LocalOllamaClient
 from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
@@ -16,7 +13,7 @@ from .rag_engine import rag_engine, RAGEngine
 from .agno_rag import AgnoRAGEngine, agno_rag_engine
 
 __all__ = [
-    "create_main_agent", "create_followup_agent", "get_main_agent",
+    "create_main_agent", "get_main_agent",
     "get_agno_client", "AgnoClient", "get_agno_model", "reset_agno_client",
     "get_llm_client", "LLMClient", "MockLLMClient", "CloudAPIClient", "LocalOllamaClient",
     "nlu_engine", "RuleBaseNLU", "NLUResult",
@@ -26,8 +23,7 @@ __all__ = [
     "rag_engine", "RAGEngine",
     "AgnoRAGEngine", "agno_rag_engine",
     "AgnoKnowledgeAdapter", "agno_knowledge",
-    "AGNO_FOLLOWUP_TOOLS", "MEDICAL_TOOLS",
-    "agno_get_followup_context", "agno_record_answer", "agno_complete_followup",
+    "MEDICAL_TOOLS",
     "create_care_team", "get_care_team",
-    "create_prenatal_workflow", "create_followup_workflow", "get_prenatal_workflow", "get_followup_workflow",
+    "create_prenatal_workflow", "get_prenatal_workflow",
 ]

@@ -175,83 +175,6 @@ def create_prenatal_workflow() -> Workflow:
     )
 
 
-def create_followup_workflow() -> Workflow:
-    """创建随访流程 Workflow
-
-    流程：
-    1. 随访准备 → 加载随访模板和患者信息
-    2. 随访执行 → 逐一提问并记录
-    3. 随访总结 → 生成随访报告并归档
-    """
-    from .agno_tools import (
-        agno_get_followup_context,
-        agno_record_answer,
-        agno_complete_followup,
-    )
-
-    def _create_prep_agent() -> Agent:
-        return Agent(
-            name="随访准备员",
-            model=get_agno_model(),
-            instructions=[
-                "你负责随访前的准备工作。",
-                "使用工具获取随访模板和患者信息。",
-                "整理随访问题列表和患者背景。",
-            ],
-            tools=[agno_get_followup_context],
-            markdown=True,
-        )
-
-    def _create_exec_agent() -> Agent:
-        return Agent(
-            name="随访执行员",
-            model=get_agno_model(),
-            instructions=[
-                "你负责执行随访对话。",
-                "按照模板逐一提问，记录孕妇的回答。",
-                "使用工具记录每个回答。",
-                "语气温暖亲切，像朋友聊天。",
-            ],
-            tools=[agno_record_answer],
-            markdown=True,
-        )
-
-    def _create_summary_agent() -> Agent:
-        return Agent(
-            name="随访总结员",
-            model=get_agno_model(),
-            instructions=[
-                "你负责随访后的总结工作。",
-                "使用工具完成随访归档。",
-                "生成简洁的随访摘要。",
-            ],
-            tools=[agno_complete_followup],
-            markdown=True,
-        )
-
-    return Workflow(
-        name="随访流程",
-        description="标准化随访流程编排：准备 → 执行 → 总结",
-        steps=[
-            Step(
-                name="随访准备",
-                agent=_create_prep_agent(),
-                description="加载随访模板和患者信息",
-            ),
-            Step(
-                name="随访执行",
-                agent=_create_exec_agent(),
-                description="逐一提问并记录回答",
-            ),
-            Step(
-                name="随访总结",
-                agent=_create_summary_agent(),
-                description="生成随访报告并归档",
-            ),
-        ],
-    )
-
-
 # ==================== Workflow 缓存 ====================
 
 
@@ -259,9 +182,3 @@ def create_followup_workflow() -> Workflow:
 def get_prenatal_workflow() -> Workflow:
     """获取孕检流程 Workflow 单例"""
     return create_prenatal_workflow()
-
-
-@lru_cache(maxsize=1)
-def get_followup_workflow() -> Workflow:
-    """获取随访流程 Workflow 单例"""
-    return create_followup_workflow()

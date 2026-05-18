@@ -1,7 +1,75 @@
 """高危规则引擎 - CPU执行"""
 import re
+import operator
 from typing import Callable
 from datetime import datetime
+
+
+# 安全的比较运算符映射
+OPERATORS = {
+    ">=": operator.ge,
+    "<=": operator.le,
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">": operator.gt,
+    "<": operator.lt,
+}
+
+# 安全的逻辑运算符
+LOGICAL_OPS = {"and", "or", "not"}
+
+
+def _safe_eval_condition(condition: str, variables: dict) -> bool:
+    """安全评估条件表达式，不使用 eval()
+
+    支持的语法：
+    - 比较: sbp >= 140, dbp < 60
+    - 逻辑: and, or, not
+    - 复合: sbp >= 140 or dbp >= 90
+    """
+    try:
+        # 分割 by and/or
+        condition = condition.strip()
+
+        # 处理 "or" 逻辑
+        if " or " in condition:
+            parts = condition.split(" or ")
+            return any(_safe_eval_condition(part.strip(), variables) for part in parts)
+
+        # 处理 "and" 逻辑
+        if " and " in condition:
+            parts = condition.split(" and ")
+            return all(_safe_eval_condition(part.strip(), variables) for part in parts)
+
+        # 处理 "not" 逻辑
+        if condition.startswith("not "):
+            return not _safe_eval_condition(condition[4:].strip(), variables)
+
+        # 解析比较表达式: variable operator value
+        for op_str, op_func in OPERATORS.items():
+            if op_str in condition:
+                left, right = condition.split(op_str, 1)
+                left = left.strip()
+                right = right.strip()
+
+                # 获取左操作数的值
+                left_value = variables.get(left)
+                if left_value is None:
+                    return False
+
+                # 解析右操作数（可能是数字或变量）
+                try:
+                    right_value = float(right)
+                except ValueError:
+                    right_value = variables.get(right)
+                    if right_value is None:
+                        return False
+
+                return op_func(left_value, right_value)
+
+        return False
+    except Exception:
+        return False
 
 
 class Rule:
@@ -15,33 +83,23 @@ class Rule:
         self.action = action
 
     def evaluate(self, context: dict) -> bool:
-        """评估规则是否命中"""
+        """评估规则是否命中（安全版本，不使用eval）"""
         try:
-            sbp = context.get("sbp", 0) or 0
-            dbp = context.get("dbp", 0) or 0
-            weight = context.get("weight", 0) or 0
-            fetal_movement = context.get("fetal_movement", 0) or 0
-            fetal_movement_avg = context.get("fetal_movement_avg", fetal_movement) or fetal_movement
-            weight_gain_weekly = context.get("weight_gain_weekly", 0) or 0
-            emotion_score = context.get("emotion_score_avg_7d", 0) or 0
-            blood_sugar_fasting = context.get("blood_sugar_fasting", 0) or 0
-            blood_sugar_postprandial = context.get("blood_sugar_postprandial", 0) or 0
-            sleep_hours = context.get("sleep_hours", 8) or 8
-            gest_week = context.get("gest_week", 0) or 0
-
-            return bool(eval(self.expression, {
-                "sbp": sbp, "dbp": dbp,
-                "weight": weight,
-                "fetal_movement": fetal_movement,
-                "fetal_movement_avg": fetal_movement_avg,
-                "weight_gain_weekly": weight_gain_weekly,
-                "emotion_score": emotion_score,
-                "emotion_score_avg_7d": emotion_score,
-                "blood_sugar_fasting": blood_sugar_fasting,
-                "blood_sugar_postprandial": blood_sugar_postprandial,
-                "sleep_hours": sleep_hours,
-                "gest_week": gest_week,
-            }))
+            variables = {
+                "sbp": context.get("sbp", 0) or 0,
+                "dbp": context.get("dbp", 0) or 0,
+                "weight": context.get("weight", 0) or 0,
+                "fetal_movement": context.get("fetal_movement", 0) or 0,
+                "fetal_movement_avg": context.get("fetal_movement_avg", context.get("fetal_movement", 0)) or context.get("fetal_movement", 0),
+                "weight_gain_weekly": context.get("weight_gain_weekly", 0) or 0,
+                "emotion_score": context.get("emotion_score_avg_7d", 0) or 0,
+                "emotion_score_avg_7d": context.get("emotion_score_avg_7d", 0) or 0,
+                "blood_sugar_fasting": context.get("blood_sugar_fasting", 0) or 0,
+                "blood_sugar_postprandial": context.get("blood_sugar_postprandial", 0) or 0,
+                "sleep_hours": context.get("sleep_hours", 8) or 8,
+                "gest_week": context.get("gest_week", 0) or 0,
+            }
+            return _safe_eval_condition(self.expression, variables)
         except Exception:
             return False
 

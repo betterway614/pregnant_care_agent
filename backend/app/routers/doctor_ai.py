@@ -6,6 +6,7 @@ from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
+from ..core.json_parser import parse_llm_json
 from ..core.prompts import get_doctor_system_prompt
 from ..config import settings
 
@@ -157,7 +158,7 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
         if not response or not response.strip():
             return None
 
-        data = _parse_llm_json(response)
+        data = parse_llm_json(response)
         if not data:
             return None
 
@@ -341,30 +342,6 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
         suggested_orders=suggested_orders,
         risk_summary=risk_summary,
     )
-
-
-def _parse_llm_json(response: str) -> dict | None:
-    """解析LLM返回的JSON，支持多种格式"""
-    import re
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        pass
-    # 尝试提取代码块中的JSON
-    match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', response, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except (json.JSONDecodeError, KeyError):
-            pass
-    # 尝试提取花括号包裹的JSON
-    match = re.search(r'\{.*\}', response, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    return None
 
 
 # ==================== Dr.智 工具函数 ====================

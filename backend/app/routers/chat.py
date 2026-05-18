@@ -13,14 +13,10 @@ from sse_starlette.sse import EventSourceResponse
 from ..schemas import ChatSendRequest, ChatResponse, ChatNLUResult
 from loguru import logger
 from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
-from ..core.followup_tools import FOLLOWUP_TOOLS, dispatch_tool
 from ..core.agno_client import get_agno_client
 from ..core.agno_rag import agno_rag_engine
 from ..core.conversation_store import conversation_store
-from ..core.prompts import (
-    get_pregnant_system_prompt,
-    get_followup_system_prompt,
-)
+from ..core.prompts import get_pregnant_system_prompt
 from ..models import HealthDataPoint, Pregnant, FollowUpRecord
 from ..database import SessionLocal, db_call
 from ..config import settings
@@ -35,8 +31,6 @@ def _generate_session_id(pregnant_id: str) -> str:
     date_str = datetime.now().strftime("%Y%m%d")
     rand_str = _uuid.uuid4().hex[:4]
     return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
-
-MAX_AGENT_TURNS = 15
 
 # 文件日志（绕开 stdout 重定向问题）
 _DEBUG_LOG = os.path.join(os.path.dirname(__file__), "../../debug_chat.log")
@@ -119,35 +113,6 @@ def _get_patient_context_simple(pregnant_id: str) -> str:
     return patient_context
 
 
-def _init_followup_db(record_id: str, pregnant_id: str):
-    """同步函数：随访初始数据库查询（在线程池中执行）"""
-    from uuid import UUID
-    from ..models import FollowUpRecord, Pregnant
-    from ..database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        record = db.query(FollowUpRecord).filter(
-            FollowUpRecord.id == UUID(record_id)
-        ).first()
-        if not record:
-            return ChatResponse(content="随访记录不存在。")
-        if str(record.pregnant_id) != pregnant_id:
-            return ChatResponse(content="孕妇信息不匹配，无法继续随访。")
-
-        # 已归档则直接返回
-        if record.status == "confirmed":
-            return ChatResponse(
-                content=f"本次随访已于 {record.follow_up_date.strftime('%Y-%m-%d %H:%M')} 完成。\n\n摘要：{record.summary or '无'}",
-            )
-
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        system_prompt = _build_followup_system_prompt(pregnant, record, record_id)
-        return system_prompt
-    finally:
-        db.close()
-
-
 router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
 
 from ..core.llm_client import get_pregnant_llm_client
@@ -191,14 +156,8 @@ async def send_message(req: ChatSendRequest):
     _debug_log(f"[SEND] calling agno_enabled={settings.agno_enabled}")
     # Agno Agent 模式
     if settings.agno_enabled:
-        from ..core.agno_chat_handler import handle_chat_with_agno, handle_followup_chat_with_agno
-        if req.record_id:
-            return await handle_followup_chat_with_agno(req)
+        from ..core.agno_chat_handler import handle_chat_with_agno
         return await handle_chat_with_agno(req)
-
-    # 随访Agent模式：当传入 record_id 时进入结构随访对话
-    if req.record_id:
-        return await _handle_followup_chat(req)
 
     # 1. NLU解析
     nlu_result = nlu_engine.parse(req.message)
@@ -384,7 +343,6 @@ def _chat_response_to_sse(result: ChatResponse):
             "source": result.source or "AI_CARE",
             "nlu_result": {"intent": nlu.intent, "entities": nlu.entities} if nlu else None,
             "memory_updated": result.memory_updated or [],
-            "followup_progress": result.followup_progress,
         })}
     return EventSourceResponse(wrapper())
 
@@ -394,15 +352,8 @@ async def send_message_stream(req: ChatSendRequest):
     """发送对话消息（SSE 流式输出）"""
     # Agno Agent 模式 — 流式 SSE 输出
     if settings.agno_enabled:
-        from ..core.agno_chat_handler import handle_chat_with_agno_stream, handle_followup_chat_with_agno_stream
-        if req.record_id:
-            return EventSourceResponse(handle_followup_chat_with_agno_stream(req))
+        from ..core.agno_chat_handler import handle_chat_with_agno_stream
         return EventSourceResponse(handle_chat_with_agno_stream(req))
-
-    # 随访模式 — 包装为 SSE 格式
-    if req.record_id:
-        result = await _handle_followup_chat(req)
-        return _chat_response_to_sse(result)
 
     ctx = await _build_chat_context(req)
     session_id = ctx["session_id"]
@@ -483,119 +434,6 @@ async def send_message_stream(req: ChatSendRequest):
             pass  # 持久化失败不影响主流程
 
     return EventSourceResponse(event_generator())
-
-
-
-
-async def _handle_followup_chat(req: ChatSendRequest) -> ChatResponse:
-    """随访模式 ReAct 循环：工具感知的智能体对话"""
-    logger.info("FOLLOWUP_CHAT record_id={} pregnant_id={}", req.record_id, req.pregnant_id)
-    llm = _get_chat_llm()
-    _debug_log(f"[FOLLOWUP_CHAT] llm_type={type(llm).__name__}")
-    logger.info("FOLLOWUP_CHAT LLM client: {}", type(llm).__name__)
-
-    # 初始数据库查询（在线程池中执行，避免阻塞事件循环）
-    db_init = await db_call(_init_followup_db, req.record_id, req.pregnant_id)
-    if isinstance(db_init, ChatResponse):
-        return db_init
-    system_prompt = db_init
-
-    messages = [{"role": "system", "content": system_prompt}]
-    # 加载历史消息（异步）
-    fu_session_id = f"FU_{req.record_id[:8]}"
-    history = await conversation_store.async_load_history(fu_session_id, req.pregnant_id)
-
-    # ReAct 循环需要一个共享的 db session 传给 dispatch_tool
-    db = SessionLocal()
-    try:
-        messages.extend(history)
-        messages.append({"role": "user", "content": req.message})
-
-        # ReAct 循环
-        final_response = ""
-        progress = None
-        for turn in range(MAX_AGENT_TURNS):
-            logger.info("FOLLOWUP_CHAT Turn {} llm.chat_with_tools...", turn)
-            result = await llm.chat_with_tools(messages, FOLLOWUP_TOOLS)
-            logger.info("FOLLOWUP_CHAT Turn {} tool_calls={} content={}", turn, bool(result.get('tool_calls')), result.get('content', '')[:50])
-
-            if result.get("tool_calls"):
-                messages.append(result)
-                for tc in result["tool_calls"]:
-                    tool_result = await dispatch_tool(tc, db)
-                    progress = {
-                        "answered": tool_result.get("answered_count", 0),
-                        "total": tool_result.get("total_count", 0),
-                        "status": tool_result.get("status", "in_progress"),
-                    }
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", ""),
-                        "content": json.dumps(tool_result, ensure_ascii=False),
-                    })
-                # 记录到历史（持久化）
-                try:
-                    user_and_assistant = [m for m in messages[-4:] if m.get("role") in ("user", "assistant")]
-                    await conversation_store.async_save_messages(fu_session_id, req.pregnant_id, user_and_assistant)
-                except Exception:
-                    pass
-            else:
-                final_response = result.get("content", "")
-                break
-        else:
-            final_response = "随访流程已结束，感谢您的配合！如有其他问题，随时可以问我。"
-
-        # 持久化最终回复
-        try:
-            await conversation_store.async_save_single(fu_session_id, req.pregnant_id, "assistant", final_response)
-        except Exception:
-            pass
-
-        return ChatResponse(
-            content=final_response,
-            session_id=req.session_id or f"FU_{req.record_id[:8]}",
-            source="FOLLOWUP",
-            followup_progress=progress,
-        )
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        logger.error("FOLLOWUP_CHAT 异常 {}: {}", type(e).__name__, str(e)[:200])
-        return ChatResponse(
-            content=f"随访对话异常（{type(e).__name__}）：{str(e)[:200]}",
-            session_id=req.session_id,
-        )
-    finally:
-        db.close()
-
-
-def _build_followup_system_prompt(pregnant, record, record_id: str) -> str:
-    """构建随访模式的 system prompt"""
-    gw = f"{pregnant.gestational_age_days // 7}+{pregnant.gestational_age_days % 7}" if pregnant and pregnant.gestational_age_days else "?"
-    risk_text = "、".join(pregnant.risk_tags) if pregnant and pregnant.risk_tags else "无"
-    health_edu = "\n".join(f"- {item}" for item in (record.health_education or []))
-
-    # 反向推断模板名称
-    template = None
-    from ..services.followup_service import FOLLOWUP_TEMPLATES
-    for tid, tmpl in FOLLOWUP_TEMPLATES.items():
-        if tmpl["name"] in (record.self_reported_data or {}).get("_template", ""):
-            template = tid
-            break
-    tmpl_name = template or "standard"
-
-    patient_name = pregnant.nickname or pregnant.display_name if pregnant else "准妈妈"
-
-    return get_followup_system_prompt(
-        patient_name=patient_name,
-        gest_week=gw,
-        risk_text=risk_text,
-        record_id=record_id,
-        template_name=tmpl_name,
-        record_status=record.status,
-        health_education=health_edu,
-    )
-
 
 
 def _extract_extra_entities(message: str, nlu_result):

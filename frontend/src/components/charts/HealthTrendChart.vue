@@ -66,6 +66,24 @@ function getAxisData(s: TrendSeries): string[] {
   return s.data.map(d => props.axisMode === 'gest_week' ? `孕${d.gest_week}周` : d.date)
 }
 
+// 简化日期显示格式 - 只显示月/日
+function formatDateLabel(dateStr: string): string {
+  if (!dateStr) return ''
+  const parts = dateStr.split('-')
+  if (parts.length >= 3) {
+    return `${parts[1]}/${parts[2]}`
+  }
+  return dateStr
+}
+
+// 计算标签显示间隔 - 根据数据点数量动态调整
+function calculateInterval(dataLength: number): number {
+  if (dataLength <= 7) return 0  // 7个以内显示全部
+  if (dataLength <= 14) return 1  // 14个以内隔一个显示
+  if (dataLength <= 30) return 2  // 30个以内隔两个显示
+  return Math.floor(dataLength / 10)  // 更多数据时动态计算
+}
+
 function buildOption() {
   const sList = props.series
   if (!sList.length) return {}
@@ -83,13 +101,50 @@ function buildComboOption(sList: TrendSeries[], isBP: boolean) {
   const secondary = sList.find(s => s.metric === (isBP ? 'diastolic' : 'blood_sugar_postprandial'))!
   const xAxisData = getAxisData(primary)
   const markAreaData = buildMarkArea(primary, isBP)
+  const interval = calculateInterval(xAxisData.length)
 
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: [primary.name, secondary.name], bottom: 0 },
-    grid: { left: 50, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
-    yAxis: { type: 'value', name: primary.unit, min: axisMin, max: axisMax },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        label: { backgroundColor: '#6a7985' },
+        lineStyle: { color: '#E4E7ED', type: 'dashed' },
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E4E7ED',
+      textStyle: { color: '#303133', fontSize: 12 },
+    },
+    legend: {
+      data: [primary.name, secondary.name],
+      top: 0,
+      left: 'center',
+      itemWidth: 16,
+      itemHeight: 8,
+      textStyle: { fontSize: 11, color: '#606266' },
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 50, containLabel: false },
+    xAxis: {
+      type: 'category',
+      data: xAxisData,
+      axisLabel: {
+        interval,
+        fontSize: 11,
+        color: '#909399',
+        formatter: formatDateLabel,
+      },
+      axisLine: { lineStyle: { color: '#E4E7ED' } },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      name: primary.unit,
+      min: axisMin,
+      max: axisMax,
+      nameTextStyle: { fontSize: 11, color: '#909399' },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#F2F6FC', type: 'dashed' } },
+    },
     series: [buildLineSeries(primary, markAreaData), buildLineSeries(secondary)],
   }
 }
@@ -99,23 +154,89 @@ function buildSingleOption(sList: TrendSeries[]) {
     const s = sList[0]
     const xAxisData = getAxisData(s)
     const markAreaData = buildMarkArea(s, false)
+    const interval = calculateInterval(xAxisData.length)
     return {
-      tooltip: { trigger: 'axis' },
-      grid: { left: 50, right: 20, top: 20, bottom: 40 },
-      xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
-      yAxis: { type: 'value', name: s.unit, min: axisMin, max: axisMax },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross',
+          label: { backgroundColor: '#6a7985' },
+          lineStyle: { color: '#E4E7ED', type: 'dashed' },
+        },
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#E4E7ED',
+        textStyle: { color: '#303133', fontSize: 12 },
+      },
+      grid: { left: 60, right: 30, top: 30, bottom: 50, containLabel: false },
+      xAxis: {
+        type: 'category',
+        data: xAxisData,
+        axisLabel: {
+          interval,
+          fontSize: 11,
+          color: '#909399',
+          formatter: formatDateLabel,
+        },
+        axisLine: { lineStyle: { color: '#E4E7ED' } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        name: s.unit,
+        min: axisMin,
+        max: axisMax,
+        nameTextStyle: { fontSize: 11, color: '#909399' },
+        axisLine: { show: false },
+        splitLine: { lineStyle: { color: '#F2F6FC', type: 'dashed' } },
+      },
       series: [buildLineSeries(s, markAreaData)],
     }
   }
 
   const first = sList[0]
   const xAxisData = getAxisData(first)
+  const interval = calculateInterval(xAxisData.length)
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: sList.map(s => s.name), bottom: 0 },
-    grid: { left: 50, right: 50, top: 20, bottom: 40 },
-    xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: xAxisData.length > 10 ? 30 : 0 } },
-    yAxis: sList.map((s, i) => ({ type: 'value', name: s.unit, position: i % 2 === 0 ? 'left' : 'right' })),
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        label: { backgroundColor: '#6a7985' },
+        lineStyle: { color: '#E4E7ED', type: 'dashed' },
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E4E7ED',
+      textStyle: { color: '#303133', fontSize: 12 },
+    },
+    legend: {
+      data: sList.map(s => s.name),
+      top: 0,
+      left: 'center',
+      itemWidth: 16,
+      itemHeight: 8,
+      textStyle: { fontSize: 11, color: '#606266' },
+    },
+    grid: { left: 60, right: 60, top: 40, bottom: 50, containLabel: false },
+    xAxis: {
+      type: 'category',
+      data: xAxisData,
+      axisLabel: {
+        interval,
+        fontSize: 11,
+        color: '#909399',
+        formatter: formatDateLabel,
+      },
+      axisLine: { lineStyle: { color: '#E4E7ED' } },
+      axisTick: { show: false },
+    },
+    yAxis: sList.map((s, i) => ({
+      type: 'value',
+      name: s.unit,
+      position: i % 2 === 0 ? 'left' : 'right',
+      nameTextStyle: { fontSize: 11, color: '#909399' },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#F2F6FC', type: 'dashed' } },
+    })),
     series: sList.map((s, i) => ({ ...buildLineSeries(s), yAxisIndex: i })),
   }
 }
@@ -130,7 +251,16 @@ function buildLineSeries(s: TrendSeries, markArea?: any[]) {
     data: s.data.map(d => d.value),
     itemStyle: { color: METRIC_COLORS[s.metric] || '#409EFF' },
     lineStyle: { width: 2 },
-    areaStyle: { opacity: 0.05 },
+    areaStyle: {
+      color: {
+        type: 'linear',
+        x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: `${METRIC_COLORS[s.metric] || '#409EFF'}20` },
+          { offset: 1, color: `${METRIC_COLORS[s.metric] || '#409EFF'}05` },
+        ],
+      },
+    },
     markArea: markArea && markArea.length ? { data: markArea } : undefined,
     markLine: s.normal_range.min != null ? {
       silent: true,
@@ -192,7 +322,13 @@ defineExpose({ zoomToRange })
 <style scoped>
 .health-trend-chart {
   width: 100%;
-  min-height: 200px;
+  min-height: 250px;
+  position: relative;
+}
+
+.health-trend-chart > :deep(div) {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .chart-empty {

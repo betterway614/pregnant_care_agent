@@ -1,10 +1,18 @@
 <template>
   <div class="chat-wrapper" :class="{ 'chat-wrapper--ios': isIOS }">
+    <!-- ==================== 动态光晕背景 ==================== -->
+    <div class="halo-bg">
+      <div class="halo-orb halo-orb-1"></div>
+      <div class="halo-orb halo-orb-2"></div>
+      <div class="halo-orb halo-orb-3"></div>
+      <div class="halo-backdrop"></div>
+    </div>
+
     <!-- ==================== 紧急警告横幅 ==================== -->
     <transition name="banner-slide">
       <div v-if="urgentDetected" class="emergency-banner" role="alert">
         <el-icon :size="18"><WarningFilled /></el-icon>
-        <span>检测到紧急关键词，请立即联系医生或拨打急救电话</span>
+        <span>您描述的内容可能涉及需及时就医的情况，建议尽快联系产检医生或拨打急救电话</span>
         <el-button size="small" text class="banner-close" @click="urgentDetected = false">
           <el-icon :size="14"><Close /></el-icon>
         </el-button>
@@ -16,7 +24,7 @@
       <div v-if="isFollowupMode" class="followup-banner">
         <div class="followup-banner__inner">
           <div class="followup-banner__header">
-            <span class="followup-banner__icon">📋</span>
+            <el-icon :size="18" class="followup-banner__icon"><DocumentChecked /></el-icon>
             <span>小护发来随访对话</span>
             <el-tag
               v-if="followupProgress?.status === 'confirmed'"
@@ -45,16 +53,16 @@
 
     <!-- ==================== 1. 顶部导航栏 ==================== -->
     <nav class="chat-navbar">
-      <button class="navbar-btn navbar-btn--back" @click="handleBack" aria-label="返回">
-        <el-icon :size="18"><ArrowLeft /></el-icon>
+      <button class="navbar-btn navbar-btn--back interactive-card" @click="handleBack" aria-label="返回">
+        <el-icon :size="20"><ArrowLeft /></el-icon>
       </button>
       <h1 class="navbar-title">孕期温暖陪伴</h1>
       <div class="navbar-actions">
-        <button class="navbar-btn" @click="handleNewChat" aria-label="新建对话" title="新建对话">
-          <el-icon :size="18"><ChatLineRound /></el-icon>
+        <button class="navbar-btn interactive-card" @click="handleNewChat" aria-label="新建对话" title="新建对话">
+          <el-icon :size="20"><ChatLineRound /></el-icon>
         </button>
-        <button class="navbar-btn" @click="handleClearMemory" aria-label="清除记录" title="清除记录">
-          <el-icon :size="18"><Delete /></el-icon>
+        <button class="navbar-btn interactive-card" @click="handleClearMemory" aria-label="清除记录" title="清除记录">
+          <el-icon :size="20"><Delete /></el-icon>
         </button>
       </div>
     </nav>
@@ -62,15 +70,12 @@
     <!-- ==================== 2. 用户信息栏 ==================== -->
     <div class="user-info-bar">
       <span class="user-name">{{ displayName || '孕妈' }}</span>
-      <button class="switch-btn" @click="handleSwitchUser">
+      <button class="switch-btn interactive-card" @click="handleSwitchUser">
         <el-icon :size="12"><RefreshRight /></el-icon> 切换
       </button>
       <div class="user-actions">
-        <button class="user-action-btn" :class="{ active: isMuted }" @click="toggleMute" :aria-label="isMuted ? '取消静音' : '静音'">
+        <button class="user-action-btn interactive-card" :class="{ active: isMuted }" @click="toggleMute" :aria-label="isMuted ? '取消静音' : '静音'">
           <el-icon :size="16"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
-        </button>
-        <button class="user-action-btn" @click="scrollToBottom()" aria-label="滚动到底部">
-          <el-icon :size="16"><ChatDotRound /></el-icon>
         </button>
       </div>
     </div>
@@ -82,58 +87,27 @@
         <!-- ---- 欢迎信息 ---- -->
         <div v-if="showWelcome" class="welcome-section">
           <div class="welcome-header">
-            <AgentAvatar agent="xiaan" :size="64" />
+            <div class="ai-avatar-wrapper">
+              <div class="ai-halo"></div>
+              <AgentAvatar agent="xiaan" :size="72" />
+            </div>
           </div>
           <h2 class="welcome-title">您好，我是孕期助手小安</h2>
-          <p class="welcome-desc">在这里，我将为您提供全方位的孕产知识支持，陪伴您度过一个安心、健康的孕期旅程~</p>
+          <p class="welcome-desc">我在这里为您提供全方位的孕产知识支持，陪伴您度过安心、健康的孕期旅程。</p>
         </div>
 
-        <!-- ---- 孕周指南 ---- -->
+        <!-- ---- 轻量化孕周指南 ---- -->
         <div v-if="gestWeek && showWelcome" class="pregnancy-guide">
-          <h3 class="section-title">孕周指南</h3>
-          <div class="week-card">
-            <div class="week-main">
-              <div class="week-number">孕{{ gestWeek }}周{{ gestDay || 0 }}天</div>
-              <div class="days-remaining">还有{{ Math.max(0, (40 - gestWeek) * 7 - (gestDay || 0)) }}天出生</div>
+          <div class="soft-card week-card interactive-card" @click="$router.push('/pregnant/tools')">
+            <div class="week-mini-info">
+              <span class="week-number">孕{{ gestWeek }}周{{ gestDay || 0 }}天</span>
+              <span class="days-remaining">距预产期还有 {{ Math.max(0, (40 - gestWeek) * 7 - (gestDay || 0)) }} 天</span>
             </div>
-            <div class="fetus-visual">
-              <div class="fetus-circle">
-                <span class="fetus-size">{{ fetusSize }}</span>
-              </div>
-              <span class="fetus-label">宝宝现在这么大</span>
+            <div class="fetus-mini">
+              <el-icon :size="18" class="fetus-icon"><Avatar /></el-icon>
+              <span class="fetus-size">{{ fetusSize }}</span>
+              <el-icon :size="14" color="#94A3B8"><ArrowRight /></el-icon>
             </div>
-            <div class="measurements">
-              <div class="measurement">
-                <span class="measurement-label">身长</span>
-                <span class="measurement-value">{{ fetusLength }}</span>
-              </div>
-              <div class="measurement-divider" />
-              <div class="measurement">
-                <span class="measurement-label">体重</span>
-                <span class="measurement-value">{{ fetusWeight }}</span>
-              </div>
-            </div>
-            <div class="pagination-dots">
-              <span class="dot active" />
-              <span class="dot" />
-              <span class="dot" />
-            </div>
-          </div>
-        </div>
-
-        <!-- ---- 功能导航 ---- -->
-        <div v-if="showWelcome" class="function-nav">
-          <div
-            v-for="fn in functionItems"
-            :key="fn.id"
-            class="function-item"
-            :class="'function-item--' + fn.color"
-            @click="handleFunctionClick(fn)"
-            role="button"
-            :aria-label="fn.name"
-          >
-            <div class="function-icon"><span>{{ fn.icon }}</span></div>
-            <span class="function-name">{{ fn.name }}</span>
           </div>
         </div>
 
@@ -151,18 +125,23 @@
             <AgentAvatar
               v-if="msg.role === 'assistant'"
               agent="xiaan"
-              :size="34"
+              :size="32"
+              class="assistant-avatar"
             />
 
             <div class="message-body">
-              <!-- 思考中 -->
+              <!-- 思考中 (Agent Zero Interface) -->
               <div
                 v-if="msg.loading && msg.thinking"
                 class="message-bubble message-bubble--assistant message-bubble--thinking"
               >
-                <AgentAvatar agent="xiaan" :size="20" :thinking="true" />
+                <div class="thinking-indicator">
+                  <span class="ripple"></span>
+                  <span class="ripple-delay"></span>
+                </div>
                 <span class="thinking-text">{{ msg.thinkingMessage || '小安正在思考...' }}</span>
               </div>
+              
               <!-- 加载中 -->
               <div
                 v-else-if="msg.loading"
@@ -180,12 +159,12 @@
                 :class="{
                   'message-bubble--user': msg.role === 'user',
                   'message-bubble--assistant': msg.role === 'assistant',
-                  'message-bubble--urgent': msg.isUrgent,
+                  'message-bubble--urgent': msg.role === 'user' && msg.isUrgent,
                 }"
               >
-                <!-- 用户消息：纯文本 -->
+                <!-- 用户消息：柔和圆角气泡 -->
                 <div v-if="msg.role === 'user'" class="bubble-text">{{ msg.content }}</div>
-                <!-- 助手消息：Markdown 渲染 -->
+                <!-- 助手消息：无边框阅读流 Markdown 渲染 -->
                 <div
                   v-else
                   class="bubble-text bubble-markdown"
@@ -195,157 +174,123 @@
                 <span v-if="msg.role === 'assistant' && isStreamingMessage(msg)" class="typing-cursor" />
               </div>
 
-              <!-- 时间戳 -->
+              <!-- 时间戳与操作栏 -->
               <div
-                class="message-time"
-                :class="{ 'message-time--user': msg.role === 'user' }"
+                class="message-footer"
+                :class="{ 'message-footer--user': msg.role === 'user' }"
               >
-                <span>{{ formatTime(msg.timestamp) }}</span>
+                <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
                 <el-tag
-                  v-if="msg.isUrgent"
+                  v-if="msg.role === 'user' && msg.isUrgent"
                   size="small"
-                  type="danger"
+                  type="warning"
                   class="urgent-tag"
-                  effect="dark"
+                  effect="plain"
                 >
-                  紧急
+                  建议咨询医护
                 </el-tag>
-              </div>
-
-              <!-- 消息操作栏 -->
-              <div
-                v-if="!msg.loading && chatStore.messages.length > 0"
-                class="message-actions"
-                :class="{ 'message-actions--user': msg.role === 'user' }"
-              >
-                <button
-                  v-if="msg.role === 'assistant'"
-                  class="msg-action-btn"
-                  @click="handleCopyMessage(msg.content)"
-                  title="复制"
+                
+                <div
+                  v-if="!msg.loading && chatStore.messages.length > 0"
+                  class="message-actions"
                 >
-                  <el-icon :size="13"><CopyDocument /></el-icon>
-                </button>
-                <button
-                  v-if="msg.role === 'assistant' && !chatStore.streaming"
-                  class="msg-action-btn"
-                  @click="handleRetry(msg)"
-                  title="重新生成"
-                >
-                  <el-icon :size="13"><RefreshRight /></el-icon>
-                </button>
-                <button
-                  v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading"
-                  class="msg-action-btn"
-                  :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_up' }"
-                  @click="handleFeedback(msg, 'thumbs_up')"
-                  title="有帮助"
-                >
-                  👍
-                </button>
-                <button
-                  v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading"
-                  class="msg-action-btn"
-                  :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_down' }"
-                  @click="handleFeedback(msg, 'thumbs_down')"
-                  title="需改进"
-                >
-                  👎
-                </button>
-                <button
-                  v-if="msg.role === 'user'"
-                  class="msg-action-btn"
-                  @click="handleEditMessage(msg)"
-                  title="编辑"
-                >
-                  <el-icon :size="13"><Edit /></el-icon>
-                </button>
+                  <button v-if="msg.role === 'assistant'" class="msg-action-btn" @click="handleCopyMessage(msg.content)" title="复制">
+                    <el-icon :size="14"><CopyDocument /></el-icon>
+                  </button>
+                  <button v-if="msg.role === 'assistant' && !chatStore.streaming" class="msg-action-btn" @click="handleRetry(msg)" title="重新生成">
+                    <el-icon :size="14"><RefreshRight /></el-icon>
+                  </button>
+                  <button v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading" class="msg-action-btn" :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_up' }" @click="handleFeedback(msg, 'thumbs_up')" title="有帮助">
+                    <el-icon :size="14"><Check /></el-icon>
+                  </button>
+                  <button v-if="msg.role === 'assistant' && !chatStore.streaming && !msg.loading" class="msg-action-btn" :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_down' }" @click="handleFeedback(msg, 'thumbs_down')" title="需改进">
+                    <el-icon :size="14"><Close /></el-icon>
+                  </button>
+                  <button v-if="msg.role === 'user'" class="msg-action-btn" @click="handleEditMessage(msg)" title="编辑">
+                    <el-icon :size="14"><Edit /></el-icon>
+                  </button>
+                </div>
               </div>
             </div>
-
-            <div v-if="msg.role === 'user'" class="user-avatar-spacer" />
           </div>
         </div>
-
-        <!-- ---- 兴趣推荐 ---- -->
-        <transition name="suggest-fade">
-          <div v-if="!chatStore.loading && !isFollowupMode" class="interests-area">
-            <h3 class="interests-title">您可能感兴趣：</h3>
-            <div class="interests-list">
-              <div
-                v-for="item in SUGGESTED_QUESTIONS"
-                :key="item"
-                class="interest-item"
-                @click="handleSuggestionClick(item)"
-                role="button"
-              >
-                <span class="interest-hashtag">#</span>
-                <span class="interest-text">{{ item }}</span>
-              </div>
-            </div>
-          </div>
-        </transition>
 
         <div ref="scrollAnchorRef" class="scroll-anchor" />
       </div>
     </div>
 
-    <!-- ==================== 3. 底部输入区 ==================== -->
-    <div class="input-area">
-      <transition name="banner-slide">
-        <div v-if="isRecording" class="recording-bar">
-          <span class="recording-dot" />
-          <span class="recording-text">{{ recordingText }}</span>
-          <el-button size="small" type="danger" text @click="cancelRecording">取消</el-button>
+    <!-- ==================== 3. 底部输入区 (灵动岛) ==================== -->
+    <div class="input-container">
+      <!-- ---- 兴趣推荐 (Prompt Chips) ---- -->
+      <transition name="suggest-fade">
+        <div v-if="!chatStore.loading && !isFollowupMode && showWelcome" class="prompt-chips">
+          <div
+            v-for="item in SUGGESTED_QUESTIONS"
+            :key="item"
+            class="prompt-chip interactive-card"
+            @click="handleSuggestionClick(item)"
+            role="button"
+          >
+            {{ item }}
+          </div>
         </div>
       </transition>
 
-      <div class="input-row">
-        <button
-          class="toolbar-btn"
-          :class="{ 'toolbar-btn--recording': isRecording }"
-          @click="toggleRecording"
-          :aria-label="isRecording ? '停止录音' : '语音输入'"
-        >
-          <el-icon :size="20"><Microphone /></el-icon>
-        </button>
+      <div class="input-pill-wrapper">
+        <transition name="banner-slide">
+          <div v-if="isRecording" class="recording-bar">
+            <span class="recording-dot" />
+            <span class="recording-text">{{ recordingText }}</span>
+            <el-button size="small" type="danger" text @click="cancelRecording">取消</el-button>
+          </div>
+        </transition>
 
-        <!-- 停止生成按钮（流式输出时显示） -->
-        <button
-          v-if="chatStore.streaming"
-          class="toolbar-btn toolbar-btn--stop"
-          @click="handleStopGeneration"
-          aria-label="停止生成"
-        >
-          <el-icon :size="18"><VideoPause /></el-icon>
-        </button>
+        <div class="input-pill">
+          <button
+            class="toolbar-btn interactive-card"
+            :class="{ 'toolbar-btn--recording': isRecording }"
+            @click="toggleRecording"
+            :aria-label="isRecording ? '停止录音' : '语音输入'"
+          >
+            <el-icon :size="20"><Microphone /></el-icon>
+          </button>
 
-        <el-input
-          v-else
-          ref="inputRef"
-          v-model="inputText"
-          type="textarea"
-          :rows="1"
-          :autosize="{ minRows: 1, maxRows: 4 }"
-          placeholder="输入您的问题…"
-          resize="none"
-          class="chat-input"
-          @keydown.enter.exact.prevent="handleSend"
-        />
+          <el-input
+            ref="inputRef"
+            v-model="inputText"
+            type="textarea"
+            :rows="1"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            placeholder="随时向我提问..."
+            resize="none"
+            class="chat-input"
+            @keydown.enter.exact.prevent="handleSend"
+            :disabled="chatStore.streaming"
+          />
 
-        <button
-          v-if="!chatStore.streaming"
-          class="send-btn"
-          :disabled="!inputText.trim() || chatStore.loading"
-          @click="handleSend"
-          aria-label="发送"
-        >
-          <el-icon :size="20"><Promotion /></el-icon>
-        </button>
-      </div>
+          <!-- 停止生成按钮 -->
+          <button
+            v-if="chatStore.streaming"
+            class="send-btn stop-btn interactive-card"
+            @click="handleStopGeneration"
+            aria-label="停止生成"
+          >
+            <div class="stop-icon-box"></div>
+          </button>
 
-      <div class="input-hint">
-        <span>Enter 发送 · Shift+Enter 换行</span>
+          <button
+            v-else
+            class="send-btn interactive-card"
+            :disabled="!inputText.trim() || chatStore.loading"
+            @click="handleSend"
+            aria-label="发送"
+          >
+            <el-icon :size="20"><Promotion /></el-icon>
+          </button>
+        </div>
+        <div class="input-hint">
+          <span>Enter 发送 · Shift+Enter 换行</span>
+        </div>
       </div>
     </div>
 
@@ -372,22 +317,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Delete,
-  Promotion,
-  ArrowLeft,
-  WarningFilled,
-  Close,
-  Microphone,
-  Mute,
-  RefreshRight,
-  ChatDotRound,
-  ChatLineRound,
-  CopyDocument,
-  Edit,
-  VideoPause,
+  Delete, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
+  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPause, ArrowRight, DocumentChecked, Avatar, Check
 } from '@element-plus/icons-vue'
 import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
@@ -412,16 +346,11 @@ const EMERGENCY_KEYWORDS = [
 ]
 
 const SUGGESTED_QUESTIONS = [
-  '孕期可以喝咖啡吗',
-  '孕期体重增长标准',
-  '孕期运动推荐',
-  '孕期饮食注意事项',
-]
-
-const FUNCTION_ITEMS = [
-  { id: 1, name: '深度思考', icon: '🧠', color: 'pink' },
-  { id: 2, name: '数胎动', icon: '💓', color: 'orange' },
-  { id: 3, name: '超声报告', icon: '📄', color: 'yellow' },
+  '孕晚期需要注意什么？',
+  '推荐一份健康食谱',
+  '腰酸背痛怎么办？',
+  '如何数胎动？',
+  '临产征兆有哪些？'
 ]
 
 const FETUS_DATA: Record<number, { length: string; weight: string; size: string }> = {
@@ -473,12 +402,8 @@ const messagesRef = ref<HTMLElement | null>(null)
 const scrollAnchorRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLElement | null>(null)
 
-// 移动端
 const isIOS = ref(/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
-
-// 滚动状态（@vueuse 自动管理）
 let isAtBottom = true
-const functionItems = ref(FUNCTION_ITEMS)
 
 /* ==================== 计算属性 ==================== */
 const showWelcome = computed(() => chatStore.messages.length === 0)
@@ -493,8 +418,6 @@ const fetusData = computed(() => {
   return FETUS_DATA[matched]
 })
 
-const fetusLength = computed(() => fetusData.value.length)
-const fetusWeight = computed(() => fetusData.value.weight)
 const fetusSize = computed(() => fetusData.value.size)
 
 /* ==================== 工具函数 ==================== */
@@ -507,10 +430,8 @@ function checkUrgent(content: string): boolean {
   return EMERGENCY_KEYWORDS.some((kw) => content.includes(kw))
 }
 
-/** 判断消息是否正在流式输出 */
 function isStreamingMessage(msg: ChatMessage): boolean {
   if (!chatStore.streaming) return false
-  // 最后一条助手消息且内容不为空
   const msgs = chatStore.messages
   return msgs.length > 0 && msgs[msgs.length - 1].id === msg.id && msg.role === 'assistant'
 }
@@ -525,7 +446,6 @@ function scrollToBottom(smooth = true) {
   })
 }
 
-// @vueuse 自动追踪滚动位置（arrivedState 不是响应式，手动检查 bottom）
 useScroll(messagesRef, {
   onScroll() {
     const el = messagesRef.value
@@ -549,11 +469,6 @@ function toggleMute() {
   ElMessage.info(isMuted.value ? '已静音' : '已取消静音')
 }
 
-function handleFunctionClick(fn: { id: number; name: string }) {
-  const hints: Record<number, string> = { 1: '深度思考模式即将上线', 2: '数胎动功能即将上线', 3: '超声报告解读功能即将上线' }
-  ElMessage.info(hints[fn.id] || '功能即将上线')
-}
-
 /* ==================== 新建对话 ==================== */
 function handleNewChat() {
   if (chatStore.messages.length === 0) return
@@ -571,7 +486,6 @@ async function handleCopyMessage(content: string) {
     await navigator.clipboard.writeText(content)
     ElMessage.success('已复制')
   } catch {
-    // fallback
     const ta = document.createElement('textarea')
     ta.value = content
     document.body.appendChild(ta)
@@ -583,11 +497,9 @@ async function handleCopyMessage(content: string) {
 }
 
 async function handleFeedback(msg: ChatMessage, rating: 'thumbs_up' | 'thumbs_down') {
-  // 切换反馈状态
   const newRating = msg.feedback === rating ? null : rating
   chatStore.updateMessage(msg.id, { feedback: newRating })
 
-  // 发送到后端
   if (newRating) {
     try {
       const pregnantId = localStorage.getItem('currentPregnantId') || ''
@@ -597,16 +509,13 @@ async function handleFeedback(msg: ChatMessage, rating: 'thumbs_up' | 'thumbs_do
         rating: newRating,
         session_id: chatStore.sessionId || undefined,
       })
-    } catch {
-      // 静默失败
-    }
+    } catch {}
   }
 }
 
 function handleRetry(msg: ChatMessage) {
   const prevUser = chatStore.getPreviousUserMessage(msg.id)
   if (!prevUser) return
-  // 删除这条助手消息，用用户消息重新发送
   chatStore.deleteMessageFrom(msg.id)
   inputText.value = prevUser.content
   nextTick(() => handleSend())
@@ -623,18 +532,14 @@ function confirmEdit() {
   if (!text) return
   editDialogVisible.value = false
 
-  // 更新用户消息内容
   chatStore.updateMessage(editingMsgId, { content: text })
-
-  // 删除该消息之后的所有消息（包括助手回复）
   chatStore.deleteMessageFrom(editingMsgId)
 
-  // 重新发送
   inputText.value = text
   nextTick(() => handleSend())
 }
 
-/* ==================== 核心：发送消息 ==================== */
+/* ==================== 发送消息 ==================== */
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || chatStore.loading) return
@@ -642,7 +547,10 @@ async function handleSend() {
   inputText.value = ''
   urgentDetected.value = false
 
-  chatStore.addMessage('user', text)
+  const userMentionedEmergency = checkUrgent(text)
+  if (userMentionedEmergency) urgentDetected.value = true
+
+  chatStore.addMessage('user', text, { isUrgent: userMentionedEmergency })
   chatStore.loading = true
 
   const loadingMsg = chatStore.addMessage('assistant', '', { loading: true })
@@ -668,18 +576,15 @@ async function handleSend() {
       chatStore.updateMessage(loadingMsg.id, {
         loading: false,
         content: data.content || '抱歉，我暂时无法回复，请稍后再试。',
-        isUrgent: checkUrgent(data.content || ''),
         timestamp: new Date().toISOString(),
       })
     } catch {
       chatStore.updateMessage(loadingMsg.id, {
         loading: false,
         content: '抱歉，我暂时无法回复。请稍后再试，或联系您的孕期管理师。',
-        isUrgent: false,
       })
     }
   } else {
-    // SSE 流式
     chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
     chatStore.streaming = true
 
@@ -689,10 +594,7 @@ async function handleSend() {
     try {
       await postChatStream(req, {
         onThinking(message: string) {
-          chatStore.updateMessage(loadingMsg.id, {
-            thinking: true,
-            thinkingMessage: message,
-          })
+          chatStore.updateMessage(loadingMsg.id, { thinking: true, thinkingMessage: message })
         },
         onChunk(chunk: string) {
           const msg = chatStore.messages.find((m) => m.id === loadingMsg.id)
@@ -706,16 +608,13 @@ async function handleSend() {
         onDone(metadata: any) {
           chatStore.sessionId = metadata.session_id
           chatStore.updateMessage(loadingMsg.id, {
-            isUrgent: checkUrgent(loadingMsg.content),
             timestamp: new Date().toISOString(),
           })
         },
         onError(err: Error) {
           console.error('SSE error:', err)
           if (!loadingMsg.content) {
-            chatStore.updateMessage(loadingMsg.id, {
-              content: '抱歉，我暂时无法回复。请稍后再试，或联系您的孕期管理师。',
-            })
+            chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
           }
         },
       }, controller.signal)
@@ -727,13 +626,9 @@ async function handleSend() {
           chatStore.sessionId = data.session_id
           chatStore.updateMessage(loadingMsg.id, {
             content: data.content || '抱歉，我暂时无法回复，请稍后再试。',
-            isUrgent: checkUrgent(data.content || ''),
           })
         } catch {
-          chatStore.updateMessage(loadingMsg.id, {
-            content: '抱歉，我暂时无法回复。请稍后再试，或联系您的孕期管理师。',
-            isUrgent: false,
-          })
+          chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
         }
       }
     } finally {
@@ -741,12 +636,8 @@ async function handleSend() {
       chatStore.setAbortController(null)
     }
 
-    // 流式结束后内容仍为空（如非SSE响应无声消耗）时的兜底
     if (!loadingMsg.content) {
-      chatStore.updateMessage(loadingMsg.id, {
-        content: '抱歉，我暂时无法回复。请稍后再试，或联系您的孕期管理师。',
-        isUrgent: false,
-      })
+      chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
     }
   }
 
@@ -845,7 +736,6 @@ onMounted(async () => {
 
   await loadPregnantContext()
 
-  // 从后端同步对话历史
   if (pregnantId.value) {
     await chatStore.loadFromBackend(pregnantId.value)
   }
@@ -876,319 +766,310 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ==================== 容器 ==================== */
+/* ==================== 容器与字体 ==================== */
 .chat-wrapper {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   grid-template-columns: 100%;
-  height: 100%;
-  background: var(--pt-gradient);
-  overflow: hidden;
+  height: 100vh;
   position: relative;
+  overflow: hidden;
+  font-family: 'Nunito Sans', 'PingFang SC', sans-serif;
+  color: #1E293B;
+  background-color: #F8FAFC;
 }
-
 .chat-wrapper--ios {
   height: 100%;
 }
 
-/* ==================== 紧急警告横幅 ==================== */
-.emergency-banner {
-  grid-row: 1;
-  grid-column: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: linear-gradient(135deg, #ffebee, #ffcdd2);
-  border-left: 4px solid #e53935;
-  color: #b71c1c;
-  font-size: 13px;
-  font-weight: 600;
-  z-index: 20;
-  animation: bannerPulse 2s ease-in-out infinite;
+/* ==================== 动态光晕背景 (Halo) ==================== */
+.halo-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+.halo-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.85;
+  animation: halo-float 20s infinite ease-in-out alternate;
+}
+.halo-orb-1 {
+  top: -10%; left: -10%;
+  width: 120vw; height: 120vw;
+  background: radial-gradient(circle, #FECDD3 0%, transparent 70%);
+}
+.halo-orb-2 {
+  bottom: -10%; right: -20%;
+  width: 140vw; height: 140vw;
+  background: radial-gradient(circle, #FCE7F3 0%, transparent 70%);
+  animation-delay: -5s;
+}
+.halo-orb-3 {
+  top: 30%; left: 40%;
+  width: 100vw; height: 100vw;
+  background: radial-gradient(circle, #FFE4E6 0%, transparent 70%);
+  animation-delay: -10s;
+}
+.halo-backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+}
+@keyframes halo-float {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(15vw, 15vh) scale(1.1); }
+  100% { transform: translate(-10vw, 10vh) scale(0.9); }
 }
 
-@keyframes bannerPulse {
-  0%, 100% { background: linear-gradient(135deg, #ffebee, #ffcdd2); }
-  50% { background: linear-gradient(135deg, #ffcdd2, #ef9a9a); }
+/* ==================== 交互动效 ==================== */
+.interactive-card {
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s;
+  -webkit-tap-highlight-color: transparent;
 }
-
-.emergency-banner .banner-close { margin-left: auto; color: #c62828; flex-shrink: 0; }
-
-.banner-slide-enter-active, .banner-slide-leave-active { transition: all 0.3s ease; }
-.banner-slide-enter-from, .banner-slide-leave-to { opacity: 0; transform: translateY(-100%); }
-
-/* ==================== 随访模式横幅 ==================== */
-.followup-banner { grid-row: 1; grid-column: 1; background: linear-gradient(135deg, #F3E5F5, #E1BEE7); border-bottom: 1px solid rgba(206, 147, 216, 0.3); padding: 10px 16px; }
-.followup-banner__inner { max-width: 720px; margin: 0 auto; }
-.followup-banner__header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #4A148C; }
-.followup-banner__icon { font-size: 18px; }
-.followup-banner__progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.followup-banner__bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.5); overflow: hidden; }
-.followup-banner__fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #CE93D8, #AB47BC); transition: width 0.4s ease; }
-.followup-banner__count { font-size: 12px; font-weight: 600; color: #7B1FA2; min-width: 32px; text-align: right; }
+.interactive-card:active {
+  transform: scale(0.95);
+}
 
 /* ==================== 1. 顶部导航栏 ==================== */
-.chat-navbar { grid-row: 1; grid-column: 1; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top, 10px)); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(244, 143, 177, 0.1); z-index: 10; }
-.navbar-btn { display: flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; border-radius: 50%; border: none; background: transparent; color: var(--pt-text); cursor: pointer; transition: all 0.2s ease; -webkit-tap-highlight-color: transparent; }
-.navbar-btn:hover { background: var(--pt-primary-light); color: var(--pt-primary-dark); }
-.navbar-title { font-family: 'Figtree', 'PingFang SC', sans-serif; font-size: 16px; font-weight: 700; color: var(--pt-text); margin: 0; }
+.chat-navbar {
+  grid-row: 1; grid-column: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top, 10px));
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  z-index: 10;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+}
+.navbar-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%; border: none;
+  background: transparent; color: #475569;
+}
+.navbar-title {
+  font-size: 16px; font-weight: 700; color: #1E293B; margin: 0;
+}
 .navbar-actions { display: flex; gap: 4px; }
 
 /* ==================== 2. 用户信息栏 ==================== */
-.user-info-bar { grid-row: 2; grid-column: 1; display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: var(--pt-card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(244, 143, 177, 0.08); }
-.user-name { font-size: 13px; font-weight: 600; color: var(--pt-text); }
-.switch-btn { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; border: 1px solid rgba(244, 143, 177, 0.25); background: rgba(255, 255, 255, 0.6); color: var(--pt-primary-dark); font-size: 11px; font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.switch-btn:hover { background: var(--pt-primary-light); border-color: var(--pt-primary); }
-.user-actions { display: flex; gap: 2px; margin-left: auto; }
-.user-action-btn { display: flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; border-radius: 50%; border: none; background: transparent; color: var(--pt-text-muted); cursor: pointer; transition: all 0.2s ease; -webkit-tap-highlight-color: transparent; }
-.user-action-btn:hover { background: var(--pt-primary-light); color: var(--pt-primary-dark); }
-.user-action-btn.active { color: var(--pt-primary-dark); background: var(--pt-primary-light); }
+.user-info-bar {
+  grid-row: 2; grid-column: 1;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  z-index: 9;
+}
+.user-name { font-size: 13px; font-weight: 600; color: #475569; }
+.switch-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7); border: 1px solid white;
+  color: #0284C7; font-size: 11px; font-weight: 600;
+}
+.user-actions { margin-left: auto; display: flex; }
+.user-action-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: transparent; color: #94A3B8; display: flex; align-items: center; justify-content: center;
+}
+.user-action-btn.active { color: #FB7185; background: #FFF1F2; }
 
-/* ==================== 消息区域 ==================== */
-.messages-container { grid-row: 3; grid-column: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 8px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.messages-inner { display: flex; flex-direction: column; gap: 12px; max-width: 720px; margin: 0 auto; }
+/* ==================== 主区域 ==================== */
+.messages-container {
+  grid-row: 3; grid-column: 1;
+  min-height: 0; overflow-y: auto; padding: 20px 16px 8px;
+  -webkit-overflow-scrolling: touch;
+  z-index: 5;
+}
+.messages-inner {
+  display: flex; flex-direction: column; gap: 24px;
+  max-width: 768px; margin: 0 auto;
+}
 
-/* ---- 欢迎 ---- */
-.welcome-section { text-align: center; padding: 16px 12px 6px; animation: welcomeFadeIn 0.5s ease-out; }
-@keyframes welcomeFadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-.welcome-header { margin-bottom: 12px; }
-.doctor-avatar { background: linear-gradient(135deg, #fff 0%, #fce4ec 100%); box-shadow: 0 4px 20px rgba(244, 143, 177, 0.25); border: 3px solid rgba(255, 255, 255, 0.8); }
-.doctor-emoji { font-size: 32px; line-height: 1; }
-.welcome-title { font-size: 18px; font-weight: 700; color: var(--pt-text); margin: 0 0 6px; font-family: 'Figtree', 'PingFang SC', sans-serif; }
-.welcome-desc { font-size: 13px; line-height: 1.6; color: var(--pt-text-secondary); margin: 0 auto; max-width: 360px; }
+/* ---- 沉浸式欢迎区 ---- */
+.welcome-section {
+  text-align: center; padding: 40px 16px 20px;
+  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-avatar-wrapper {
+  position: relative; display: inline-flex; justify-content: center; align-items: center;
+  margin-bottom: 24px;
+}
+.ai-halo {
+  position: absolute;
+  width: 120%; height: 120%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 113, 133, 0.4) 0%, transparent 70%);
+  animation: breathing 4s ease-in-out infinite alternate;
+  z-index: -1;
+}
+@keyframes breathing {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+.welcome-title { font-size: 20px; font-weight: 700; color: #1E293B; margin-bottom: 8px; }
+.welcome-desc { font-size: 14px; line-height: 1.6; color: #64748B; max-width: 280px; margin: 0 auto; }
 
-/* ---- 孕周指南 ---- */
-.pregnancy-guide { animation: welcomeFadeIn 0.5s ease-out 0.1s both; }
-.section-title { font-size: 14px; font-weight: 600; color: var(--pt-text); margin: 0 0 8px; }
-.week-card { background: var(--pt-card-bg-solid); border-radius: var(--pt-radius); padding: 14px; box-shadow: var(--pt-shadow); display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.week-main { text-align: center; }
-.week-number { font-size: 18px; font-weight: 700; color: var(--pt-primary-dark); font-family: 'Figtree', sans-serif; }
-.days-remaining { font-size: 12px; color: var(--pt-text-muted); margin-top: 2px; }
-.fetus-visual { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.fetus-circle { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--pt-primary-light), #F8BBD0); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(244, 143, 177, 0.2); }
-.fetus-size { font-size: 15px; font-weight: 700; color: var(--pt-primary-dark); font-family: 'Figtree', sans-serif; }
-.fetus-label { font-size: 11px; color: var(--pt-text-muted); }
-.measurements { display: flex; align-items: center; gap: 20px; justify-content: center; }
-.measurement { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.measurement-label { font-size: 11px; color: var(--pt-text-muted); }
-.measurement-value { font-size: 14px; font-weight: 600; color: var(--pt-text); font-family: 'Figtree', sans-serif; }
-.measurement-divider { width: 1px; height: 24px; background: var(--pt-border); }
-.pagination-dots { display: flex; gap: 5px; justify-content: center; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pt-border); }
-.dot.active { width: 16px; border-radius: 3px; background: var(--pt-primary); }
+/* ---- 轻量化孕周指南 ---- */
+.pregnancy-guide { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s backwards; }
+.soft-card { background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(16px); border-radius: 20px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 4px 16px rgba(148, 163, 184, 0.1); }
+.week-card { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
+.week-mini-info { display: flex; flex-direction: column; gap: 4px; }
+.week-number { font-size: 16px; font-weight: 700; color: #FB7185; }
+.days-remaining { font-size: 12px; color: #64748B; }
+.fetus-mini { display: flex; align-items: center; gap: 8px; background: white; padding: 6px 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+.fetus-icon { font-size: 18px; }
+.fetus-size { font-size: 14px; font-weight: 600; color: #334155; }
 
-/* ---- 功能导航 ---- */
-.function-nav { display: flex; gap: 8px; animation: welcomeFadeIn 0.5s ease-out 0.2s both; }
-.function-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: var(--pt-radius-sm); background: var(--pt-card-bg-solid); box-shadow: var(--pt-shadow); cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent; -webkit-tap-highlight-color: transparent; }
-.function-item:active { transform: scale(0.96); }
-.function-item--pink { border-bottom: 3px solid #F48FB1; }
-.function-item--orange { border-bottom: 3px solid #FFB74D; }
-.function-item--yellow { border-bottom: 3px solid #FFD54F; }
-.function-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--pt-primary-light); }
-.function-item--orange .function-icon { background: #FFF3E0; }
-.function-item--yellow .function-icon { background: #FFFDE7; }
-.function-name { font-size: 12px; font-weight: 600; color: var(--pt-text); }
+/* ---- 消息列表 (Zero Interface) ---- */
+.msg-list { display: flex; flex-direction: column; gap: 28px; }
+.message-row { display: flex; gap: 12px; max-width: 100%; animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes slideUpFade { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ---- 消息列表 ---- */
-.msg-list { display: flex; flex-direction: column; gap: 12px; }
+.message-row--assistant { align-self: flex-start; padding-right: 16px; }
+.message-row--user { align-self: flex-end; flex-direction: row-reverse; padding-left: 16px; }
 
-.message-row { display: flex; align-items: flex-start; gap: 8px; max-width: 90%; animation: msgSlideIn 0.3s ease-out; }
-@keyframes msgSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.message-row--assistant { align-self: flex-start; }
-.message-row--user { align-self: flex-end; flex-direction: row-reverse; }
+.assistant-avatar { margin-top: 4px; }
 
-.msg-avatar--assistant { flex-shrink: 0; background: linear-gradient(135deg, #fff 0%, #fce4ec 100%); border: 1.5px solid rgba(255, 255, 255, 0.6); }
-.avatar-emoji-sm { font-size: 16px; line-height: 1; }
-.user-avatar-spacer { width: 34px; flex-shrink: 0; }
-
-.message-body { display: flex; flex-direction: column; gap: 3px; max-width: 100%; }
+.message-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .message-row--user .message-body { align-items: flex-end; }
 
-/* ---- 气泡 ---- */
-.message-bubble { padding: 9px 14px; border-radius: 16px; font-size: 14px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; position: relative; }
-.message-bubble--assistant { background: #fce4ec; color: var(--pt-text); border-bottom-left-radius: 6px; box-shadow: 0 1px 4px rgba(244, 143, 177, 0.08); }
-.message-bubble--user { background: #fff; color: var(--pt-text); border: 1px solid rgba(244, 143, 177, 0.2); border-bottom-right-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04); }
-.message-bubble--urgent.message-bubble--assistant, .message-bubble--urgent.message-bubble--user { background: linear-gradient(135deg, #ffebee, #ffcdd2); border: 1px solid #ef9a9a; box-shadow: 0 2px 12px rgba(229, 57, 53, 0.18); animation: urgentPulse 1.5s ease-in-out 3; }
-@keyframes urgentPulse { 0%, 100% { box-shadow: 0 2px 12px rgba(229, 57, 53, 0.18); } 50% { box-shadow: 0 2px 20px rgba(229, 57, 53, 0.35); } }
-
-.message-bubble--loading { display: flex; align-items: center; gap: 5px; padding: 12px 18px; min-width: 50px; }
-.loading-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pt-primary); animation: dotBounce 1.4s infinite ease-in-out both; }
-.loading-dot:nth-child(1) { animation-delay: -0.32s; }
-.loading-dot:nth-child(2) { animation-delay: -0.16s; }
-.loading-dot:nth-child(3) { animation-delay: 0s; }
-@keyframes dotBounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; } 40% { transform: scale(1); opacity: 1; } }
-
-/* 思考状态指示器 */
-.message-bubble--thinking {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, #fce4ec, #fff);
-  border: 1px solid #f8bbd0;
-  animation: thinking-pulse 2s ease-in-out infinite;
+/* 气泡样式重构 */
+.message-bubble { position: relative; font-size: 15px; line-height: 1.6; word-wrap: break-word; }
+.message-bubble--user {
+  background: rgba(255, 241, 242, 0.75);
+  backdrop-filter: blur(12px);
+  color: #1E293B;
+  padding: 12px 18px;
+  border-radius: 20px 20px 4px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 8px rgba(251, 113, 133, 0.1);
 }
-.thinking-text {
-  font-size: 13px;
-  color: #e91e63;
-  font-weight: 500;
-}
-@keyframes thinking-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+.message-bubble--assistant {
+  /* Zero Interface: 去除背景边框，类似流式阅读 */
+  background: transparent;
+  color: #1E293B;
+  padding: 4px 0;
 }
 
-.bubble-text { font-size: 14px; line-height: 1.55; }
-
-/* ---- Markdown 样式 ---- */
-.bubble-markdown :deep(p) { margin: 0 0 6px; }
+/* Markdown 排版优化 */
+.bubble-markdown { font-size: 15px; line-height: 1.65; color: #334155; }
+.bubble-markdown :deep(p) { margin: 0 0 10px; }
 .bubble-markdown :deep(p:last-child) { margin-bottom: 0; }
-.bubble-markdown :deep(ul), .bubble-markdown :deep(ol) { margin: 4px 0; padding-left: 18px; }
-.bubble-markdown :deep(li) { margin: 2px 0; }
-.bubble-markdown :deep(code) { background: rgba(0, 0, 0, 0.06); padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: 'Menlo', 'Consolas', monospace; }
-.bubble-markdown :deep(pre) { background: #2d2d2d; color: #f8f8f2; padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0; font-size: 12.5px; line-height: 1.5; }
-.bubble-markdown :deep(pre code) { background: none; padding: 0; color: inherit; }
-.bubble-markdown :deep(strong) { font-weight: 700; color: var(--pt-primary-dark); }
-.bubble-markdown :deep(a) { color: var(--pt-primary-dark); text-decoration: underline; }
-.bubble-markdown :deep(blockquote) { border-left: 3px solid var(--pt-primary); margin: 6px 0; padding: 4px 10px; background: rgba(244, 143, 177, 0.06); border-radius: 0 6px 6px 0; }
-.bubble-markdown :deep(table) { border-collapse: collapse; margin: 6px 0; font-size: 13px; width: 100%; }
-.bubble-markdown :deep(th), .bubble-markdown :deep(td) { border: 1px solid var(--pt-border); padding: 5px 8px; text-align: left; }
-.bubble-markdown :deep(th) { background: var(--pt-primary-light); font-weight: 600; }
+.bubble-markdown :deep(strong) { font-weight: 700; color: #1E293B; }
+.bubble-markdown :deep(li) { margin: 4px 0; }
+.bubble-markdown :deep(ul), .bubble-markdown :deep(ol) { padding-left: 20px; }
 
-/* ---- 打字光标 ---- */
-.typing-cursor { display: inline-block; width: 2px; height: 1em; background: var(--pt-primary-dark); margin-left: 2px; vertical-align: text-bottom; animation: cursorBlink 0.8s step-end infinite; }
-@keyframes cursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+/* 思考中特效 */
+.message-bubble--thinking { display: flex; align-items: center; gap: 12px; }
+.thinking-indicator { position: relative; width: 20px; height: 20px; }
+.ripple, .ripple-delay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 50%; border: 2px solid #FB7185; opacity: 0;
+  animation: ripple-anim 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.ripple-delay { animation-delay: 1s; }
+@keyframes ripple-anim {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.thinking-text { font-size: 14px; font-weight: 600; color: #FB7185; }
 
-/* ---- 时间戳 ---- */
-.message-time { font-size: 10px; color: var(--pt-text-muted); padding: 0 4px; display: flex; align-items: center; gap: 5px; }
-.message-time--user { flex-direction: row-reverse; }
-.urgent-tag { font-size: 10px; height: 16px; line-height: 16px; padding: 0 5px; }
-
-/* ---- 消息操作栏 ---- */
-.message-actions { display: flex; gap: 2px; margin-top: 2px; opacity: 0; transition: opacity 0.2s ease; }
+/* 操作栏与时间 */
+.message-footer { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.message-footer--user { flex-direction: row-reverse; }
+.message-time { font-size: 11px; color: #94A3B8; }
+.message-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
 .message-row:hover .message-actions { opacity: 1; }
-.message-actions--user { justify-content: flex-end; }
-.msg-action-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pt-text-muted); cursor: pointer; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent; font-size: 13px; }
-.msg-action-btn:hover { background: var(--pt-primary-light); color: var(--pt-primary-dark); }
-.msg-action-btn:active { transform: scale(0.9); }
-.msg-action-btn--active { background: var(--pt-primary-light); color: var(--pt-primary); }
+@media (hover: none) { .message-actions { opacity: 0.7; } }
+.msg-action-btn {
+  width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent;
+  color: #94A3B8; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; cursor: pointer;
+}
+.msg-action-btn:hover { background: white; color: #1E293B; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
 
-/* 移动端常驻显示操作栏 */
-@media (hover: none) {
-  .message-actions { opacity: 0.6; }
+.scroll-anchor { height: 20px; }
+
+/* ==================== 3. 底部输入区 (灵动输入岛) ==================== */
+.input-container {
+  grid-row: 4; grid-column: 1;
+  position: relative; z-index: 10;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 16px 16px; padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
 }
 
-.scroll-anchor { height: 1px; }
+.prompt-chips {
+  display: flex; gap: 8px;
+  overflow-x: auto; scrollbar-width: none;
+  width: 100%; max-width: 768px; padding-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.prompt-chips::-webkit-scrollbar { display: none; }
+.prompt-chip {
+  flex: 0 0 auto;
+  padding: 8px 16px; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
+  border: 1px solid white; box-shadow: 0 4px 12px rgba(148, 163, 184, 0.08);
+  font-size: 13px; font-weight: 600; color: #0284C7;
+}
 
-/* ==================== 3. 兴趣推荐 ==================== */
-.interests-area { padding: 6px 0 4px; }
-.interests-title { font-size: 13px; font-weight: 600; color: var(--pt-text); margin: 0 0 8px; }
-.interests-list { display: flex; flex-direction: column; gap: 6px; }
-.interest-item { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-radius: 10px; background: var(--pt-card-bg-solid); border: 1px solid rgba(244, 143, 177, 0.1); cursor: pointer; transition: all 0.2s ease; -webkit-tap-highlight-color: transparent; }
-.interest-item:active { transform: scale(0.98); background: var(--pt-primary-light); }
-.interest-hashtag { font-size: 15px; font-weight: 700; color: var(--pt-primary); flex-shrink: 0; }
-.interest-text { font-size: 13px; color: var(--pt-text-secondary); }
-.suggest-fade-enter-active, .suggest-fade-leave-active { transition: all 0.3s ease; }
-.suggest-fade-enter-from, .suggest-fade-leave-to { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+.input-pill-wrapper {
+  width: 100%; max-width: 768px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
 
-/* ==================== 4. 底部输入区 ==================== */
-.input-area { grid-row: 4; grid-column: 1; padding: 4px 12px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px)); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(244, 143, 177, 0.12); position: relative; z-index: 10; }
+/* 胶囊灵动岛 */
+.input-pill {
+  width: 100%;
+  display: flex; align-items: flex-end; gap: 8px;
+  background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 28px;
+  padding: 6px;
+  box-shadow: 0 8px 32px rgba(148, 163, 184, 0.15);
+}
 
-.input-row { display: flex; align-items: flex-end; gap: 8px; max-width: 720px; margin: 0 auto; }
-
-.toolbar-btn { display: flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; border-radius: 50%; border: none; background: var(--pt-primary-light); color: var(--pt-primary-dark); cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
-.toolbar-btn:active { transform: scale(0.92); }
-.toolbar-btn--recording { background: #ffebee; color: #e53935; animation: recPulse 1.5s ease-in-out infinite; }
-.toolbar-btn--stop { background: #e53935; color: #fff; }
-.toolbar-btn--stop:hover { background: #c62828; }
-@keyframes recPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.3); } 50% { box-shadow: 0 0 0 8px rgba(229, 57, 53, 0); } }
+.toolbar-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: none;
+  background: white; color: #475569; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex-shrink: 0;
+}
+.toolbar-btn--recording { background: #FFE4E6; color: #E11D48; }
+.toolbar-btn--stop { background: #1E293B; color: white; }
 
 .chat-input { flex: 1; }
-.chat-input :deep(.el-textarea__inner) { border-radius: 20px; border: 1.5px solid rgba(244, 143, 177, 0.2); padding: 9px 16px; font-size: 14px; line-height: 1.45; transition: all 0.25s ease; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03); font-family: inherit; }
-.chat-input :deep(.el-textarea__inner:focus) { border-color: var(--pt-primary); box-shadow: 0 0 0 3px rgba(244, 143, 177, 0.12); }
-.chat-input :deep(.el-textarea__inner::placeholder) { color: var(--pt-text-muted); }
+.chat-input :deep(.el-textarea__inner) {
+  border: none; background: transparent; box-shadow: none;
+  padding: 10px 8px; font-size: 15px; color: #1E293B; line-height: 1.4;
+}
+.chat-input :deep(.el-textarea__inner:focus) { box-shadow: none; }
+.chat-input :deep(.el-textarea__inner::placeholder) { color: #94A3B8; }
 
-.send-btn { flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, var(--pt-primary), var(--pt-primary-dark)); border: none; color: #fff; box-shadow: 0 4px 14px rgba(244, 143, 177, 0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; -webkit-tap-highlight-color: transparent; }
-.send-btn:active:not(:disabled) { transform: scale(0.92); }
-.send-btn:disabled { background: #e0e0e0; box-shadow: none; color: #bdbdbd; cursor: default; }
+.send-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: none;
+  background: #FB7185; color: white; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(251, 113, 133, 0.3); flex-shrink: 0;
+}
+.send-btn:disabled { background: #E2E8F0; box-shadow: none; color: #94A3B8; }
 
-.input-hint { text-align: center; font-size: 10px; color: var(--pt-text-muted); opacity: 0.5; margin-top: 4px; padding-bottom: env(safe-area-inset-bottom, 0); }
-
-/* ---- 录音 ---- */
-.recording-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #fff0f0; border-radius: 10px; max-width: 720px; margin: 0 auto 8px; border: 1px solid rgba(229, 57, 53, 0.15); }
-.recording-dot { width: 8px; height: 8px; border-radius: 50%; background: #e53935; animation: dotBlink 0.8s ease-in-out infinite; }
-@keyframes dotBlink { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-.recording-text { flex: 1; font-size: 13px; color: #c62828; }
-
-/* ==================== 动画 ==================== */
-.msg-enter-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-.msg-leave-active { transition: all 0.15s ease; }
-.msg-enter-from { opacity: 0; transform: translateY(10px) scale(0.97); }
-.msg-leave-to { opacity: 0; transform: translateX(-16px); }
-
-/* ==================== 滚动条 ==================== */
-.messages-container::-webkit-scrollbar { width: 3px; }
-.messages-container::-webkit-scrollbar-track { background: transparent; }
-.messages-container::-webkit-scrollbar-thumb { background: rgba(244, 143, 177, 0.15); border-radius: 2px; }
-
-/* ==================== 移动端 ==================== */
-
-/* --- 所有移动端通用 --- */
-@media (max-width: 430px) {
-  /* 导航栏 */
-  .chat-navbar { padding: 6px 10px; padding-top: max(6px, env(safe-area-inset-top, 6px)); }
-  .navbar-title { font-size: 14px; }
-  .navbar-btn { min-width: 36px; min-height: 36px; }
-  .navbar-actions { gap: 2px; }
-
-  /* 用户栏 */
-  .user-info-bar { padding: 3px 10px; }
-
-  /* 消息区 */
-  .messages-container { padding: 6px 8px 4px; }
-  .messages-inner { gap: 6px; }
-  .msg-list { gap: 6px; }
-  .message-body { gap: 2px; }
-  .message-bubble { padding: 6px 10px; font-size: 13px; line-height: 1.4; }
-  .bubble-text { line-height: 1.4; }
-
-  /* Markdown 移动端间距收紧 */
-  .bubble-markdown :deep(p) { margin: 0 0 3px; }
-  .bubble-markdown :deep(p:last-child) { margin-bottom: 0; }
-  .bubble-markdown :deep(ul), .bubble-markdown :deep(ol) { margin: 2px 0; padding-left: 16px; }
-  .bubble-markdown :deep(li) { margin: 1px 0; }
-  .message-time { font-size: 9px; padding: 0 2px; }
-  .message-actions { margin-top: 1px; }
-
-  /* 欢迎区 - 紧凑 */
-  .welcome-section { padding: 10px 8px 2px; text-align: center; }
-  .welcome-header { margin-bottom: 4px; }
-  .doctor-avatar { width: 40px !important; height: 40px !important; }
-  .doctor-emoji { font-size: 20px; }
-  .welcome-title { font-size: 15px; margin-bottom: 2px; }
-  .welcome-desc { font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-  /* 孕周指南 - 移动端隐藏 */
-  .pregnancy-guide { display: none; }
-
-  /* 功能导航 - 横向滚动 */
-  .function-nav { gap: 8px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .function-nav::-webkit-scrollbar { display: none; }
-  .function-item { flex: 0 0 auto; min-width: 80px; padding: 8px 10px; }
-  .function-icon { width: 32px; height: 32px; font-size: 16px; }
-  .function-name { font-size: 11px; }
-
-  /* 输入区 */
-  .send-btn { width: 40px; height: 40px; }
-  .toolbar-btn { min-width: 38px; min-height: 38px; }
-  .input-area { padding: 3px 10px 6px; }
-  .input-hint { display: none; }
+.stop-btn {
+  background: #1E293B;
+  box-shadow: 0 4px 12px rgba(30, 41, 59, 0.3);
 }
 
-/* --- 桌面端 --- */
-@media (min-width: 431px) {
-  .messages-container { padding: 14px 16px 8px; }
-  .messages-inner { max-width: 600px; }
+.stop-icon-box {
+  width: 14px;
+  height: 14px;
+  background-color: white;
+  border-radius: 3px;
 }
+
+.input-hint { font-size: 11px; color: #94A3B8; }
+
 </style>

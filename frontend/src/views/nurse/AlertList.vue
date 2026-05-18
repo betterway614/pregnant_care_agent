@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1 class="page-title">预警管理</h1>
-      <el-button type="primary" :icon="Refresh" @click="fetchAlerts" :loading="loading">
+      <el-button type="primary" class="brand-gradient-btn" :icon="Refresh" @click="fetchAlerts" :loading="loading">
         刷新
       </el-button>
     </div>
@@ -29,9 +29,9 @@
       </el-select>
       <el-select v-model="filterStatus" placeholder="处理状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
-        <el-option label="待处理" value="pending" />
-        <el-option label="已确认" value="confirmed" />
-        <el-option label="已驳回" value="dismissed" />
+        <el-option label="待处理" value="PENDING" />
+        <el-option label="已确认" value="CONFIRMED" />
+        <el-option label="已驳回" value="DISMISSED" />
       </el-select>
       <span class="text-light filter-summary" v-if="alerts.length">
         共 {{ alerts.length }} 条预警
@@ -46,45 +46,8 @@
           stripe
           style="width: 100%"
           size="small"
-          :default-expand-all="false"
-          row-key="id"
+          @row-click="viewDetail"
         >
-          <!-- 展开行 -->
-          <el-table-column type="expand" width="40">
-            <template #default="{ row }">
-              <div class="expand-detail">
-                <div class="expand-detail__section">
-                  <h4 class="expand-detail__title">预警详情</h4>
-                  <div class="expand-detail__grid">
-                    <div class="expand-detail__item">
-                      <span class="expand-detail__label">触发来源</span>
-                      <span class="expand-detail__value">{{ row.trigger_source || '--' }}</span>
-                    </div>
-                    <div class="expand-detail__item">
-                      <span class="expand-detail__label">规则ID</span>
-                      <span class="expand-detail__value">{{ row.rule_id || '--' }}</span>
-                    </div>
-                    <div class="expand-detail__item">
-                      <span class="expand-detail__label">孕周</span>
-                      <span class="expand-detail__value">
-                        {{ row.gestational_age_days ? Math.floor(row.gestational_age_days / 7) + '周' : '--' }}
-                      </span>
-                    </div>
-                    <div class="expand-detail__item">
-                      <span class="expand-detail__label">预警时间</span>
-                      <span class="expand-detail__value">{{ formatTime(row.created_at) }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="expand-detail__section" v-if="Object.keys(row.details || {}).length">
-                  <h4 class="expand-detail__title">原始数据</h4>
-                  <pre class="expand-detail__pre">{{ JSON.stringify(row.details, null, 2) }}</pre>
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-
           <el-table-column label="时间" width="150">
             <template #default="{ row }">
               <span class="text-nowrap">{{ formatTime(row.created_at) }}</span>
@@ -105,19 +68,24 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="操作" width="280" fixed="right" align="center" header-align="center">
             <template #default="{ row }">
-              <template v-if="row.status === 'pending'">
-                <el-button size="small" type="primary" @click.stop="handleReview(row, 'confirmed')">
-                  确认
+              <div class="table-row-actions table-row-actions--alert">
+                <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="goPregnantDetail(row)">
+                  孕妇详情
                 </el-button>
-                <el-button size="small" @click.stop="handleReview(row, 'dismissed')">
-                  驳回
-                </el-button>
-              </template>
-              <span v-else class="text-light handled-text">
-                {{ row.status === 'confirmed' ? '已处理' : '已驳回' }}
-              </span>
+                <template v-if="isAlertPending(row.status)">
+                  <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'confirm')">
+                    确认
+                  </el-button>
+                  <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'dismiss')">
+                    驳回
+                  </el-button>
+                </template>
+                <el-tag v-else size="small" effect="plain" :type="statusTagType(row.status)">
+                  {{ statusLabel(row.status) }}
+                </el-tag>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -129,6 +97,63 @@
         </div>
       </div>
     </div>
+
+    <!-- 预警详情抽屉 -->
+    <el-drawer
+      v-model="detailVisible"
+      :title="`预警详情 - ${selectedAlert?.patient_name || ''}`"
+      size="500px"
+      destroy-on-close
+    >
+      <template v-if="selectedAlert">
+        <div class="detail-section">
+          <div class="detail-row">
+            <span class="detail-label">孕妇</span>
+            <span class="detail-value">{{ selectedAlert.patient_name || '--' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">预警级别</span>
+            <RiskBadge :level="selectedAlert.level" />
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">处理状态</span>
+            <el-tag :type="statusTagType(selectedAlert.status)" size="small" effect="plain">
+              {{ statusLabel(selectedAlert.status) }}
+            </el-tag>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">触发来源</span>
+            <span class="detail-value">{{ selectedAlert.trigger_source || '--' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">规则ID</span>
+            <span class="detail-value">{{ selectedAlert.rule_id || '--' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">孕周</span>
+            <span class="detail-value">
+              {{ selectedAlert.gestational_age_days ? Math.floor(selectedAlert.gestational_age_days / 7) + '周' : '--' }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">预警时间</span>
+            <span class="detail-value">{{ formatTime(selectedAlert.created_at) }}</span>
+          </div>
+        </div>
+
+        <el-divider />
+
+        <div class="detail-section">
+          <h4 class="detail-section__title">预警消息</h4>
+          <p class="detail-section__content">{{ selectedAlert.message || '--' }}</p>
+        </div>
+
+        <div class="detail-section" v-if="Object.keys(selectedAlert.details || {}).length">
+          <h4 class="detail-section__title">原始数据</h4>
+          <pre class="detail-section__pre">{{ JSON.stringify(selectedAlert.details, null, 2) }}</pre>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -137,36 +162,64 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { Refresh, Bell } from '@element-plus/icons-vue'
 import { alertApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import type { Alert } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
+const router = useRouter()
 const loading = ref(false)
 const error = ref('')
 const alerts = ref<Alert[]>([])
 const filterLevel = ref('')
 const filterStatus = ref('')
 
+/** 详情抽屉 */
+const detailVisible = ref(false)
+const selectedAlert = ref<Alert | null>(null)
+
+/** 查看详情 */
+function viewDetail(row: Alert) {
+  selectedAlert.value = row
+  detailVisible.value = true
+}
+
+/** 跳转到孕妇详情页 */
+function goPregnantDetail(row: Alert) {
+  if (row.pregnant_id) {
+    router.push({ name: 'NursePregnantDetail', params: { pregnantId: row.pregnant_id } })
+  }
+}
+
 /** 是否有活跃筛选条件 */
 const hasActiveFilter = computed(() => !!(filterLevel.value || filterStatus.value))
 
-/** 状态标签映射 */
+/** 与后端一致的状态码（大小写不敏感） */
+function normalizeAlertStatus(status: string): string {
+  return (status || '').toUpperCase()
+}
+
+function isAlertPending(status: string): boolean {
+  return normalizeAlertStatus(status) === 'PENDING'
+}
+
+/** 状态标签映射（展示中文，兼容后端大写枚举） */
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
-    pending: '待处理',
-    confirmed: '已确认',
-    dismissed: '已驳回',
+    PENDING: '待处理',
+    CONFIRMED: '已确认',
+    DISMISSED: '已驳回',
   }
-  return map[status] || status
+  return map[normalizeAlertStatus(status)] || status
 }
 
 /** 状态标签类型 */
 function statusTagType(status: string): string {
   const map: Record<string, string> = {
-    pending: 'warning',
-    confirmed: 'success',
-    dismissed: 'info',
+    PENDING: 'warning',
+    CONFIRMED: 'success',
+    DISMISSED: 'info',
   }
-  return map[status] || 'info'
+  return map[normalizeAlertStatus(status)] || 'info'
 }
 
 /** 时间格式化 */
@@ -200,14 +253,14 @@ async function fetchAlerts() {
   }
 }
 
-/** 处理预警（确认/驳回） */
-async function handleReview(alert: Alert, action: string) {
-  const actionText = action === 'confirmed' ? '确认' : '驳回'
+/** 处理预警（确认/驳回），action 与后端 AlertReviewRequest 一致 */
+async function handleReview(alert: Alert, action: 'confirm' | 'dismiss') {
+  const actionText = action === 'confirm' ? '确认' : '驳回'
   try {
     await ElMessageBox.confirm(
       `确定${actionText}该预警？`,
       `${actionText}预警`,
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: action === 'confirmed' ? 'primary' : 'warning' }
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: action === 'confirm' ? 'primary' : 'warning' }
     )
   } catch {
     return
@@ -250,58 +303,51 @@ onMounted(fetchAlerts)
   color: var(--text-light);
 }
 
-.handled-text {
-  font-size: 13px;
-  padding: 0 8px;
-}
-
-/* 展开详情 */
-.expand-detail {
-  padding: 12px 24px 12px 40px;
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-}
-
-.expand-detail__section {
+/* 详情抽屉 */
+.detail-section {
   margin-bottom: 16px;
 }
 
-.expand-detail__section:last-child {
-  margin-bottom: 0;
-}
-
-.expand-detail__title {
-  font-size: 13px;
+.detail-section__title {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
 
-.expand-detail__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.expand-detail__item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.expand-detail__label {
-  font-size: 11px;
-  color: var(--text-light);
-}
-
-.expand-detail__value {
+.detail-section__content {
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
 }
 
-.expand-detail__pre {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+.detail-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  width: 80px;
+  font-size: 13px;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.detail-section__pre {
+  background: var(--bg-page);
   border-radius: var(--radius-sm);
   padding: 12px;
   font-size: 12px;
@@ -309,8 +355,6 @@ onMounted(fetchAlerts)
   overflow-x: auto;
   font-family: 'SF Mono', 'Fira Code', monospace;
   margin: 0;
-  max-height: 200px;
-  overflow-y: auto;
 }
 
 .empty-state {
@@ -324,5 +368,10 @@ onMounted(fetchAlerts)
 .empty-state p {
   color: var(--text-light);
   font-size: 14px;
+}
+
+/* 操作列：表头与单元格居中，与全局 table-row-actions 左对齐区分 */
+.table-row-actions.table-row-actions--alert {
+  justify-content: center;
 }
 </style>

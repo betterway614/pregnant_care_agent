@@ -1,6 +1,13 @@
 <template>
   <div class="patient-schedule">
-    <div class="page-container schedule-container">
+    <!-- ==================== 动态光晕背景 ==================== -->
+    <div class="halo-bg">
+      <div class="halo-orb halo-orb-1"></div>
+      <div class="halo-orb halo-orb-2"></div>
+      <div class="halo-backdrop"></div>
+    </div>
+
+    <div class="page-container schedule-container content-wrapper">
       <!-- 页面标题 -->
       <div class="schedule-header">
         <h1 class="page-title">检查日程</h1>
@@ -9,13 +16,13 @@
 
       <!-- 加载状态 -->
       <div v-if="loading" class="page-loading">
-        <el-icon class="loading-icon" :size="36"><Loading /></el-icon>
-        <p>正在加载日程...</p>
+        <el-icon class="is-loading" :size="36" color="#FB7185"><Loading /></el-icon>
+        <p>正在为您加载日程...</p>
       </div>
 
       <template v-else>
         <!-- 日历视图 -->
-        <el-card shadow="hover" class="calendar-card">
+        <div class="soft-card calendar-card">
           <el-calendar v-model="selectedDate" class="schedule-calendar">
             <template #date-cell="{ data }">
               <div class="calendar-cell" :class="{ 'has-check': hasCheckOnDate(data.day) }">
@@ -24,28 +31,26 @@
               </div>
             </template>
           </el-calendar>
-        </el-card>
+        </div>
 
         <!-- 选中日期的日程列表 -->
-        <el-card shadow="hover" class="schedule-list-card">
-          <template #header>
-            <div class="card-header">
-              <div class="card-title-row">
-                <el-icon color="var(--pt-primary)" :size="20"><Calendar /></el-icon>
-                <span>{{ selectedDateText }} 检查安排</span>
-              </div>
-              <el-tag v-if="selectedDateSchedules.length" size="small" round effect="plain">
-                {{ selectedDateSchedules.length }} 项
-              </el-tag>
+        <div class="soft-card schedule-list-card">
+          <div class="card-header">
+            <div class="card-title-row">
+              <el-icon color="#FB7185" :size="20"><Calendar /></el-icon>
+              <span>{{ selectedDateText }} 检查安排</span>
             </div>
-          </template>
+            <div v-if="selectedDateSchedules.length" class="soft-badge">
+              {{ selectedDateSchedules.length }} 项
+            </div>
+          </div>
 
           <div v-if="selectedDateSchedules.length" class="schedule-list">
             <div
               v-for="item in selectedDateSchedules"
               :key="item.id"
-              class="schedule-item"
-              :class="{ 'schedule-item--completed': item.status === 'completed' }"
+              class="schedule-item interactive-card"
+              :class="{ 'is-completed': item.status === 'completed' }"
             >
               <div class="schedule-item-left">
                 <div class="schedule-time-indicator" :class="getStatusClass(item.status)">
@@ -61,15 +66,12 @@
                 <div class="schedule-item-content">
                   <div class="schedule-item-top">
                     <span class="schedule-item-name">{{ item.item }}</span>
-                    <el-tag
-                      :type="getCheckTypeTagType(item.node_type)"
-                      size="small"
-                      effect="plain"
-                      round
+                    <div
                       class="check-type-tag"
+                      :class="getCheckTypeTagType(item.node_type)"
                     >
                       {{ getCheckTypeLabel(item.node_type) }}
-                    </el-tag>
+                    </div>
                   </div>
                   <div class="schedule-item-bottom">
                     <span class="schedule-item-time">
@@ -85,75 +87,74 @@
             </div>
           </div>
 
-          <el-empty v-else description="当前日期暂无检查安排" :image-size="60">
-            <template #description>
-              <p class="empty-hint">选择日历中有<span class="dot-legend">绿色圆点</span>标记的日期查看详情</p>
-            </template>
-          </el-empty>
-        </el-card>
+          <div v-else class="empty-state">
+            <el-icon :size="48" color="#94A3B8"><Calendar /></el-icon>
+            <p>当前日期暂无检查安排</p>
+            <span class="empty-hint">选择日历中有<span class="dot-legend">粉色小点</span>标记的日期查看详情</span>
+          </div>
+        </div>
 
         <!-- 近期所有检查概览 -->
-        <el-card shadow="hover" class="upcoming-card">
-          <template #header>
-            <div class="card-header">
-              <div class="card-title-row">
-                <el-icon color="var(--pt-accent)" :size="20"><List /></el-icon>
-                <span>所有检查计划</span>
-              </div>
-              <el-tag v-if="allSchedules.length" size="small" round effect="plain">
-                {{ completedCount }} / {{ allSchedules.length }} 项
-              </el-tag>
+        <div class="soft-card upcoming-card">
+          <div class="card-header">
+            <div class="card-title-row">
+              <el-icon color="#38BDF8" :size="20"><List /></el-icon>
+              <span>所有检查计划</span>
             </div>
-          </template>
+            <div v-if="allSchedules.length" class="soft-badge">
+              {{ completedCount }} / {{ allSchedules.length }} 项
+            </div>
+          </div>
 
           <div v-if="allSchedules.length" class="all-schedule-list">
             <div
               v-for="item in sortedAllSchedules"
               :key="item.id"
-              class="all-schedule-item"
-              :class="{ 'all-schedule-item--completed': item.status === 'completed' }"
+              class="all-schedule-item interactive-card"
+              :class="{ 'is-completed': item.status === 'completed' }"
             >
               <div class="all-item-date">
                 <span class="all-date-text">{{ formatDateShort(item.scheduled_date) }}</span>
               </div>
               <div class="all-item-info">
                 <span class="all-item-name">{{ item.item }}</span>
-                <el-tag
-                  :type="getCheckTypeTagType(item.node_type)"
-                  size="small"
-                  effect="plain"
-                  round
+                <div
+                  class="check-type-tag"
+                  :class="getCheckTypeTagType(item.node_type)"
                 >
                   {{ getCheckTypeLabel(item.node_type) }}
-                </el-tag>
+                </div>
               </div>
               <div class="all-item-status">
                 <el-icon
                   v-if="item.status === 'completed'"
-                  color="var(--pt-primary)"
-                  :size="18"
+                  color="#34D399"
+                  :size="20"
                 >
                   <CircleCheck />
                 </el-icon>
                 <el-icon
                   v-else-if="item.status === 'pending'"
-                  color="var(--pt-text-muted)"
-                  :size="18"
+                  color="#94A3B8"
+                  :size="20"
                 >
                   <Clock />
                 </el-icon>
                 <el-icon
                   v-else
-                  color="#F57C00"
-                  :size="18"
+                  color="#FBBF24"
+                  :size="20"
                 >
                   <Warning />
                 </el-icon>
               </div>
             </div>
           </div>
-          <el-empty v-else description="暂无检查计划" :image-size="60" />
-        </el-card>
+          <div v-else class="empty-state">
+            <el-icon :size="48" color="#94A3B8"><List /></el-icon>
+            <p>暂无检查计划</p>
+          </div>
+        </div>
       </template>
     </div>
   </div>
@@ -185,7 +186,6 @@ const selectedDate = ref(new Date())
 const allSchedules = ref<ScheduleNode[]>([])
 
 /* ============ 计算属性 ============ */
-/** 选中日期字符串 YYYY-MM-DD */
 const selectedDateStr = computed(() => {
   const d = selectedDate.value
   const y = d.getFullYear()
@@ -194,7 +194,6 @@ const selectedDateStr = computed(() => {
   return `${y}-${m}-${day}`
 })
 
-/** 选中日期的可读文本 */
 const selectedDateText = computed(() => {
   const d = selectedDate.value
   const m = d.getMonth() + 1
@@ -203,7 +202,6 @@ const selectedDateText = computed(() => {
   return `${m}月${day}日 ${weekNames[d.getDay()]}`
 })
 
-/** 有检查安排的日期集合 */
 const checkDateSet = computed<Set<string>>(() => {
   const set = new Set<string>()
   for (const s of allSchedules.value) {
@@ -214,7 +212,6 @@ const checkDateSet = computed<Set<string>>(() => {
   return set
 })
 
-/** 选中日期的日程列表 */
 const selectedDateSchedules = computed(() => {
   return allSchedules.value.filter((s) => {
     const dateStr = s.scheduled_date?.split('T')[0] || ''
@@ -222,36 +219,29 @@ const selectedDateSchedules = computed(() => {
   })
 })
 
-/** 已完成数量 */
 const completedCount = computed(() => {
   return allSchedules.value.filter((s) => s.status === 'completed').length
 })
 
-/** 排序后的所有日程 */
 const sortedAllSchedules = computed(() => {
   return [...allSchedules.value].sort((a, b) => {
-    // 待完成在前，已完成在后
     if (a.status !== b.status) {
       return a.status === 'completed' ? 1 : -1
     }
-    // 同一状态下按日期排序
     return (a.scheduled_date || '').localeCompare(b.scheduled_date || '')
   })
 })
 
 /* ============ 工具函数 ============ */
-/** 判断某天是否有检查 */
 function hasCheckOnDate(dayStr: string): boolean {
   return checkDateSet.value.has(dayStr)
 }
 
-/** 格式化日期 */
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '--'
   return dateStr.split('T')[0] || dateStr
 }
 
-/** 简短日期格式 MM-DD */
 function formatDateShort(dateStr?: string): string {
   if (!dateStr) return '--'
   const raw = dateStr.split('T')[0] || dateStr
@@ -259,22 +249,20 @@ function formatDateShort(dateStr?: string): string {
   return `${parts[1] || '--'}-${parts[2] || '--'}`
 }
 
-/** 获取检查类型标签颜色 */
-function getCheckTypeTagType(type?: string): 'danger' | 'warning' | 'success' | 'info' {
-  if (!type) return 'info'
+function getCheckTypeTagType(type?: string): string {
+  if (!type) return 'tag-info'
   const t = type.toLowerCase()
-  if (['fgr_high_risk', 'urgent'].includes(t)) return 'danger'
-  if (['routine', '常规'].includes(t)) return 'success'
-  if (['important'].includes(t)) return 'warning'
-  return 'info'
+  if (['fgr_high_risk', 'urgent'].includes(t)) return 'tag-danger'
+  if (['routine', '常规'].includes(t)) return 'tag-success'
+  if (['important'].includes(t)) return 'tag-warning'
+  return 'tag-info'
 }
 
-/** 获取检查类型标签文字 */
 function getCheckTypeLabel(type?: string): string {
   if (!type) return '常规'
   const labelMap: Record<string, string> = {
     routine: '常规',
-    fgr_high_risk: 'FGR 高风险',
+    fgr_high_risk: '高风险',
     urgent: '紧急',
     important: '重要',
     examination: '检查',
@@ -283,18 +271,16 @@ function getCheckTypeLabel(type?: string): string {
   return labelMap[type] || type
 }
 
-/** 获取状态 CSS 类名 */
 function getStatusClass(status: string): string {
   if (status === 'completed') return 'status-completed'
   if (status === 'pending') return 'status-pending'
   return 'status-other'
 }
 
-/** 获取状态图标颜色 */
 function getStatusColor(status: string): string {
-  if (status === 'completed') return 'var(--pt-primary)'
-  if (status === 'pending') return 'var(--pt-text-muted)'
-  return '#F57C00'
+  if (status === 'completed') return '#34D399'
+  if (status === 'pending') return '#94A3B8'
+  return '#FBBF24'
 }
 
 /* ============ 数据加载 ============ */
@@ -318,19 +304,88 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ========== 全局变量 (Soft UI Colors) ========== */
 .patient-schedule {
-  height: 100%;
-  background: #FFF5F7;
+  --c-rose: #FB7185;
+  --c-rose-light: #FFF1F2;
+  --c-sky: #38BDF8;
+  --c-sky-light: #F0F9FF;
+  --c-emerald: #34D399;
+  --c-emerald-light: #ECFDF5;
+  --c-amber: #FBBF24;
+  --c-amber-light: #FFFBEB;
+  --c-slate-800: #1E293B;
+  --c-slate-600: #475569;
+  --c-slate-400: #94A3B8;
+  --c-bg: #F8FAFC;
+  --card-shadow: 0 4px 16px rgba(148, 163, 184, 0.1);
+  --card-shadow-hover: 0 8px 24px rgba(148, 163, 184, 0.15);
+
+  background: var(--c-bg);
+  min-height: 100vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 24px;
-  box-sizing: border-box;
+  font-family: 'Nunito Sans', 'PingFang SC', sans-serif;
+  position: relative;
+}
+
+.content-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+/* ==================== 动态光晕背景 (Halo) ==================== */
+.halo-bg {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+.halo-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.85;
+  animation: halo-float 20s infinite ease-in-out alternate;
+}
+.halo-orb-1 {
+  top: -10%; left: -20%;
+  width: 140vw; height: 140vw;
+  background: radial-gradient(circle, #FECDD3 0%, transparent 70%);
+}
+.halo-orb-2 {
+  top: 40%; right: -20%;
+  width: 120vw; height: 120vw;
+  background: radial-gradient(circle, #FCE7F3 0%, transparent 70%);
+  animation-delay: -5s;
+}
+.halo-backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+}
+@keyframes halo-float {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(15vw, 15vh) scale(1.1); }
+  100% { transform: translate(-10vw, 10vh) scale(0.9); }
 }
 
 .schedule-container {
   max-width: 480px;
   margin: 0 auto;
-  padding: 28px 20px 24px;
+  padding: 24px 16px 40px;
+}
+
+/* ========== 交互动画基础 ========== */
+.interactive-card {
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+.interactive-card:active {
+  transform: scale(0.96);
 }
 
 /* ========== 页面头部 ========== */
@@ -339,16 +394,15 @@ onMounted(() => {
 }
 
 .schedule-header .page-title {
-  font-family: 'Figtree', sans-serif;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  color: var(--pt-text);
+  color: var(--c-slate-800);
   margin-bottom: 4px;
 }
 
 .page-subtitle {
-  font-size: 13px;
-  color: var(--pt-text-muted);
+  font-size: 14px;
+  color: var(--c-slate-600);
   margin: 0;
 }
 
@@ -360,539 +414,274 @@ onMounted(() => {
   justify-content: center;
   min-height: 300px;
   gap: 16px;
-  color: var(--pt-text-muted);
+  color: var(--c-slate-600);
 }
 
-.loading-icon {
-  animation: spin 1.2s linear infinite;
-  color: var(--pt-primary);
+/* ========== 通用软卡片 ========== */
+.soft-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 20px;
+  box-shadow: var(--card-shadow);
+  margin-bottom: 20px;
+  overflow: hidden;
 }
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ========== 日历卡片 ========== */
-.calendar-card {
-  margin-bottom: 16px;
-  border-radius: var(--pt-radius) !important;
-  box-shadow: var(--pt-shadow);
-  border: 1px solid var(--pt-border) !important;
-  transition: 0.2s ease;
-}
-
-.calendar-card:hover {
-  box-shadow: var(--pt-shadow-hover);
-}
-
-.calendar-card :deep(.el-card__body) {
-  padding: 12px;
-}
-
-.schedule-calendar {
-  --el-calendar-border: var(--pt-border);
-  --el-calendar-header-border-bottom: var(--pt-border);
-  --el-calendar-cell-width: auto;
-}
-
-.schedule-calendar :deep(.el-calendar-table) {
-  table-layout: fixed;
-}
-
-.schedule-calendar :deep(.el-calendar-table td) {
-  height: auto !important;
-  min-height: 0;
-}
-
-.schedule-calendar :deep(.el-calendar-table th) {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pt-text-muted);
-  padding: 6px 0;
-}
-
-.schedule-calendar :deep(.el-calendar-table tbody tr td) {
-  height: auto !important;
-}
-
-.schedule-calendar :deep(.el-calendar__header) {
-  padding: 10px 12px;
-}
-
-.schedule-calendar :deep(.el-calendar__title) {
-  font-family: 'Figtree', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--pt-text);
-}
-
-.schedule-calendar :deep(.el-calendar__button-group .el-button) {
-  color: var(--pt-text-secondary);
-}
-
-.schedule-calendar :deep(.el-calendar__button-group .el-button:hover) {
-  color: var(--pt-primary);
-}
-
-/* ========== 日历单元格 ========== */
-.calendar-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 4px;
-  position: relative;
-  min-height: 32px;
-}
-
-.calendar-day {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--pt-text);
-}
-
-.schedule-calendar :deep(.el-calendar-table .current .calendar-day) {
-  color: #fff;
-}
-
-.calendar-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #F48FB1, #EC407A);
-  margin-top: 3px;
-  box-shadow: 0 0 4px rgba(244, 143, 177, 0.35);
-  animation: dotFadeIn 0.3s ease;
-}
-
-@keyframes dotFadeIn {
-  from {
-    transform: scale(0);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* 今日样式覆盖 */
-.schedule-calendar :deep(.el-calendar-table td.is-today) {
-  background: var(--pt-primary-light);
-}
-
-/* ========== 日程列表卡片 ========== */
-.schedule-list-card {
-  margin-bottom: 16px;
-  border-radius: var(--pt-radius) !important;
-  box-shadow: var(--pt-shadow);
-  border: 1px solid var(--pt-border) !important;
-  transition: 0.2s ease;
-}
-
-.schedule-list-card:hover {
-  box-shadow: var(--pt-shadow-hover);
-}
-
-.schedule-list-card :deep(.el-card__header) {
-  padding: 16px 20px;
-  background: var(--pt-card-bg-solid);
-  border-bottom: 1px solid var(--pt-border);
-}
-
-.schedule-list-card :deep(.el-card__body) {
-  padding: 16px 20px;
-}
-
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--c-bg);
 }
-
 .card-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: 'Figtree', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--pt-text);
-}
-
-/* ========== 日程项 ========== */
-.schedule-list {
-  display: flex;
-  flex-direction: column;
   gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--c-slate-800);
+}
+.soft-badge {
+  background: var(--c-bg);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-slate-600);
 }
 
-.schedule-item {
-  padding: 14px 16px;
-  border-radius: var(--pt-radius-sm);
-  background: var(--pt-card-bg-solid);
-  transition: 0.2s ease;
+/* ========== 日历覆盖样式 ========== */
+.calendar-card {
+  padding: 12px;
 }
-
-.schedule-item:hover {
-  background: var(--pt-primary-light);
+.schedule-calendar {
+  --el-calendar-border: transparent;
+  --el-calendar-header-border-bottom: transparent;
 }
-
-.schedule-item--completed {
-  opacity: 0.65;
+.schedule-calendar :deep(.el-calendar__header) {
+  padding: 8px 12px 8px;
 }
-
-.schedule-item-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+.schedule-calendar :deep(.el-calendar__title) {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--c-slate-800);
 }
-
-.schedule-time-indicator {
+.schedule-calendar :deep(.el-calendar-table td) {
+  border: none !important;
+  padding: 2px !important;
+}
+.schedule-calendar :deep(.el-calendar-table th) {
+  font-size: 13px;
+  color: var(--c-slate-400);
+  border: none !important;
+}
+.schedule-calendar :deep(.el-calendar-table td.is-selected) {
+  background-color: transparent;
+}
+.schedule-calendar :deep(.el-calendar-table td.is-today) {
+  background-color: transparent;
+}
+.schedule-calendar :deep(.el-calendar-table td.is-selected .calendar-day) {
+  background-color: var(--c-rose);
+  color: white;
+  border-radius: 50%;
   width: 32px;
   height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(251, 113, 133, 0.4);
+}
+.schedule-calendar :deep(.el-calendar-table td.is-today .calendar-day:not(.is-selected .calendar-day)) {
+  color: var(--c-rose);
+  font-weight: 700;
+}
+
+.schedule-calendar :deep(.el-calendar-day) {
+  height: 44px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+.calendar-day {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-slate-800);
+  transition: all 0.2s ease;
+}
+.schedule-calendar :deep(.el-calendar-table .prev-month .calendar-day),
+.schedule-calendar :deep(.el-calendar-table .next-month .calendar-day) {
+  color: var(--c-slate-400);
+  font-weight: 400;
+}
+.calendar-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  background-color: var(--c-rose);
+  position: absolute;
+  bottom: 2px;
+}
+
+/* ========== 日程列表项 ========== */
+.schedule-list {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.schedule-item {
+  background: var(--c-bg);
+  border-radius: 16px;
+  padding: 16px;
+}
+.schedule-item.is-completed {
+  opacity: 0.6;
+}
+.schedule-item-left {
+  display: flex;
+  gap: 16px;
+}
+.schedule-time-indicator {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
 }
-
-.schedule-time-indicator.status-completed {
-  background: #FCE4EC;
-}
-
-.schedule-time-indicator.status-pending {
-  background: var(--pt-card-bg-solid);
-  border: 1.5px solid var(--pt-border);
-}
-
-.schedule-time-indicator.status-other {
-  background: #FFF3E0;
-}
+.schedule-time-indicator.status-completed { background: var(--c-emerald-light); }
+.schedule-time-indicator.status-pending { background: white; border: 1px solid var(--c-slate-400); }
+.schedule-time-indicator.status-other { background: var(--c-amber-light); }
 
 .schedule-item-content {
   flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.schedule-item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
-
+.schedule-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
 .schedule-item-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--pt-text);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--c-slate-800);
+  line-height: 1.4;
 }
-
-.check-type-tag {
-  flex-shrink: 0;
-}
-
 .schedule-item-bottom {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-
 .schedule-item-time {
-  font-size: 12px;
-  color: var(--pt-text-muted);
+  font-size: 13px;
+  color: var(--c-slate-600);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
-
 .schedule-item-status {
   font-size: 12px;
-  font-weight: 500;
-  color: var(--pt-text-secondary);
+  font-weight: 600;
+  color: var(--c-slate-600);
 }
 
-/* ========== 空白提示 ========== */
-.empty-hint {
-  font-size: 12px;
-  color: var(--pt-text-muted);
-  margin: 0;
+/* ========== 自定义标签 ========== */
+.check-type-tag {
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
+.tag-danger { background: var(--c-rose-light); color: var(--c-rose); }
+.tag-warning { background: var(--c-amber-light); color: var(--c-amber); }
+.tag-success { background: var(--c-emerald-light); color: var(--c-emerald); }
+.tag-info { background: white; color: var(--c-slate-600); border: 1px solid var(--c-bg); }
 
-.dot-legend {
-  color: var(--pt-primary);
-  font-weight: 500;
-}
-
-/* ========== 所有检查概览卡片 ========== */
-.upcoming-card {
-  margin-bottom: 16px;
-  border-radius: var(--pt-radius) !important;
-  box-shadow: var(--pt-shadow);
-  border: 1px solid var(--pt-border) !important;
-  transition: 0.2s ease;
-}
-
-.upcoming-card:hover {
-  box-shadow: var(--pt-shadow-hover);
-}
-
-.upcoming-card :deep(.el-card__header) {
-  padding: 16px 20px;
-  background: var(--pt-card-bg-solid);
-  border-bottom: 1px solid var(--pt-border);
-}
-
-.upcoming-card :deep(.el-card__body) {
-  padding: 16px 20px;
-}
-
-/* ========== 所有日程列表 ========== */
+/* ========== 全部日程概览 ========== */
 .all-schedule-list {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.all-schedule-item {
+  background: var(--c-bg);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.all-schedule-item.is-completed {
+  opacity: 0.6;
+}
+.all-item-date {
+  background: white;
+  padding: 8px;
+  border-radius: 12px;
+  min-width: 54px;
+  text-align: center;
+}
+.all-date-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-slate-800);
+}
+.all-item-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  align-items: flex-start;
 }
-
-.all-schedule-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: var(--pt-radius-sm);
-  background: var(--pt-card-bg-solid);
-  transition: 0.2s ease;
-}
-
-.all-schedule-item:hover {
-  background: var(--pt-primary-light);
-}
-
-.all-schedule-item--completed {
-  opacity: 0.6;
-}
-
-.all-item-date {
-  min-width: 48px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.all-date-text {
-  font-family: 'Figtree', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--pt-text);
-}
-
-.all-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .all-item-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--pt-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-slate-800);
 }
 
-.all-item-status {
-  flex-shrink: 0;
+/* ========== 空状态 ========== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--c-slate-400);
+  text-align: center;
+}
+.empty-state p {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+  color: var(--c-slate-600);
+}
+.empty-hint {
+  font-size: 13px;
+}
+.dot-legend {
+  color: var(--c-rose);
+  font-weight: 700;
+  margin: 0 4px;
 }
 
-/* ========== 触摸反馈 ========== */
-.schedule-item {
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-
-.schedule-item:active {
-  transform: scale(0.97);
-}
-
-.tab-item {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ========== 响应式 ========== */
-@media (min-width: 769px) {
-  .schedule-container {
-    max-width: 560px;
-    padding: 32px 24px 48px;
-  }
-}
-
-@media (max-width: 430px) {
-  .schedule-container {
-    padding: 16px 14px 20px;
-    max-width: 480px;
-    gap: 10px;
-  }
-
-  .schedule-header {
-    margin-bottom: 16px;
-  }
-
-  .schedule-header .page-title {
-    font-size: 20px;
-  }
-
-  .page-subtitle {
-    font-size: 12px;
-  }
-
-  .schedule-calendar :deep(.el-calendar__title) {
-    font-size: 14px;
-  }
-
-  .schedule-calendar :deep(.el-calendar__header) {
-    padding: 6px 4px;
-  }
-
-  .schedule-calendar :deep(.el-calendar__button-group .el-button) {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table) {
-    table-layout: fixed;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table th) {
-    font-size: 11px;
-    padding: 4px 0;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table td) {
-    height: auto !important;
-    padding: 2px !important;
-    border-bottom: none !important;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table tbody tr) {
-    height: auto !important;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table tbody tr td) {
-    height: 36px !important;
-    padding: 2px !important;
-  }
-
-  .calendar-cell {
-    min-height: 0;
-    padding-top: 2px;
-  }
-
-  .calendar-day {
-    font-size: 12px;
-    line-height: 1.3;
-  }
-
-  .calendar-card :deep(.el-card__body) {
-    padding: 6px 8px;
-  }
-
-  .schedule-list-card :deep(.el-card__header),
-  .upcoming-card :deep(.el-card__header) {
-    padding: 12px 14px;
-  }
-
-  .schedule-list-card :deep(.el-card__body),
-  .upcoming-card :deep(.el-card__body) {
-    padding: 12px 14px;
-  }
-
-  .card-title-row {
-    font-size: 14px;
-  }
-
-  .schedule-item {
-    padding: 12px 14px;
-  }
-
-  .schedule-item-name {
-    font-size: 13px;
-  }
-
-  .schedule-item-time,
-  .schedule-item-status {
-    font-size: 11px;
-  }
-
-  .all-schedule-item {
-    padding: 10px 12px;
-    gap: 10px;
-  }
-
-  .all-item-date {
-    min-width: 42px;
-  }
-
-  .all-date-text {
-    font-size: 12px;
-  }
-
-  .all-item-name {
-    font-size: 13px;
-  }
-
-  .all-item-info {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-}
-
-@media (max-width: 374px) {
-  .schedule-container {
-    padding: 12px 10px 16px;
-  }
-
-  .schedule-header .page-title {
-    font-size: 18px;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table tbody tr td) {
-    height: 32px !important;
-    padding: 1px !important;
-  }
-
-  .schedule-calendar :deep(.el-calendar__header) {
-    padding: 4px 2px;
-  }
-
-  .schedule-calendar :deep(.el-calendar-table th) {
-    font-size: 10px;
-    padding: 3px 0;
-  }
-
-  .calendar-day {
-    font-size: 11px;
-  }
-
-  .schedule-item {
-    padding: 10px 12px;
-  }
-
-  .schedule-item-name {
-    font-size: 12px;
-  }
-
-  .all-schedule-item {
-    padding: 8px 10px;
-  }
-}
 </style>

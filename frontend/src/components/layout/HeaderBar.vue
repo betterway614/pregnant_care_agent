@@ -35,6 +35,7 @@ import { useAppStore } from '@/stores/app'
 const route = useRoute()
 const appStore = useAppStore()
 const currentTitle = computed(() => (route.meta?.title as string) || '工作台')
+const pendingCount = computed(() => (appStore as any).pendingCount || 0)
 
 async function refreshStats() {
   await appStore.fetchStats()
@@ -80,7 +81,7 @@ async function refreshStats() {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, var(--primary-light), var(--accent-light));
+  background: var(--avatar-gradient);
 }
 
 .user-name {

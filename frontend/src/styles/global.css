@@ -11,6 +11,8 @@
   --primary-bg: #E8F5E9;
   --primary-bg-light: #F1F8E9;
   --primary-gradient: linear-gradient(135deg, #2E7D32 0%, #43A047 50%, #66BB6A 100%);
+  /* 与顶栏用户头像一致的渐变（绿 → 青） */
+  --avatar-gradient: linear-gradient(135deg, var(--primary-light), var(--accent-light));
 
   /* 辅助色 */
   --accent: #00838F;
@@ -368,6 +370,47 @@ h1, h2, h3, h4, h5, h6 {
 
 .el-button--primary:active {
   transform: translateY(0);
+}
+
+/* 指定控件：与头像同色渐变 + 白字（覆盖上方 primary 绿渐变） */
+.el-button.brand-gradient-btn.el-button--primary {
+  background: var(--avatar-gradient) !important;
+  border: none !important;
+  color: #fff !important;
+  --el-button-text-color: #fff;
+  --el-button-hover-text-color: #fff;
+  --el-button-disabled-text-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 4px 14px rgba(77, 208, 225, 0.22), 0 2px 8px rgba(102, 187, 106, 0.18);
+}
+
+.el-button.brand-gradient-btn.el-button--primary:hover,
+.el-button.brand-gradient-btn.el-button--primary:focus {
+  background: var(--avatar-gradient) !important;
+  color: #fff !important;
+  filter: brightness(1.06);
+  box-shadow: 0 6px 18px rgba(77, 208, 225, 0.28), 0 3px 10px rgba(102, 187, 106, 0.22);
+}
+
+.el-button.brand-gradient-btn.el-button--primary:active {
+  filter: brightness(0.97);
+  color: #fff !important;
+}
+
+.el-button.brand-gradient-btn.el-button--primary.is-disabled,
+.el-button.brand-gradient-btn.el-button--primary.is-loading {
+  background: var(--avatar-gradient) !important;
+  color: #fff !important;
+  opacity: 0.65;
+}
+
+/* 表格操作列：左对齐横排，避免单行居中导致主按钮错位 */
+.table-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 28px;
 }
 
 .el-card {

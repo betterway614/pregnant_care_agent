@@ -108,7 +108,7 @@ async def submit_epds(req: EPDSSubmitRequest):
                 level="RED" if risk_level == "severe" else "ORANGE",
                 message=f"EPDS心理健康筛查结果：{risk_desc}（得分：{total_score}/30）",
                 details={"score": total_score, "risk_level": risk_level},
-                status="pending",
+                status="PENDING",
             )
             db.add(alert)
 
