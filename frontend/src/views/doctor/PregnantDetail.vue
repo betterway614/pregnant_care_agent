@@ -197,18 +197,19 @@ onMounted(() => {
 
 <style scoped>
 .detail-body {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .header-subtitle {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-muted);
   margin-left: 8px;
+  font-weight: 500;
 }
 
 .risk-tags {
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: 12px;
 }
 
@@ -216,73 +217,101 @@ onMounted(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  gap: 4px;
 }
 
 .abnormal-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 10px 0;
   font-size: 14px;
+  transition: background var(--transition-fast);
+}
+
+.abnormal-item:hover {
+  background: rgba(211, 47, 47, 0.04);
+  border-radius: var(--radius-xs);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .abnormal-item:not(:last-child) {
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border);
 }
 
 .point-detail-card {
-  margin-top: 12px;
-  padding: 12px 16px;
-  background: #f5f7fa;
-  border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  margin-top: 14px;
+  padding: 16px 18px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
 }
 
 .point-detail__header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .point-detail__name {
   font-size: 14px;
-  font-weight: 600;
-  color: #303133;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .point-detail__close {
   margin-left: auto;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.06);
-  color: #909399;
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
   cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.point-detail__close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
 }
 
 .point-detail__body {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
 }
 
 .point-detail__value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #409eff;
+  font-size: 28px;
+  font-weight: 800;
+  font-family: 'Figtree', sans-serif;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
 }
 
 .point-detail__unit {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .point-detail__date {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-muted);
   margin-left: auto;
+  font-weight: 500;
 }
 </style>

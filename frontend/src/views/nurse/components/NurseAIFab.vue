@@ -103,6 +103,40 @@
               </div>
             </div>
           </el-tab-pane>
+
+          <!-- 上报 Tab -->
+          <el-tab-pane label="上报" name="report">
+            <div class="report-tab">
+              <el-form :model="reportForm" label-position="top" size="small">
+                <el-form-item label="问题类型">
+                  <el-select v-model="reportForm.issue_type" placeholder="选择问题类型" style="width: 100%">
+                    <el-option label="风险预警" value="risk_alert" />
+                    <el-option label="异常数据" value="abnormal_data" />
+                    <el-option label="患者投诉" value="patient_complaint" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="优先级">
+                  <el-radio-group v-model="reportForm.priority">
+                    <el-radio-button label="low">低</el-radio-button>
+                    <el-radio-button label="medium">中</el-radio-button>
+                    <el-radio-button label="high">高</el-radio-button>
+                    <el-radio-button label="urgent">紧急</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item label="问题标题">
+                  <el-input v-model="reportForm.title" placeholder="简要描述问题" />
+                </el-form-item>
+                <el-form-item label="详细描述">
+                  <el-input v-model="reportForm.description" type="textarea" :rows="3" placeholder="详细描述问题情况" />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="submitReport" :loading="reportLoading" style="width: 100%">
+                    上报给医生
+                  </el-button>
+                </el-form-item>
+              </el-form>
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </div>
     </transition>
@@ -112,9 +146,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Close, MagicStick } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import NurseAIChat from '../NurseAIChat.vue'
-import { dashboardApi, nurseAiApi, aiAnalysisApi } from '@/api/endpoints'
+import { dashboardApi, nurseAiApi, aiAnalysisApi, collaborationApi } from '@/api/endpoints'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)
@@ -170,6 +205,42 @@ onMounted(() => {
   // 预加载孕妇列表
   loadPatientList()
 })
+
+// ==================== 问题上报 ====================
+const reportForm = ref({
+  issue_type: 'risk_alert',
+  priority: 'medium',
+  title: '',
+  description: '',
+})
+const reportLoading = ref(false)
+
+async function submitReport() {
+  if (!reportForm.value.title || !reportForm.value.description) {
+    ElMessage.warning('请填写问题标题和描述')
+    return
+  }
+
+  reportLoading.value = true
+  try {
+    const pregnantId = localStorage.getItem('currentPregnantId') || ''
+    await collaborationApi.reportIssue({
+      pregnant_id: pregnantId,
+      ...reportForm.value,
+    })
+    ElMessage.success('问题已上报给医生')
+    reportForm.value = {
+      issue_type: 'risk_alert',
+      priority: 'medium',
+      title: '',
+      description: '',
+    }
+  } catch (error) {
+    ElMessage.error('上报失败，请重试')
+  } finally {
+    reportLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -310,5 +381,12 @@ onMounted(() => {
   height: 100%;
   border: none;
   border-radius: 0;
+}
+
+/* 上报 Tab 样式 */
+.report-tab {
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
 }
 </style>

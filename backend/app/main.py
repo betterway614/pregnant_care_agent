@@ -20,6 +20,28 @@ from loguru import logger
 setup_logging()
 
 
+def _ensure_fgr_columns():
+    """为已有 SQLite 数据库添加 FGR 新列（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("fgr_assessments")]
+        new_cols = [
+            ("fgr_probability", "FLOAT"),
+            ("predicted_label", "VARCHAR(8)"),
+            ("model_confidence", "VARCHAR(8)"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_cols:
+                if col_name not in columns:
+                    conn.execute(sa.text(
+                        f"ALTER TABLE fgr_assessments ADD COLUMN {col_name} {col_type}"
+                    ))
+            conn.commit()
+    except Exception as e:
+        logger.warning("FGR 列迁移跳过: {}", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -40,6 +62,18 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("数据库已存在，跳过初始化")
 
+    # 对已有 SQLite 数据库添加 FGR 新列
+    _ensure_fgr_columns()
+
+    # FGR 模式：加载真实预测模型
+    if settings.fgr_mode:
+        try:
+            from fgr_compete import initialize_predictor
+            initialize_predictor()
+            logger.info("FGR 预测模型加载完成")
+        except Exception as e:
+            logger.error("FGR 模型初始化失败，回退到 mock 模式: {}", e)
+
     logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
     logger.info("  LLM模式: {}", settings.llm_mode)
     logger.info("  FGR模式: {}", settings.fgr_mode)
@@ -53,6 +87,11 @@ async def lifespan(app: FastAPI):
             logger.error("Mock数据注入失败: {}", e)
 
     yield
+    # 应用关闭
+    if settings.fgr_mode:
+        from fgr_compete.predictor import _PREDICTOR as fgr_predictor
+        if fgr_predictor is not None:
+            logger.info("FGR 预测模型已释放")
     logger.info("应用关闭")
 
 

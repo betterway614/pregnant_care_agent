@@ -70,8 +70,8 @@ def test_get_main_agent_has_knowledge():
             assert agent.knowledge is not None
 
 
-def test_get_main_agent_has_memory():
-    """验证缓存的主 Agent 启用了 Memory"""
+def test_get_main_agent_has_memory_default_enabled():
+    """验证主 Agent 的 agentic Memory 默认启用（SqliteDb 持久化）"""
     from app.core.agno_agent import get_main_agent
 
     mock_model = _make_mock_model()
@@ -81,16 +81,31 @@ def test_get_main_agent_has_memory():
             agent = get_main_agent()
             assert agent.enable_agentic_memory is True
             assert agent.add_history_to_context is True
-            assert agent.num_history_runs == 5
+            assert agent.num_history_runs == 8
+            assert agent.db is not None
 
 
-def test_followup_agent_not_cached():
-    """验证随访 Agent 每次创建新实例（含动态上下文）"""
-    from app.core.agno_agent import create_followup_agent
+def test_get_main_agent_has_memory_when_enabled():
+    """验证主 Agent 的 Plan-and-Execute 增强配置"""
+    from app.core.agno_agent import get_main_agent
 
     mock_model = _make_mock_model()
     with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
-            agent1 = create_followup_agent(patient_name="张三")
-            agent2 = create_followup_agent(patient_name="李四")
+            get_main_agent.cache_clear()
+            agent = get_main_agent()
+            assert agent.tool_call_limit == 8
+            assert agent.add_datetime_to_context is True
+            assert len(agent.tools) == 10
+
+
+def test_followup_agent_not_cached():
+    """验证随访生成 Agent 每次创建新实例"""
+    from app.core.agno_medical_agents import create_followup_generate_agent
+
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            agent1 = create_followup_generate_agent()
+            agent2 = create_followup_generate_agent()
             assert agent1 is not agent2

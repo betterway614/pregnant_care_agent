@@ -7,6 +7,8 @@
         <router-view />
       </main>
     </div>
+    <!-- Dr.智 AI 悬浮球 -->
+    <DoctorAIFab />
   </div>
 </template>
 
@@ -14,6 +16,7 @@
 import { onMounted } from 'vue'
 import Sidebar from './Sidebar.vue'
 import HeaderBar from './HeaderBar.vue'
+import DoctorAIFab from '@/views/doctor/components/DoctorAIFab.vue'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()

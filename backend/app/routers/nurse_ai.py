@@ -1,5 +1,6 @@
 """护士AI辅助 API"""
 import json
+import asyncio
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import desc, func
@@ -14,6 +15,18 @@ from ..core.json_parser import parse_llm_json
 from ..core.prompts import get_nurse_system_prompt
 from ..core.websocket_manager import ws_manager
 from ..config import settings
+
+# 护士端工具调用 → 用户友好的中文描述
+NURSE_TOOL_THINKING_MAP: dict[str, str] = {
+    "agno_query_patient_data": "正在查询患者数据...",
+    "agno_analyze_patient_comprehensive": "正在综合分析患者情况...",
+    "agno_create_followup_record": "正在创建随访记录...",
+    "agno_report_issue_to_doctor": "正在上报问题给医生...",
+    "agno_analyze_health_trends": "正在分析健康趋势...",
+    "agno_evaluate_vital_rules": "正在评估生命体征...",
+    "agno_search_knowledge": "正在查阅护理知识库...",
+    "agno_get_patient_context": "正在获取患者信息...",
+}
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
 
@@ -44,6 +57,12 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
             result = _fallback_nurse_analyze(pregnant, gest_week, gest_day, risk_tags, patient_data)
 
         # 分析完成后自动创建预警（如果检测到高风险）
+        # 应用患者安全后处理：拦截诊断性/用药性结论
+        from ..core.agno_guardrails import apply_patient_facing_safety
+        result.summary = apply_patient_facing_safety(result.summary or "")
+        result.risk_assessment = apply_patient_facing_safety(result.risk_assessment or "")
+        result.nursing_suggestions = apply_patient_facing_safety(result.nursing_suggestions or "")
+
         if "高风险" in (result.risk_assessment or "") or "异常" in (result.risk_assessment or ""):
             # 创建预警记录
             alert = Alert(
@@ -98,7 +117,7 @@ def recommend_followup_schedule(pregnant_id: str):
 
 def _collect_patient_data_for_nurse(db, pregnant_id: str, gest_week: int, gest_day: int) -> dict:
     """收集孕妇数据用于护士分析"""
-    from sqlalchemy import desc
+    from ..services.patient_context_service import get_recent_health_data, get_active_alerts
 
     data = {
         "gestational_week": f"{gest_week}+{gest_day}",
@@ -108,29 +127,24 @@ def _collect_patient_data_for_nurse(db, pregnant_id: str, gest_week: int, gest_d
         "recent_followup": None,
     }
 
-    # 最近健康数据（最近5条）
-    health_points = db.query(HealthDataPoint).filter(
-        HealthDataPoint.pregnant_id == pregnant_id
-    ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
+    # 最近健康数据
+    health_points = get_recent_health_data(db, pregnant_id, limit=10)
     for hp in health_points:
         data["recent_health"].append({
-            "metric": hp.metric_code,
-            "value": hp.value,
-            "unit": hp.unit,
-            "recorded_at": hp.recorded_at.isoformat() if hp.recorded_at else ""
+            "metric": hp["metric"],
+            "value": hp["value"],
+            "unit": hp["unit"],
+            "recorded_at": hp["recorded_at"],
         })
 
     # 活跃预警
-    alerts = db.query(Alert).filter(
-        Alert.pregnant_id == pregnant_id,
-        Alert.status == "PENDING"
-    ).order_by(desc(Alert.created_at)).limit(5).all()
+    alerts = get_active_alerts(db, pregnant_id, limit=5)
     for a in alerts:
         data["active_alerts"].append({
-            "level": a.level,
-            "message": a.message,
-            "source": a.trigger_source,
-            "created_at": a.created_at.isoformat() if a.created_at else ""
+            "level": a["level"],
+            "message": a["message"],
+            "source": a["source"],
+            "created_at": a["created_at"],
         })
 
     # 最近FGR评估
@@ -162,23 +176,30 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
                                  risk_tags: list, patient_data: dict) -> NurseAnalyzeResponse | None:
     """尝试通过LLM分析孕妇数据，失败返回None"""
     try:
+        prompt = _build_nurse_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, patient_data)
+
         if settings.agno_enabled:
-            from ..core.agno_client import get_agno_client
-            client = get_agno_client()
+            from ..core.agno_medical_agents import create_nurse_agent
+            agent = create_nurse_agent()
+            response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
+            content = response.content or ""
+            import json
+            try:
+                data = json.loads(content) if isinstance(content, str) else content
+            except json.JSONDecodeError:
+                return None
         else:
             client = get_llm_client()
-        prompt = _build_nurse_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, patient_data)
-        messages = [
-            {"role": "system", "content": get_nurse_system_prompt()},
-            {"role": "user", "content": prompt}
-        ]
-        response = await client.chat(messages)
-        if not response or not response.strip():
-            return None
-
-        data = parse_llm_json(response)
-        if not data:
-            return None
+            messages = [
+                {"role": "system", "content": get_nurse_system_prompt()},
+                {"role": "user", "content": prompt}
+            ]
+            response = await client.chat(messages)
+            if not response or not response.strip():
+                return None
+            data = parse_llm_json(response)
+            if not data:
+                return None
 
         return NurseAnalyzeResponse(
             pregnant_id=pregnant.pregnant_id,
@@ -338,24 +359,31 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
                                       template_id: str) -> FollowUpGenerateResponse | None:
     """尝试通过LLM生成随访对话脚本，失败返回None"""
     try:
-        if settings.agno_enabled:
-            from ..core.agno_client import get_agno_client
-            client = get_agno_client()
-        else:
-            client = get_llm_client()
         prompt = _build_followup_generate_prompt(pregnant, gest_week, gest_day, risk_tags,
                                                   patient_data, template_id)
-        messages = [
-            {"role": "system", "content": "你是一位经验丰富的产科随访护士，擅长与孕妇进行有效的电话/微信随访沟通。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：opening_message(开场白), questions(问题列表，每项含question和purpose字段), closing_message(结束语)"},
-            {"role": "user", "content": prompt}
-        ]
-        response = await client.chat(messages)
-        if not response or not response.strip():
-            return None
 
-        data = parse_llm_json(response)
-        if not data:
-            return None
+        if settings.agno_enabled:
+            from ..core.agno_medical_agents import create_followup_generate_agent
+            agent = create_followup_generate_agent()
+            response = await agent.arun(prompt)
+            content = response.content or ""
+            import json
+            try:
+                data = json.loads(content) if isinstance(content, str) else content
+            except json.JSONDecodeError:
+                return None
+        else:
+            client = get_llm_client()
+            messages = [
+                {"role": "system", "content": "你是一位经验丰富的产科随访护士，擅长与孕妇进行有效的电话/微信随访沟通。请严格按JSON格式返回，不要包含markdown代码块标记。返回字段：opening_message(开场白), questions(问题列表，每项含question和purpose字段), closing_message(结束语)"},
+                {"role": "user", "content": prompt}
+            ]
+            response = await client.chat(messages)
+            if not response or not response.strip():
+                return None
+            data = parse_llm_json(response)
+            if not data:
+                return None
 
         return FollowUpGenerateResponse(
             pregnant_id=pregnant.pregnant_id,
@@ -432,14 +460,54 @@ from ..core.prompts import get_nurse_chat_system_prompt
 
 @router.post("/chat/stream")
 async def nurse_chat_stream(req: dict):
-    """护士 AI 持续对话（SSE 流式）"""
+    """护士 AI 持续对话（SSE 流式）— 使用 Agno Agent 自动工具路由"""
     message = req.get("message", "")
     pregnant_id = req.get("pregnant_id", "")
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    # 构建护士 AI 上下文
+    # 使用 Agno Agent 处理（如果启用）
+    if settings.agno_enabled:
+        from ..core.agno_medical_agents import create_nurse_chat_agent
+        from agno.agent import RunEvent
+        agent = create_nurse_chat_agent()
+
+        async def agno_event_generator():
+            tool_steps: list[str] = []
+            try:
+                yield {"event": "thinking", "data": "小护正在思考..."}
+                async for chunk in agent.arun(
+                    input=message,
+                    stream=True,
+                    stream_events=True,
+                    user_id=pregnant_id or "anonymous",
+                ):
+                    event = chunk.event
+                    # 工具调用开始 → 发送 thinking 事件
+                    if event == RunEvent.tool_call_started and chunk.tool is not None:
+                        tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                        thinking_msg = NURSE_TOOL_THINKING_MAP.get(
+                            tool_name, f"正在处理（{tool_name}）..."
+                        )
+                        yield {"event": "thinking", "data": thinking_msg}
+                    # 工具调用完成 → 记录步骤
+                    elif event == RunEvent.tool_call_completed and chunk.tool is not None:
+                        tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                        step_desc = NURSE_TOOL_THINKING_MAP.get(tool_name, "")
+                        if step_desc and step_desc not in tool_steps:
+                            tool_steps.append(step_desc)
+                    # 流式内容输出
+                    elif event == RunEvent.run_content:
+                        if chunk.content and isinstance(chunk.content, str):
+                            yield {"event": "chunk", "data": chunk.content}
+            except Exception as e:
+                yield {"event": "error", "data": str(e)}
+            yield {"event": "done", "data": json.dumps({"source": "NURSE_AI", "tool_steps": tool_steps})}
+
+        return EventSourceResponse(agno_event_generator())
+
+    # 降级到普通 LLM 处理
     db = SessionLocal()
     patient_summary = ""
     try:
@@ -450,7 +518,6 @@ async def nurse_chat_stream(req: dict):
                 risk_text = "、".join(pregnant.risk_tags) if pregnant.risk_tags else "无"
                 patient_summary = f"当前查看的孕妇: {pregnant.display_name}, 孕{gw}周, 风险: {risk_text}"
 
-                # 获取最近健康数据
                 from datetime import datetime, timedelta
                 recent = db.query(HealthDataPoint).filter(
                     HealthDataPoint.pregnant_id == pregnant_id,
@@ -460,7 +527,6 @@ async def nurse_chat_stream(req: dict):
                     data_lines = [f"  - {r.metric_code}: {r.value}{r.unit}" for r in recent]
                     patient_summary += "\n近7日数据:\n" + "\n".join(data_lines)
 
-                # 获取活跃告警
                 alerts = db.query(Alert).filter(
                     Alert.pregnant_id == pregnant_id,
                     Alert.status == "PENDING"
@@ -473,25 +539,15 @@ async def nurse_chat_stream(req: dict):
 
     system_prompt = get_nurse_chat_system_prompt(patient_summary)
 
-    async def event_generator():
+    async def fallback_event_generator():
         try:
-            if settings.agno_enabled:
-                from ..core.agno_client import get_agno_client
-                client = get_agno_client()
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message},
-                ]
-                async for chunk in client.chat_stream(messages):
-                    yield {"event": "chunk", "data": chunk}
-            else:
-                client = get_llm_client()
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message},
-                ]
-                async for chunk in client.chat_stream(messages, max_tokens=1024):
-                    yield {"event": "chunk", "data": chunk}
+            client = get_llm_client()
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            async for chunk in client.chat_stream(messages, max_tokens=1024):
+                yield {"event": "chunk", "data": chunk}
         except Exception:
             from ..core.llm_client import MockLLMClient
             mock = MockLLMClient()
@@ -501,6 +557,7 @@ async def nurse_chat_stream(req: dict):
             ]
             async for chunk in mock.chat_stream(messages):
                 yield {"event": "chunk", "data": chunk}
+        yield {"event": "done", "data": json.dumps({"source": "NURSE_AI"})}
 
         yield {"event": "done", "data": json.dumps({"source": "NURSE_AI"})}
 
@@ -855,3 +912,101 @@ async def get_ai_analysis_history(pregnant_id: str, db: Session = Depends(get_db
         )
         for r in results
     ]
+
+
+# ==================== 医护协作 - 问题上报 ====================
+
+from ..schemas import NurseDoctorIssueCreate, NurseDoctorIssueResponse
+
+
+@router.post("/issues/report", response_model=NurseDoctorIssueResponse)
+async def report_issue(req: NurseDoctorIssueCreate):
+    """护士上报问题给医生"""
+    from ..models import NurseDoctorIssue
+    from ..core.websocket_manager import ws_manager
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
+        if not pregnant:
+            raise HTTPException(404, "孕妇不存在")
+
+        issue = NurseDoctorIssue(
+            pregnant_id=req.pregnant_id,
+            reported_by="current-nurse",
+            issue_type=req.issue_type,
+            title=req.title,
+            description=req.description,
+            priority=req.priority,
+            status="pending",
+        )
+        db.add(issue)
+        db.commit()
+        db.refresh(issue)
+
+        # 通过 WebSocket 推送给医生端
+        issue_data = {
+            "id": str(issue.id),
+            "pregnant_id": req.pregnant_id,
+            "patient_name": pregnant.display_name,
+            "issue_type": req.issue_type,
+            "title": req.title,
+            "description": req.description,
+            "priority": req.priority,
+            "status": "pending",
+            "created_at": issue.created_at.isoformat(),
+        }
+        await ws_manager.broadcast_alert({
+            **issue_data,
+            "message": f"[问题上报] {req.title}",
+            "level": "ORANGE" if req.priority in ("high", "urgent") else "YELLOW",
+        })
+
+        return NurseDoctorIssueResponse(
+            id=str(issue.id),
+            pregnant_id=req.pregnant_id,
+            patient_name=pregnant.display_name,
+            reported_by=issue.reported_by,
+            issue_type=issue.issue_type,
+            title=issue.title,
+            description=issue.description,
+            priority=issue.priority,
+            status=issue.status,
+            created_at=issue.created_at,
+        )
+    finally:
+        db.close()
+
+
+@router.get("/issues", response_model=list[NurseDoctorIssueResponse])
+async def list_issues(status: str = "pending"):
+    """获取护士上报的问题列表"""
+    from ..models import NurseDoctorIssue
+
+    db = SessionLocal()
+    try:
+        issues = db.query(NurseDoctorIssue).filter(
+            NurseDoctorIssue.status == status
+        ).order_by(NurseDoctorIssue.created_at.desc()).limit(20).all()
+
+        result = []
+        for issue in issues:
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == issue.pregnant_id).first()
+            result.append(NurseDoctorIssueResponse(
+                id=str(issue.id),
+                pregnant_id=issue.pregnant_id,
+                patient_name=pregnant.display_name if pregnant else "未知",
+                reported_by=issue.reported_by,
+                issue_type=issue.issue_type,
+                title=issue.title,
+                description=issue.description,
+                priority=issue.priority,
+                status=issue.status,
+                assigned_to=issue.assigned_to,
+                resolution=issue.resolution,
+                created_at=issue.created_at,
+            ))
+
+        return result
+    finally:
+        db.close()

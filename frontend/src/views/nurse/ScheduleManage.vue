@@ -300,22 +300,27 @@ onMounted(fetchPregnant)
   margin-bottom: 16px;
 }
 
-.search-bar {
-  margin-bottom: 20px;
-  align-items: center;
-}
-
 .publish-tag {
   margin-left: 8px;
 }
 
-/* 时间轴卡片 */
+/* 时间轴卡片 - 玻璃拟态 */
 .node-card {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  transition: all var(--transition);
+}
+
+.node-card:hover {
+  box-shadow: var(--shadow);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 .node-card__header {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .node-card__title-row {
@@ -329,13 +334,17 @@ onMounted(fetchPregnant)
   font-size: 15px;
   font-weight: 700;
   color: var(--primary);
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .node-card__item {
   font-size: 14px;
   color: var(--text-primary);
-  margin: 8px 0;
-  line-height: 1.5;
+  margin: 10px 0;
+  line-height: 1.6;
 }
 
 .node-card__footer {
@@ -344,7 +353,7 @@ onMounted(fetchPregnant)
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
@@ -356,7 +365,7 @@ onMounted(fetchPregnant)
 
 .node-card__date-label {
   font-size: 13px;
-  color: var(--text-light);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -368,6 +377,6 @@ onMounted(fetchPregnant)
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 </style>

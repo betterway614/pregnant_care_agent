@@ -12,7 +12,13 @@ export interface ChatMessage {
   loading?: boolean
   thinking?: boolean
   thinkingMessage?: string
+  toolSteps?: string[]  // Agent 工具调用步骤（已完成的中文描述列表）
+  currentStep?: string  // 当前正在执行的步骤描述
   feedback?: 'thumbs_up' | 'thumbs_down' | null
+  // 音频消息
+  audioUrl?: string       // blob URL，用于播放录音
+  audioDuration?: number  // 录音时长（秒）
+  messageType?: 'text' | 'audio'
 }
 
 const MAX_MESSAGES = 200
@@ -163,21 +169,24 @@ export const useChatStore = defineStore('chat', () => {
     abortController = controller
   }
 
-  /** 从后端加载对话历史 */
+  /** 从后端加载对话历史（persist_chat_messages 开启时有效） */
   async function loadFromBackend(pregnantId: string) {
     try {
       const res = await chatApi.getConversation(pregnantId, sessionId.value || undefined)
       const backendMessages = res.data?.messages || []
-      if (backendMessages.length > 0 && messages.value.length === 0) {
-        // 后端有历史且本地为空时，同步到本地
+      if (backendMessages.length > 0) {
+        // 以后端数据为准，合并到本地（去重：相同内容的相邻消息）
         const synced: ChatMessage[] = backendMessages.map((m, idx) => ({
           id: `backend_${idx}_${Date.now()}`,
           role: m.role as 'user' | 'assistant',
           content: m.content,
-          timestamp: new Date().toISOString(),
+          timestamp: m.created_at || new Date().toISOString(),
         }))
-        messages.value = synced
-        persist()
+        // 如果本地消息为空或后端消息更多，以后端为准
+        if (messages.value.length === 0 || backendMessages.length >= messages.value.length) {
+          messages.value = synced
+          persist()
+        }
       }
     } catch {
       // 加载失败不影响使用

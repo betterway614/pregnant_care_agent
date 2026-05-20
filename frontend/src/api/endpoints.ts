@@ -2,7 +2,7 @@
 import client from './client'
 import type {
   Pregnant, FollowUpRecord, Alert, ScheduleNode,
-  FgrAssessment, FgrTrendPoint, MedicalOrder,
+  FgrAssessment, FgrTrendPoint, PatientImageInfo, MedicalOrder,
   DashboardStats, ChatRequest, ChatResponse,
   HomeResponse, RecommendResponse,
   HealthTrendResponse, FollowUpHistoryResponse,
@@ -18,7 +18,7 @@ export const chatApi = {
   getProactive: (pregnantId: string) => client.get<{ message: string; greeting_type: string; icon: string }>(`/chat/proactive/${pregnantId}`),
   getTrends: (pregnantId: string) => client.get<{ trends: Array<{ metric: string; current_value: number; unit: string; trend: string; summary: string; is_normal: boolean | null }> }>(`/chat/trends/${pregnantId}`),
   getConversation: (pregnantId: string, sessionId?: string) =>
-    client.get<{ session_id: string; messages: Array<{ role: string; content: string }> }>(
+    client.get<{ session_id: string; messages: Array<{ role: string; content: string; session_id?: string; created_at?: string }> }>(
       `/chat/conversation/${pregnantId}`,
       { params: { session_id: sessionId } }
     ),
@@ -69,8 +69,20 @@ export const alertApi = {
 
 // FGR
 export const fgrApi = {
-  assess: (data: { pregnant_id: string; gestational_weeks: number; image_type?: string }) =>
-    client.post<FgrAssessment>('/fgr/assess', data),
+  // 评估已绑定图片的患者
+  assess: (pregnantId: string, data: { gestational_weeks: number; image_type?: string }) =>
+    client.post<FgrAssessment>(`/fgr/assess/${pregnantId}`, data),
+  // 上传图片 + 评估
+  upload: (pregnantId: string, formData: FormData) =>
+    client.post<FgrAssessment>(`/fgr/upload/${pregnantId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  // 获取患者绑定的超声图信息
+  patientImages: (pregnantId: string) =>
+    client.get<PatientImageInfo>(`/fgr/patient-images/${pregnantId}`),
+  // 获取超声原图 (返回 blob URL)
+  imageUrl: (pregnantId: string) => `/api/v1/fgr/image/${pregnantId}`,
+  // 趋势
   trend: (pregnantId: string) =>
     client.get<FgrTrendPoint[]>(`/fgr/trend/${pregnantId}`),
 }
@@ -174,6 +186,31 @@ async function nurseChatStream(
 export const doctorAiApi = {
   analyze: (pregnantId: string, query: string = '') =>
     client.post<any>(`/doctor/analyze/${pregnantId}`, { pregnant_id: pregnantId, query }),
+  chatStream: (data: { message: string; pregnant_id?: string }, callbacks: SSEStreamCallbacks, signal?: AbortSignal) =>
+    doctorChatStream(data, callbacks, signal),
+  generateReport: (pregnantId: string) =>
+    client.post<any>(`/doctor/report/${pregnantId}`),
+}
+
+// 医护协作
+export const collaborationApi = {
+  reportIssue: (data: { pregnant_id: string; issue_type: string; title: string; description: string; priority: string }) =>
+    client.post<any>('/nurse/issues/report', data),
+  listNurseIssues: (status: string = 'pending') =>
+    client.get<any[]>('/nurse/issues', { params: { status } }),
+  listDoctorIssues: (status: string = 'pending') =>
+    client.get<any[]>('/doctor/issues', { params: { status } }),
+  resolveIssue: (issueId: string, resolution: string) =>
+    client.put<any>(`/doctor/issues/${issueId}/resolve`, null, { params: { resolution } }),
+}
+
+/* ========== 医生 AI 流式对话 ========== */
+async function doctorChatStream(
+  data: { message: string; pregnant_id?: string },
+  callbacks: SSEStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  await _sseFetch('/api/v1/doctor/chat/stream', data, callbacks, signal)
 }
 
 // 医嘱解释

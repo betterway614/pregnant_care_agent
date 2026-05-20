@@ -1,5 +1,11 @@
 """AI-Care 后端启动入口"""
 import os
+import warnings
+
+# 抑制 agno 包中 EvalRunRecord 的 Pydantic 命名空间警告
+warnings.filterwarnings("ignore", message='Field "model_id" in EvalRunRecord.*')
+warnings.filterwarnings("ignore", message='Field "model_provider" in EvalRunRecord.*')
+
 import uvicorn
 
 if __name__ == "__main__":

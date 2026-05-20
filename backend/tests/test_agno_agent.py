@@ -26,13 +26,14 @@ def test_create_main_agent():
             assert agent.name == "小安"
 
 
-def test_create_followup_agent():
-    """验证随访 Agent 创建成功"""
-    from app.core.agno_agent import create_followup_agent
+def test_create_followup_generate_agent():
+    """验证随访生成 Agent 创建成功"""
+    from app.core.agno_medical_agents import create_followup_generate_agent, FollowUpGenerateOutput
 
     mock_model = _make_mock_model()
-    with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
-            agent = create_followup_agent(patient_name="小明", gest_week="30+2")
+            agent = create_followup_generate_agent()
             assert agent is not None
-            assert "小明" in str(agent.instructions)
+            assert agent.name == "小安-随访生成"
+            assert agent.output_schema == FollowUpGenerateOutput

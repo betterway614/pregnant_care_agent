@@ -335,10 +335,6 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
-.search-bar {
-  margin-bottom: 20px;
-}
-
 .pagination-wrapper {
   display: flex;
   justify-content: center;
@@ -349,19 +345,12 @@ onUnmounted(() => {
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 0;
-  gap: 12px;
+  color: var(--text-muted);
 }
 
 .empty-state p {
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 14px;
+  font-weight: 500;
 }
 </style>

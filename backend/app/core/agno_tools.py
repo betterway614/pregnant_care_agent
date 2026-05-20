@@ -11,6 +11,11 @@
 5. 趋势分析：analyze_health_trends
 6. 知识搜索：search_knowledge
 7. 心理筛查：get_epds_result
+
+上下文自动注入：
+- 通过 Agno 原生 RunContext 自动获取当前 user_id（即 pregnant_id）
+- 工具函数可通过 run_context.user_id 获取当前登录用户
+- Agent 无需手动传递 pregnant_id，RunContext 由框架自动注入
 """
 from __future__ import annotations
 
@@ -19,7 +24,17 @@ import json
 from datetime import datetime
 from uuid import UUID
 
+from agno.run import RunContext
 from agno.tools import tool
+
+
+def _resolve_pid(pregnant_id: str, run_context: RunContext | None) -> str:
+    """解析孕妇ID：优先使用传入值，为空时从 RunContext.user_id 获取"""
+    if pregnant_id:
+        return pregnant_id
+    if run_context is not None and hasattr(run_context, "user_id") and run_context.user_id:
+        return run_context.user_id
+    return ""
 
 
 # ==================== NLU 工具 ====================
@@ -65,7 +80,8 @@ def agno_check_emergency(text: str) -> dict:
 
 @tool
 def agno_evaluate_vital_rules(
-    pregnant_id: str,
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
     sbp: float = 0,
     dbp: float = 0,
     weight: float = 0,
@@ -78,10 +94,12 @@ def agno_evaluate_vital_rules(
     sleep_hours: float = 8,
     gest_week: float = 0,
 ) -> dict:
-    """评估生命体征规则，返回触发的告警列表。用于检测异常指标。"""
+    """评估生命体征规则，返回触发的告警列表。用于检测异常指标。
+    pregnant_id 可选，留空时自动使用当前登录用户。"""
+    pid = _resolve_pid(pregnant_id, run_context)
     from ..core.rule_engine import rule_engine
 
-    context = {
+    ctx = {
         "sbp": sbp, "dbp": dbp,
         "weight": weight,
         "fetal_movement": fetal_movement,
@@ -93,9 +111,9 @@ def agno_evaluate_vital_rules(
         "sleep_hours": sleep_hours,
         "gest_week": gest_week,
     }
-    alerts = rule_engine.evaluate_all(context)
+    alerts = rule_engine.evaluate_all(ctx)
     return {
-        "pregnant_id": pregnant_id,
+        "pregnant_id": pid,
         "alerts": alerts,
         "alert_count": len(alerts),
         "has_critical": any(a["level"] == "RED" for a in alerts),
@@ -164,7 +182,8 @@ def _save_health_data_sync(
 
 @tool
 async def agno_save_health_data(
-    pregnant_id: str,
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
     weight: float = 0,
     sbp: float = 0,
     dbp: float = 0,
@@ -174,10 +193,12 @@ async def agno_save_health_data(
     sleep_hours: float = 0,
     steps: float = 0,
 ) -> dict:
-    """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。异步安全，不阻塞事件循环。"""
+    """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。
+    pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    pid = _resolve_pid(pregnant_id, run_context)
     return await asyncio.to_thread(
         _save_health_data_sync,
-        pregnant_id, weight, sbp, dbp, fetal_movement,
+        pid, weight, sbp, dbp, fetal_movement,
         blood_sugar, heart_rate, sleep_hours, steps,
     )
 
@@ -185,33 +206,25 @@ async def agno_save_health_data(
 def _get_patient_context_sync(pregnant_id: str) -> dict:
     """同步获取患者上下文（在线程池中执行）"""
     from ..database import SessionLocal
-    from ..models import Pregnant, HealthDataPoint
-    from sqlalchemy import desc
+    from ..services.patient_context_service import get_patient_basic, get_recent_health_data
 
     db = SessionLocal()
     try:
-        pregnant = db.query(Pregnant).filter(
-            Pregnant.pregnant_id == pregnant_id
-        ).first()
-        if not pregnant:
+        basic = get_patient_basic(db, pregnant_id)
+        if not basic:
             return {"error": "孕妇不存在"}
 
-        gest_week = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
-        gest_day = pregnant.gestational_age_days % 7 if pregnant.gestational_age_days else 0
-
-        recent = db.query(HealthDataPoint).filter(
-            HealthDataPoint.pregnant_id == pregnant_id
-        ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
+        recent = get_recent_health_data(db, pregnant_id, limit=10)
 
         return {
             "pregnant_id": pregnant_id,
-            "display_name": pregnant.display_name,
-            "nickname": pregnant.nickname,
-            "gestational_week": f"{gest_week}+{gest_day}",
-            "gest_week": gest_week,
-            "risk_tags": pregnant.risk_tags or [],
+            "display_name": basic["display_name"],
+            "nickname": basic["nickname"],
+            "gestational_week": basic["gestational_week"],
+            "gest_week": basic["gest_week"],
+            "risk_tags": basic["risk_tags"],
             "recent_data": [
-                {"metric": d.metric_code, "value": d.value, "unit": d.unit}
+                {"metric": d["metric"], "value": d["value"], "unit": d["unit"]}
                 for d in recent
             ],
         }
@@ -220,28 +233,41 @@ def _get_patient_context_sync(pregnant_id: str) -> dict:
 
 
 @tool
-async def agno_get_patient_context(pregnant_id: str) -> dict:
-    """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。异步安全。"""
-    return await asyncio.to_thread(_get_patient_context_sync, pregnant_id)
+async def agno_get_patient_context(
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。
+    pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    pid = _resolve_pid(pregnant_id, run_context)
+    return await asyncio.to_thread(_get_patient_context_sync, pid)
 
 
 # ==================== 记忆查询工具 ====================
 
 
 @tool
-def agno_should_ask_weight(pregnant_id: str) -> dict:
-    """检查今天是否需要询问孕妇体重。返回是否需要询问。"""
+def agno_should_ask_weight(
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """检查今天是否需要询问孕妇体重。pregnant_id 可选，留空时自动使用当前登录用户。"""
+    pid = _resolve_pid(pregnant_id, run_context)
     from ..core.memory_manager import memory_manager
-    should_ask = memory_manager.should_ask_weight(pregnant_id)
-    return {"pregnant_id": pregnant_id, "should_ask": should_ask}
+    should_ask = memory_manager.should_ask_weight(pid)
+    return {"pregnant_id": pid, "should_ask": should_ask}
 
 
 @tool
-def agno_should_ask_bp(pregnant_id: str) -> dict:
-    """检查今天是否需要询问孕妇血压。返回是否需要询问。"""
+def agno_should_ask_bp(
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """检查今天是否需要询问孕妇血压。pregnant_id 可选，留空时自动使用当前登录用户。"""
+    pid = _resolve_pid(pregnant_id, run_context)
     from ..core.memory_manager import memory_manager
-    should_ask = memory_manager.should_ask_bp(pregnant_id)
-    return {"pregnant_id": pregnant_id, "should_ask": should_ask}
+    should_ask = memory_manager.should_ask_bp(pid)
+    return {"pregnant_id": pid, "should_ask": should_ask}
 
 
 # ==================== 趋势分析工具 ====================
@@ -286,33 +312,35 @@ def _analyze_health_trends_sync(pregnant_id: str) -> dict:
 
 
 @tool
-async def agno_analyze_health_trends(pregnant_id: str) -> dict:
-    """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。异步安全。"""
-    return await asyncio.to_thread(_analyze_health_trends_sync, pregnant_id)
+async def agno_analyze_health_trends(
+    pregnant_id: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。
+    pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    pid = _resolve_pid(pregnant_id, run_context)
+    return await asyncio.to_thread(_analyze_health_trends_sync, pid)
 
 
 # ==================== 知识搜索工具 ====================
 
 
 @tool
-def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
-    """搜索产科知识库，返回与问题最相关的文档片段。用于回答孕期知识问题。"""
+async def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
+    """搜索产科知识库，返回与问题最相关的文档片段。用于回答孕期知识问题。异步安全。"""
     from ..config import settings
 
     if not settings.rag_enabled:
         return {"results": [], "message": "RAG功能未启用"}
 
     try:
-        from ..core.agno_knowledge import agno_knowledge
-        import asyncio
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # 在已有事件循环中，使用同步 search
-            from ..core.agno_rag import agno_rag_engine
-            result = agno_rag_engine.search(query, top_k=top_k)
-        else:
-            result = loop.run_until_complete(agno_knowledge.asearch(query, top_k=top_k))
-        return {"results": result, "count": len(result)}
+        from ..core.agno_rag import agno_rag_engine
+
+        async def _search():
+            result = await agno_rag_engine.search(query, top_k=top_k)
+            return {"results": result, "count": len(result)}
+
+        return await _search()
     except Exception as e:
         return {"results": [], "error": str(e)}
 
@@ -379,4 +407,361 @@ MEDICAL_TOOLS = [
     agno_analyze_health_trends,
     agno_search_knowledge,
     agno_get_epds_result,
+]
+
+
+# ==================== 护士端专用工具 ====================
+
+
+@tool
+def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
+    """查询孕妇完整数据，包括基本信息、健康数据、预警、随访记录。
+    当护士需要了解孕妇整体情况时使用此工具。
+    查询结果会保存到 session_state，供后续工具使用。"""
+    pid = _resolve_pid(pregnant_id, run_context)
+    if not pid:
+        return {"error": "未指定孕妇"}
+
+    from ..database import SessionLocal
+    from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+        if not pregnant:
+            return {"error": "孕妇不存在"}
+
+        gest_days = pregnant.gestational_age_days or 0
+        result = {
+            "basic_info": {
+                "name": pregnant.display_name,
+                "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
+                "risk_tags": pregnant.risk_tags or [],
+            }
+        }
+
+        recent_data = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pid
+        ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
+        result["recent_health_data"] = [
+            {"metric": d.metric_code, "value": d.value, "unit": d.unit, "time": d.recorded_at.isoformat()}
+            for d in recent_data
+        ]
+
+        active_alerts = db.query(Alert).filter(
+            Alert.pregnant_id == pid, Alert.status == "PENDING"
+        ).all()
+        result["active_alerts"] = [
+            {"level": a.level, "message": a.message, "time": a.created_at.isoformat()}
+            for a in active_alerts
+        ]
+
+        recent_followups = db.query(FollowUpRecord).filter(
+            FollowUpRecord.pregnant_id == pid
+        ).order_by(desc(FollowUpRecord.created_at)).limit(3).all()
+        result["recent_followups"] = [
+            {"status": f.status, "complaint": f.chief_complaint, "time": f.created_at.isoformat()}
+            for f in recent_followups
+        ]
+
+        # 保存到 session_state，供后续工具使用
+        if run_context is not None:
+            if run_context.session_state is None:
+                run_context.session_state = {}
+            run_context.session_state["last_queried_patient"] = {
+                "pregnant_id": pid,
+                "data": result,
+            }
+
+        return result
+    finally:
+        db.close()
+
+
+@tool
+def agno_create_followup_record(
+    pregnant_id: str = "",
+    chief_complaint: str = "",
+    summary: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """创建随访记录草稿。
+    当护士需要记录随访内容时使用此工具。"""
+    pid = _resolve_pid(pregnant_id, run_context)
+    if not pid:
+        return {"error": "未指定孕妇"}
+
+    from ..database import SessionLocal
+    from ..models import Pregnant, FollowUpRecord
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+        if not pregnant:
+            return {"error": "孕妇不存在"}
+
+        gest_days = pregnant.gestational_age_days or 0
+        record = FollowUpRecord(
+            pregnant_id=pid,
+            gestational_week=str(gest_days // 7),
+            chief_complaint=chief_complaint,
+            summary=summary,
+            status="draft",
+        )
+        db.add(record)
+        db.commit()
+
+        return {"success": True, "record_id": str(record.id), "message": "随访记录已创建（草稿）"}
+    finally:
+        db.close()
+
+
+@tool
+def agno_report_issue_to_doctor(
+    pregnant_id: str = "",
+    title: str = "",
+    description: str = "",
+    priority: str = "medium",
+    run_context: RunContext | None = None,
+) -> dict:
+    """上报问题给医生。
+    当护士发现异常情况需要医生处理时使用此工具。
+    如果之前调用过 agno_query_patient_data，可以不传 pregnant_id，自动使用上次查询的孕妇。"""
+    # 从 session_state 获取上次查询的孕妇 ID
+    pid = _resolve_pid(pregnant_id, run_context)
+    if not pid and run_context and run_context.session_state:
+        last_patient = run_context.session_state.get("last_queried_patient")
+        if last_patient:
+            pid = last_patient.get("pregnant_id", "")
+
+    if not pid:
+        return {"error": "未指定孕妇，请先查询孕妇数据或指定 pregnant_id"}
+
+    from ..database import SessionLocal
+    from ..models import NurseDoctorIssue
+
+    db = SessionLocal()
+    try:
+        issue = NurseDoctorIssue(
+            pregnant_id=pid,
+            reported_by="nurse_ai",
+            issue_type="risk_alert",
+            title=title,
+            description=description,
+            priority=priority,
+            status="pending",
+        )
+        db.add(issue)
+        db.commit()
+
+        # 清除 session_state 中的查询记录
+        if run_context and run_context.session_state:
+            run_context.session_state.pop("last_queried_patient", None)
+
+        return {"success": True, "issue_id": str(issue.id), "message": "问题已上报给医生"}
+    finally:
+        db.close()
+
+
+# ==================== 医生端专用工具 ====================
+
+
+@tool
+def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
+    """综合分析孕妇数据，包括健康指标趋势、风险评估、医嘱评价。
+    当医生需要全面了解孕妇情况时使用此工具。
+    分析结果会保存到 session_state，供后续工具（如生成医嘱）使用。"""
+    pid = _resolve_pid(pregnant_id, run_context)
+    if not pid:
+        return {"error": "未指定孕妇"}
+
+    from ..database import SessionLocal
+    from ..models import Pregnant, HealthDataPoint, Alert, FgrAssessment, MedicalOrder
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+        if not pregnant:
+            return {"error": "孕妇不存在"}
+
+        gest_days = pregnant.gestational_age_days or 0
+        result = {
+            "patient_info": {
+                "name": pregnant.display_name,
+                "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
+                "risk_tags": pregnant.risk_tags or [],
+            }
+        }
+
+        metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar"]
+        trends = {}
+        for metric in metrics:
+            points = db.query(HealthDataPoint).filter(
+                HealthDataPoint.pregnant_id == pid,
+                HealthDataPoint.metric_code == metric,
+            ).order_by(desc(HealthDataPoint.recorded_at)).limit(5).all()
+            if points:
+                trends[metric] = [
+                    {"value": p.value, "unit": p.unit, "time": p.recorded_at.isoformat()}
+                    for p in points
+                ]
+        result["health_trends"] = trends
+
+        alerts = db.query(Alert).filter(
+            Alert.pregnant_id == pid
+        ).order_by(desc(Alert.created_at)).limit(5).all()
+        result["alerts"] = [
+            {"level": a.level, "message": a.message, "status": a.status, "time": a.created_at.isoformat()}
+            for a in alerts
+        ]
+
+        fgr = db.query(FgrAssessment).filter(
+            FgrAssessment.pregnant_id == pid
+        ).order_by(desc(FgrAssessment.assessed_at)).first()
+        if fgr:
+            result["fgr_assessment"] = {
+                "risk_level": fgr.risk_level,
+                "gestational_weeks": fgr.gestational_weeks,
+                "explanation": fgr.explanation,
+            }
+
+        orders = db.query(MedicalOrder).filter(
+            MedicalOrder.pregnant_id == pid
+        ).order_by(desc(MedicalOrder.created_at)).limit(3).all()
+        result["recent_orders"] = [
+            {"content": o.content, "status": o.status, "time": o.created_at.isoformat()}
+            for o in orders
+        ]
+
+        # 保存到 session_state，供后续工具使用
+        if run_context is not None:
+            if run_context.session_state is None:
+                run_context.session_state = {}
+            run_context.session_state["last_analyzed_patient"] = {
+                "pregnant_id": pid,
+                "analysis": result,
+            }
+
+        return result
+    finally:
+        db.close()
+
+
+@tool
+def agno_generate_medical_order(
+    pregnant_id: str = "",
+    content: str = "",
+    order_type: str = "standard",
+    run_context: RunContext | None = None,
+) -> dict:
+    """生成医嘱草稿。
+    当医生需要开具医嘱时使用此工具。
+    如果之前调用过 agno_analyze_patient_comprehensive，可以不传 pregnant_id，自动使用上次分析的孕妇。"""
+    # 从 session_state 获取上次分析的孕妇 ID
+    pid = _resolve_pid(pregnant_id, run_context)
+    if not pid and run_context and run_context.session_state:
+        last_analyzed = run_context.session_state.get("last_analyzed_patient")
+        if last_analyzed:
+            pid = last_analyzed.get("pregnant_id", "")
+
+    if not pid:
+        return {"error": "未指定孕妇，请先分析患者数据或指定 pregnant_id"}
+
+    from ..database import SessionLocal
+    from ..models import MedicalOrder
+
+    db = SessionLocal()
+    try:
+        order = MedicalOrder(
+            pregnant_id=pid,
+            content=content,
+            order_type=order_type,
+            source="AI_RECOMMENDED",
+            status="draft",
+        )
+        db.add(order)
+        db.commit()
+
+        # 清除 session_state 中的分析记录
+        if run_context and run_context.session_state:
+            run_context.session_state.pop("last_analyzed_patient", None)
+
+        return {"success": True, "order_id": str(order.id), "message": "医嘱草稿已生成"}
+    finally:
+        db.close()
+
+
+@tool
+def agno_handle_issue(
+    issue_id: str = "",
+    resolution: str = "",
+    run_context: RunContext | None = None,
+) -> dict:
+    """处理护士上报的问题。
+    当医生需要处理问题时使用此工具。"""
+    from uuid import UUID
+    from ..database import SessionLocal
+    from ..models import NurseDoctorIssue
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == UUID(issue_id)).first()
+        if not issue:
+            return {"error": "问题不存在"}
+
+        issue.status = "resolved"
+        issue.resolution = resolution
+        issue.resolved_at = datetime.utcnow()
+        db.commit()
+
+        return {"success": True, "message": "问题已处理"}
+    finally:
+        db.close()
+
+
+@tool
+def agno_query_clinical_guideline(topic: str = "") -> dict:
+    """查询临床指南和规范。
+    当医生需要查阅相关指南时使用此工具。"""
+    guidelines = {
+        "fgr": "ACOG Practice Bulletin No. 204: Fetal Growth Restriction (2021)",
+        "gdm": "ACOG Practice Bulletin No. 190: Gestational Diabetes Mellitus (2023)",
+        "hypertension": "ACOG Practice Bulletin No. 222: Gestational Hypertension and Preeclampsia (2023)",
+        "prenatal": "中华医学会妇产科学分会. 孕前和孕期保健指南(2022)",
+    }
+
+    topic_lower = topic.lower()
+    matched = []
+    for key, guideline in guidelines.items():
+        if key in topic_lower:
+            matched.append(guideline)
+
+    if not matched:
+        matched = list(guidelines.values())[:3]
+
+    return {"topic": topic, "guidelines": matched}
+
+
+# 护士端 Agent 工具集
+NURSE_TOOLS = [
+    agno_query_patient_data,
+    agno_create_followup_record,
+    agno_report_issue_to_doctor,
+    agno_analyze_health_trends,
+    agno_evaluate_vital_rules,
+    agno_search_knowledge,
+]
+
+# 医生端 Agent 工具集
+DOCTOR_TOOLS = [
+    agno_analyze_patient_comprehensive,
+    agno_generate_medical_order,
+    agno_handle_issue,
+    agno_query_clinical_guideline,
+    agno_analyze_health_trends,
+    agno_evaluate_vital_rules,
+    agno_search_knowledge,
 ]

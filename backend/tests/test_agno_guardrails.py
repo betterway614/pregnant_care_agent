@@ -94,3 +94,51 @@ def test_medical_safety_guardrail_callable():
     # 危险响应
     result = guardrail(response_content="诊断为高血压")
     assert result is not None
+
+
+# ==================== 通用安全后处理 ====================
+
+
+def test_check_output_safety_safe():
+    """验证安全文本通过检查"""
+    from app.core.agno_guardrails import check_output_safety, PATIENT_SAFETY_PATTERNS
+
+    result = check_output_safety("孕期注意休息", PATIENT_SAFETY_PATTERNS)
+    assert result is None
+
+
+def test_check_output_safety_blocks():
+    """验证违规文本被检测"""
+    from app.core.agno_guardrails import check_output_safety, PATIENT_SAFETY_PATTERNS
+
+    result = check_output_safety("根据您的症状，诊断为妊娠期糖尿病", PATIENT_SAFETY_PATTERNS)
+    assert result is not None
+
+
+def test_apply_patient_facing_safety():
+    """验证患者面向安全后处理追加警示"""
+    from app.core.agno_guardrails import apply_patient_facing_safety
+
+    # 安全文本
+    safe = apply_patient_facing_safety("建议多休息")
+    assert safe == "建议多休息"
+
+    # 违规文本
+    blocked = apply_patient_facing_safety("诊断为子痫前期")
+    assert "请咨询医生" in blocked
+
+
+def test_apply_doctor_draft_safety():
+    """验证医生草稿安全后处理"""
+    from app.core.agno_guardrails import apply_doctor_draft_safety
+
+    # 安全文本
+    safe = apply_doctor_draft_safety("建议复查尿蛋白")
+    assert safe == "建议复查尿蛋白"
+
+    # 医生草稿中允许"建议用药"等临床术语
+    draft_safe = apply_doctor_draft_safety("建议用药方案需医生确认")
+    assert "需医生确认" in draft_safe
+    # 但应拦截确定性结论
+    blocked = apply_doctor_draft_safety("确诊为妊娠期糖尿病")
+    assert "需医生审核" in blocked

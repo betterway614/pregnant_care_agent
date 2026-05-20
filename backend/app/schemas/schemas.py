@@ -109,8 +109,10 @@ class ChatSendRequest(BaseModel):
     pregnant_id: str
     message: str
     session_id: str = ""
-    message_type: str = "TEXT"
+    message_type: str = "TEXT"  # TEXT | AUDIO | IMAGE
     record_id: Optional[str] = None  # 随访记录ID，存在时进入随访Agent模式
+    audio_data: Optional[str] = None  # base64 编码的音频数据（message_type=AUDIO 时使用）
+    audio_format: str = "webm"  # 音频格式: webm, wav, mp3
 
 
 class ChatNLUResult(BaseModel):
@@ -201,20 +203,33 @@ class FollowUpTrigger(BaseModel):
 
 # === FGR ===
 class FgrAssessRequest(BaseModel):
-    pregnant_id: str
-    gestational_weeks: float
+    pregnant_id: str = ""
+    gestational_weeks: float = 28.0
     image_type: str = "AC"
-    image_base64: Optional[str] = None
 
 
 class FgrAssessResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     case_id: str
     risk_level: str
     risk_label: str
+    fgr_probability: Optional[float] = None
+    predicted_label: Optional[str] = None
+    model_confidence: Optional[str] = None
     confidence_interval: dict = {}
     explanation: str = ""
     processing_time: int = 0
     hardware: str = "NPU"
+    fold_details: Optional[list[dict]] = None
+
+
+class PatientImageResponse(BaseModel):
+    """患者绑定的超声图像信息"""
+    pregnant_id: str
+    has_image: bool
+    image_url: str = ""
+    display_name: str = ""
 
 
 class FgrTrendPoint(BaseModel):
@@ -421,3 +436,29 @@ class FollowUpHistoryRecord(BaseModel):
 class FollowUpHistoryResponse(BaseModel):
     pregnant_id: str
     records: list[FollowUpHistoryRecord] = []
+
+
+# === 医护协作 ===
+class NurseDoctorIssueCreate(BaseModel):
+    pregnant_id: str
+    issue_type: str = "risk_alert"
+    title: str
+    description: str
+    priority: str = "medium"
+
+
+class NurseDoctorIssueResponse(BaseModel):
+    id: str
+    pregnant_id: str
+    patient_name: str
+    reported_by: str
+    issue_type: str
+    title: str
+    description: str
+    priority: str
+    status: str
+    assigned_to: Optional[str] = None
+    resolution: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

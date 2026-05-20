@@ -38,7 +38,7 @@ def seed_all():
 
 
 def _seed_patients(db):
-    """生成20条匿名孕妇（含BMI分层）"""
+    """生成20条匿名孕妇（含BMI分层），前10位绑定超声图像（模拟HIS集成）"""
     existing = db.query(Pregnant).count()
     if existing > 0:
         logger.info("孕妇数据已存在，跳过")
@@ -48,13 +48,13 @@ def _seed_patients(db):
         ([], "正常"),
         ([], "正常"),
         (["FGR高危"], "FGR"),
-        (["FGR高危"], "FGR"),
+        ([], "正常"),
         (["GDM"], "GDM"),
+        (["FGR高危"], "FGR"),
         ([], "正常"),
-        (["高血压"], "高血压"),
-        ([], "正常"),
+        (["FGR高危"], "FGR"),
         (["FGR高危", "GDM"], "FGR+GDM"),
-        ([], "正常"),
+        (["FGR高危"], "FGR"),
         (["高血压"], "高血压"),
         ([], "正常"),
         (["FGR高危"], "FGR"),
@@ -67,6 +67,9 @@ def _seed_patients(db):
         (["GDM"], "GDM"),
     ]
 
+    # 记录前10位患者ID，用于图片绑���
+    patient_ids_1_10 = []
+
     base_date = datetime.now() - timedelta(days=120)
     for i in range(20):
         gest_days = random.randint(84, 280)  # 12w ~ 40w
@@ -77,10 +80,14 @@ def _seed_patients(db):
                      "欣怡", "雅茹", "婉清", "若兰", "雪婷", "慧敏", "嘉玲", "秀英",
                      "美琳", "丽华", "晓红", "艳芳"]
         phones = [f"138****{random.randint(1000,9999)}" for _ in range(20)]
-        hospital_ids = [f"H2025{i:02d}" for i in range(1, 21)]
+        hospital_ids = [f"H2025{i+1:02d}" for i in range(20)]
+
+        pid = f"PT_{uuid.uuid4().hex[:12].upper()}"
+        if i < 10:
+            patient_ids_1_10.append(f"孕妇{i+1:02d}|{pid}")
 
         pregnant = Pregnant(
-            pregnant_id=f"PT_{uuid.uuid4().hex[:12].upper()}",
+            pregnant_id=pid,
             display_name=f"孕妇{i+1:02d}",
             nickname=nicknames[i],
             phone=phones[i],
@@ -93,6 +100,46 @@ def _seed_patients(db):
         )
         db.add(pregnant)
     logger.info("生成20 条孕妇数据")
+
+    # 绑定超声图像：孕妇01-05 → NOR，孕妇06-10 → FGR
+    _assign_patient_images(patient_ids_1_10)
+
+
+def _assign_patient_images(patient_ids: list[str]) -> None:
+    """将10张超声图像绑定到前10位患者（脱敏：仅存储 file_id 映射）"""
+    try:
+        from fgr_compete.image_registry import get_image_pairs, save_patient_map
+        nor_pairs, fgr_pairs = get_image_pairs()
+
+        if len(nor_pairs) < 5 or len(fgr_pairs) < 5:
+            logger.warning("超声图像不足（NOR={} FGR={}），跳过绑定", len(nor_pairs), len(fgr_pairs))
+            return
+
+        mapping = {}
+        # 孕妇01-05 → NOR 图像
+        for idx in range(5):
+            display, pid = patient_ids[idx].split("|", 1)
+            raw_path, mask_path = nor_pairs[idx]
+            mapping[pid] = {
+                "display_name": display,
+                "raw_path": raw_path,
+                "mask_path": mask_path,
+                "group": "NOR",
+            }
+        # 孕妇06-10 → FGR 图像
+        for idx in range(5):
+            display, pid = patient_ids[idx + 5].split("|", 1)
+            raw_path, mask_path = fgr_pairs[idx]
+            mapping[pid] = {
+                "display_name": display,
+                "raw_path": raw_path,
+                "mask_path": mask_path,
+                "group": "FGR",
+            }
+        save_patient_map(mapping)
+        logger.info("已绑定10位患者的超声图像（01-05: NOR, 06-10: FGR）")
+    except ImportError:
+        logger.warning("image_registry 不可用，跳过图片绑定")
 
 
 def _seed_health_data(db):
@@ -128,8 +175,10 @@ def _seed_health_data(db):
     ]
 
     for pregnant in pregnant:
-        # 根据 display_name 解析索引
-        idx = int(pregnant.display_name.replace("孕妇", "")) - 1 if pregnant.display_name else 0
+        # 根据 display_name 解析索引（跳过非"孕妇N"名称的图片患者）
+        if not pregnant.display_name or not pregnant.display_name.startswith("孕妇"):
+            continue
+        idx = int(pregnant.display_name.replace("孕妇", "")) - 1
         idx = max(0, min(idx, 19))
         bmi = bmi_configs[idx]
         pre_weight = bmi["pre_weight"]

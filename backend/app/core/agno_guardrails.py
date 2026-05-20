@@ -4,6 +4,7 @@
 1. pre-hook (EmergencyGuardrail): 确定性紧急检测，不依赖 LLM
 2. 指令强化: 系统提示词中强调安全规则
 3. MedicalSafetyGuardrail: 输出层拦截诊断性结论
+4. 通用安全后处理：供护士/医生分析路径复用
 """
 from __future__ import annotations
 
@@ -102,3 +103,56 @@ class MedicalSafetyGuardrail:
             if pattern in response:
                 return "小安不能提供诊断或用药建议。请咨询医生获取专业意见。"
         return None
+
+
+# ==================== 通用安全后处理 ====================
+
+# 面向患者的输出不可含诊断性结论
+PATIENT_SAFETY_PATTERNS = [
+    "诊断为", "诊断是", "确诊",
+    "建议用药", "建议服用", "处方",
+    "可以吃药", "应该吃药", "用药方案",
+    "治疗方案如下", "请按以下方案",
+]
+
+# 医生工作台草稿允许更多医学内容，但仍禁止确定性诊断
+DOCTOR_SAFETY_PATTERNS = [
+    "确诊", "确定诊断",
+    "无需进一步检查",
+    "没有风险", "完全正常",
+]
+
+
+def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
+    """通用输出安全检查
+
+    Args:
+        text: 待检查文本
+        patterns: 违规关键词列表
+
+    Returns:
+        违规提示词（检测到违规时）
+        None（安全时）
+    """
+    if not text:
+        return None
+    for pattern in patterns:
+        if pattern in text:
+            return f"输出包含受限内容（{pattern}），已拦截"
+    return None
+
+
+def apply_patient_facing_safety(text: str) -> str:
+    """面向患者的输出安全检查，违规时追加警示"""
+    result = check_output_safety(text, PATIENT_SAFETY_PATTERNS)
+    if result:
+        return text + f"\n\n⚠️ {result}。请咨询医生获取专业意见。"
+    return text
+
+
+def apply_doctor_draft_safety(text: str) -> str:
+    """医生工作台草稿的安全检查，违规时追加提醒"""
+    result = check_output_safety(text, DOCTOR_SAFETY_PATTERNS)
+    if result:
+        return text + f"\n\n⚠️ {result}。以上分析需医生审核确认。"
+    return text

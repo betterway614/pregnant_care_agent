@@ -44,6 +44,11 @@
         <el-option label="中孕期 (15-28周)" value="mid" />
         <el-option label="晚孕期 (29周~)" value="late" />
       </el-select>
+      <el-select v-model="filterImage" placeholder="图片状态" clearable style="width: 130px" @change="handleFilter">
+        <el-option label="全部" value="" />
+        <el-option label="已绑定图片" value="has" />
+        <el-option label="暂无图片" value="none" />
+      </el-select>
     </div>
 
     <!-- FGR孕妇列表 -->
@@ -60,6 +65,21 @@
               <span class="gest-week">{{ calcGestationalWeek(row.gestational_age_days) }}周</span>
             </template>
           </el-table-column>
+          <el-table-column label="超声图像" width="90" align="center">
+            <template #default="{ row }">
+              <el-tooltip :content="hasImage(row.pregnant_id) ? '点击查看超声图' : '暂无绑定图像'" placement="top">
+                <el-button
+                  text
+                  :type="hasImage(row.pregnant_id) ? 'primary' : 'info'"
+                  size="small"
+                  :icon="PictureFilled"
+                  @click.stop="previewImage(row)"
+                >
+                  {{ hasImage(row.pregnant_id) ? '查看' : '上传' }}
+                </el-button>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column label="最近FGR等级" width="130">
             <template #default="{ row }">
               <RiskBadge :level="getLatestFgrLevel(row)" />
@@ -70,10 +90,18 @@
               <span class="confidence-range">{{ formatConfidence(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="220" fixed="right">
             <template #default="{ row }">
+              <el-button
+                type="primary"
+                size="small"
+                :loading="assessingIds.has(row.pregnant_id)"
+                @click.stop="handleAnalyze(row)"
+              >
+                分析
+              </el-button>
               <el-button text type="primary" size="small" @click.stop="openTrendDrawer(row)">
-                查看趋势
+                趋势
               </el-button>
             </template>
           </el-table-column>
@@ -108,6 +136,124 @@
       </div>
     </div>
 
+    <!-- 超声图像预览弹窗 -->
+    <el-dialog v-model="imagePreviewVisible" title="超声图像" width="600px" destroy-on-close>
+      <div v-if="imagePreviewId && hasImage(imagePreviewId)" style="text-align: center">
+        <el-image
+          :src="fgrApi.imageUrl(imagePreviewId)"
+          style="max-width: 100%; max-height: 500px; border-radius: 8px"
+          fit="contain"
+        />
+        <p style="margin-top: 12px; color: var(--text-secondary); font-size: 13px">
+          {{ imagePreviewName }} · 孕{{ calcGestationalWeek(imagePreviewGestDays) }}周
+        </p>
+      </div>
+      <div v-else style="text-align: center; padding: 40px">
+        <el-icon :size="48" color="var(--text-light)"><PictureFilled /></el-icon>
+        <p style="margin-top: 12px; color: var(--text-secondary)">该患者暂无绑定超声图像</p>
+        <el-button type="primary" style="margin-top: 12px" @click="imagePreviewVisible = false; openUploadDialog(imagePreviewPregnant!)">
+          上传超声图像
+        </el-button>
+      </div>
+    </el-dialog>
+
+    <!-- 上传超声图像弹窗 -->
+    <el-dialog v-model="uploadDialogVisible" title="上传超声图像" width="500px" destroy-on-close @closed="resetUploadForm">
+      <div v-if="uploadPregnant">
+        <el-descriptions :column="2" border style="margin-bottom: 20px">
+          <el-descriptions-item label="孕妇">{{ uploadPregnant.display_name }}</el-descriptions-item>
+          <el-descriptions-item label="孕周">{{ calcGestationalWeek(uploadPregnant.gestational_age_days) }}周</el-descriptions-item>
+        </el-descriptions>
+
+        <el-form label-position="top">
+          <el-form-item label="超声原图 (PNG/JPEG)">
+            <el-upload
+              ref="imageUploadRef"
+              :auto-upload="false"
+              :limit="1"
+              accept="image/png,image/jpeg"
+              :on-change="(f: any) => uploadImageFile = f.raw"
+              :on-remove="() => uploadImageFile = null"
+              drag
+            >
+              <el-icon :size="32"><UploadFilled /></el-icon>
+              <div>拖拽或点击上传超声原图</div>
+            </el-upload>
+          </el-form-item>
+          <el-form-item label="分割掩膜图 (PNG, 二值图)">
+            <el-upload
+              ref="maskUploadRef"
+              :auto-upload="false"
+              :limit="1"
+              accept="image/png"
+              :on-change="(f: any) => uploadMaskFile = f.raw"
+              :on-remove="() => uploadMaskFile = null"
+              drag
+            >
+              <el-icon :size="32"><UploadFilled /></el-icon>
+              <div>拖拽或点击上传掩膜图</div>
+            </el-upload>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="uploadDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="uploading"
+          :disabled="!uploadImageFile || !uploadMaskFile"
+          @click="handleUploadSubmit"
+        >
+          上传并分析
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 分析结果弹窗 -->
+    <el-dialog v-model="resultDialogVisible" title="FGR 分析结果" width="560px" destroy-on-close>
+      <div v-if="lastResult" class="result-body">
+        <div class="result-main">
+          <span class="result-label">风险评估：</span>
+          <RiskBadge :level="lastResult.risk_level" />
+          <span class="result-prob">
+            FGR 概率 <strong>{{ ((lastResult.fgr_probability ?? 0) * 100).toFixed(1) }}%</strong>
+          </span>
+        </div>
+        <div class="result-row">
+          <span>预测标签：<el-tag size="small">{{ lastResult.predicted_label ?? '--' }}</el-tag></span>
+          <span>置信度：<el-tag size="small" :type="confidenceTagType(lastResult.model_confidence)">{{ lastResult.model_confidence ?? '--' }}</el-tag></span>
+        </div>
+        <div class="result-row">
+          <span>置信区间：{{ formatCI(lastResult.confidence_interval) }}</span>
+          <span>耗时：{{ lastResult.processing_time }}ms</span>
+        </div>
+        <el-divider />
+        <p class="result-explain">{{ lastResult.explanation }}</p>
+        <el-collapse v-if="lastResult.fold_details?.length" style="margin-top: 12px">
+          <el-collapse-item title="5折预测明细">
+            <el-table :data="lastResult.fold_details" size="small" stripe>
+              <el-table-column prop="fold" label="折" width="50" />
+              <el-table-column label="ResNet" width="80">
+                <template #default="{ row }">{{ (row.p_resnet * 100).toFixed(1) }}%</template>
+              </el-table-column>
+              <el-table-column label="SVM" width="80">
+                <template #default="{ row }">{{ (row.p_svm * 100).toFixed(1) }}%</template>
+              </el-table-column>
+              <el-table-column label="融合权重" width="80">
+                <template #default="{ row }">{{ row.fusion_weight }}</template>
+              </el-table-column>
+              <el-table-column label="融合概率">
+                <template #default="{ row }">{{ (row.p_fused * 100).toFixed(1) }}%</template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="resultDialogVisible = false">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 趋势图抽屉 -->
     <el-drawer
       v-model="trendDrawerVisible"
@@ -117,7 +263,6 @@
     >
       <div v-loading="trendLoading" style="min-height: 300px">
         <template v-if="trendData.length">
-          <!-- 趋势统计头部 -->
           <div class="trend-summary">
             <div class="trend-summary__item">
               <span class="trend-summary__label">当前风险</span>
@@ -135,15 +280,9 @@
             </div>
           </div>
 
-          <!-- CSS 柱状趋势图 -->
           <div class="bar-chart">
             <div class="bar-chart__y-axis">
-              <span>1.0</span>
-              <span>0.8</span>
-              <span>0.6</span>
-              <span>0.4</span>
-              <span>0.2</span>
-              <span>0.0</span>
+              <span>1.0</span><span>0.8</span><span>0.6</span><span>0.4</span><span>0.2</span><span>0.0</span>
             </div>
             <div class="bar-chart__canvas">
               <div class="bar-chart__grid">
@@ -155,25 +294,16 @@
                 class="bar-chart__bar-group"
                 :style="{ left: `${(idx / (trendData.length - 1 || 1)) * 100}%` }"
               >
-                <div
-                  class="bar-chart__bar"
-                  :style="{ height: `${point.risk_score * 100}%`, background: getBarColor(point.risk_score) }"
-                >
-                  <el-tooltip
-                    :content="`${point.gestational_weeks}周: ${(point.risk_score * 100).toFixed(0)}分`"
-                    placement="top"
-                  >
+                <div class="bar-chart__bar" :style="{ height: `${point.risk_score * 100}%`, background: getBarColor(point.risk_score) }">
+                  <el-tooltip :content="`${point.gestational_weeks}周: ${(point.risk_score * 100).toFixed(0)}分`" placement="top">
                     <div class="bar-chart__dot" :style="{ background: getBarColor(point.risk_score) }" />
                   </el-tooltip>
                 </div>
-                <span class="bar-chart__label" v-if="trendData.length <= 15 || idx % Math.ceil(trendData.length / 10) === 0">
-                  {{ point.gestational_weeks }}w
-                </span>
+                <span class="bar-chart__label" v-if="trendData.length <= 15 || idx % Math.ceil(trendData.length / 10) === 0">{{ point.gestational_weeks }}w</span>
               </div>
             </div>
           </div>
 
-          <!-- 趋势数据表格 -->
           <el-divider />
           <h4 style="margin-bottom: 12px; font-size: 14px">历史评估记录</h4>
           <el-table :data="trendData" stripe size="small" max-height="240">
@@ -184,14 +314,10 @@
               <template #default="{ row }">{{ (row.risk_score * 100).toFixed(1) }}%</template>
             </el-table-column>
             <el-table-column label="置信区间" width="120" align="center">
-              <template #default="{ row }">
-                {{ (row.confidence_lower * 100).toFixed(1) }}% ~ {{ (row.confidence_upper * 100).toFixed(1) }}%
-              </template>
+              <template #default="{ row }">{{ (row.confidence_lower * 100).toFixed(1) }}% ~ {{ (row.confidence_upper * 100).toFixed(1) }}%</template>
             </el-table-column>
             <el-table-column label="评估时间" width="90" align="center">
-              <template #default="{ row }">
-                {{ formatTime(row.assessed_at) }}
-              </template>
+              <template #default="{ row }">{{ formatTime(row.assessed_at) }}</template>
             </el-table-column>
           </el-table>
         </template>
@@ -205,23 +331,146 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Search, Refresh, InfoFilled, TrendCharts } from '@element-plus/icons-vue'
+import { ref, computed, onMounted, reactive } from 'vue'
+import { Search, Refresh, InfoFilled, TrendCharts, PictureFilled, UploadFilled } from '@element-plus/icons-vue'
 import { dashboardApi, fgrApi, alertApi } from '@/api/endpoints'
-import type { Pregnant, FgrAssessment, FgrTrendPoint, Alert } from '@/types'
+import type { Pregnant, FgrAssessment, FgrTrendPoint, PatientImageInfo, Alert } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const searchQuery = ref('')
 const filterRisk = ref('')
 const filterGestWeek = ref('')
+const filterImage = ref('')
 const pregnant = ref<Pregnant[]>([])
 const alertList = ref<Alert[]>([])
 const trendDrawerVisible = ref(false)
 const trendPregnant = ref<Pregnant | null>(null)
 const trendData = ref<FgrTrendPoint[]>([])
 const trendLoading = ref(false)
+
+// 图片相关状态
+const patientImageMap = reactive<Record<string, PatientImageInfo>>({})
+const imagePreviewVisible = ref(false)
+const imagePreviewId = ref('')
+const imagePreviewName = ref('')
+const imagePreviewGestDays = ref(0)
+const imagePreviewPregnant = ref<Pregnant | null>(null)
+
+// 上传相关状态
+const uploadDialogVisible = ref(false)
+const uploadPregnant = ref<Pregnant | null>(null)
+const uploadImageFile = ref<File | null>(null)
+const uploadMaskFile = ref<File | null>(null)
+const uploading = ref(false)
+
+// 分析相关状态
+const assessingIds = reactive(new Set<string>())
+const resultDialogVisible = ref(false)
+const lastResult = ref<FgrAssessment | null>(null)
+
+/** 是否有绑定图片 */
+function hasImage(pid: string): boolean {
+  return patientImageMap[pid]?.has_image ?? false
+}
+
+/** 预览超声图像 */
+function previewImage(row: Pregnant) {
+  imagePreviewPregnant.value = row
+  imagePreviewId.value = row.pregnant_id
+  imagePreviewName.value = row.display_name
+  imagePreviewGestDays.value = row.gestational_age_days ?? 0
+  imagePreviewVisible.value = true
+}
+
+/** 打��上传弹窗 */
+function openUploadDialog(row: Pregnant) {
+  uploadPregnant.value = row
+  uploadDialogVisible.value = true
+}
+
+/** 重置上传表单 */
+function resetUploadForm() {
+  uploadImageFile.value = null
+  uploadMaskFile.value = null
+}
+
+/** 提交上传并分析 */
+async function handleUploadSubmit() {
+  if (!uploadImageFile.value || !uploadMaskFile.value || !uploadPregnant.value) return
+
+  uploading.value = true
+  const pid = uploadPregnant.value.pregnant_id
+  const weeks = uploadPregnant.value.gestational_age_days
+    ? Math.floor(uploadPregnant.value.gestational_age_days / 7)
+    : 28
+
+  try {
+    const fd = new FormData()
+    fd.append('gestational_weeks', String(weeks))
+    fd.append('image_type', 'AC')
+    fd.append('image', uploadImageFile.value)
+    fd.append('mask', uploadMaskFile.value)
+
+    const res = await fgrApi.upload(pid, fd)
+    lastResult.value = res.data
+    resultDialogVisible.value = true
+    uploadDialogVisible.value = false
+
+    // 刷新图片状态
+    patientImageMap[pid] = { pregnant_id: pid, has_image: true, image_url: fgrApi.imageUrl(pid), display_name: uploadPregnant.value?.display_name ?? '' }
+    ElMessage.success('上传成功，分析完成')
+    loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '上传失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+/** 触发分析 */
+async function handleAnalyze(row: Pregnant) {
+  // 无绑定图片：引导上传
+  if (!hasImage(row.pregnant_id)) {
+    openUploadDialog(row)
+    return
+  }
+
+  assessingIds.add(row.pregnant_id)
+  const weeks = row.gestational_age_days
+    ? Math.floor(row.gestational_age_days / 7)
+    : 28
+
+  try {
+    const res = await fgrApi.assess(row.pregnant_id, { gestational_weeks: weeks })
+    lastResult.value = res.data
+    resultDialogVisible.value = true
+    ElMessage.success('分析完成')
+    loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '分析失败')
+  } finally {
+    assessingIds.delete(row.pregnant_id)
+  }
+}
+
+/** 格式化置信区间显示 */
+function formatCI(ci: Record<string, number> | null | undefined): string {
+  if (!ci) return '--'
+  const lb = ci.lower_bound ?? ci.lowerBound ?? 0
+  const ub = ci.upper_bound ?? ci.upperBound ?? 0
+  return `${(lb * 100).toFixed(1)}% ~ ${(ub * 100).toFixed(1)}%`
+}
+
+/** 置信度标签类型 */
+function confidenceTagType(level: string | null | undefined): string {
+  if (level === 'High') return 'success'
+  if (level === 'Medium') return 'warning'
+  if (level === 'Low') return 'info'
+  return 'info'
+}
 
 /** 风险等级对应颜色 */
 const riskColors: Record<string, string> = {
@@ -230,7 +479,6 @@ const riskColors: Record<string, string> = {
   low: '#2E7D32',
 }
 
-/** 分布统计卡片 */
 const distributionCards = computed(() => {
   const total = pregnant.value.length
   const highCount = pregnant.value.filter((p) => getLatestFgrLevel(p) === 'high').length
@@ -238,96 +486,50 @@ const distributionCards = computed(() => {
   const lowCount = pregnant.value.filter((p) => getLatestFgrLevel(p) === 'low').length
 
   return [
-    {
-      icon: 'User',
-      value: total,
-      label: '总FGR孕妇',
-      color: 'var(--primary)',
-      bgColor: 'var(--primary-bg)',
-      subLabel: '监测中',
-    },
-    {
-      icon: 'WarningFilled',
-      value: highCount,
-      label: '高风险',
-      color: '#D32F2F',
-      bgColor: '#FFEBEE',
-      subLabel: `占比 ${total ? ((highCount / total) * 100).toFixed(0) : 0}%`,
-    },
-    {
-      icon: 'WarningFilled',
-      value: mediumCount,
-      label: '中风险',
-      color: '#E65100',
-      bgColor: '#FFF3E0',
-      subLabel: `占比 ${total ? ((mediumCount / total) * 100).toFixed(0) : 0}%`,
-    },
-    {
-      icon: 'CircleCheck',
-      value: lowCount,
-      label: '低风险',
-      color: '#2E7D32',
-      bgColor: '#E8F5E9',
-      subLabel: `占比 ${total ? ((lowCount / total) * 100).toFixed(0) : 0}%`,
-    },
+    { icon: 'User', value: total, label: '总FGR孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: '监测中' },
+    { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${total ? ((highCount / total) * 100).toFixed(0) : 0}%` },
+    { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${total ? ((mediumCount / total) * 100).toFixed(0) : 0}%` },
+    { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${total ? ((lowCount / total) * 100).toFixed(0) : 0}%` },
   ]
 })
 
-/** 获取孕妇最新FGR风险等级 */
 function getLatestFgrLevel(pregnant: Pregnant): string {
   const fgrAlerts = alertList.value
     .filter((a) => a.pregnant_id === pregnant.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr'))
   if (!fgrAlerts.length) return 'low'
-  const latest = fgrAlerts.sort(
-    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-  )[0]
+  const latest = fgrAlerts.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0]
   return mapLevelToFgr(latest.level)
 }
 
-/** 映射预警级别到FGR风险等级 */
 function mapLevelToFgr(level: string): string {
-  const map: Record<string, string> = {
-    RED: 'high',
-    ORANGE: 'medium',
-    YELLOW: 'low',
-    GREEN: 'low',
-    high: 'high',
-    medium: 'medium',
-    low: 'low',
-  }
+  const map: Record<string, string> = { RED: 'high', ORANGE: 'medium', YELLOW: 'low', GREEN: 'low', high: 'high', medium: 'medium', low: 'low' }
   return map[level] || 'low'
 }
 
-/** 格式化置信区间显示 */
 function formatConfidence(pregnant: Pregnant): string {
   const fgrAlerts = alertList.value
     .filter((a) => a.pregnant_id === pregnant.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr'))
   if (!fgrAlerts.length) return '--'
-  const latest = fgrAlerts.sort(
-    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-  )[0]
+  const latest = fgrAlerts.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0]
   const details = latest.details
   if (details?.confidence_interval) {
     const ci = details.confidence_interval
-    return `${(ci.lowerBound * 100).toFixed(1)}% ~ ${(ci.upperBound * 100).toFixed(1)}%`
+    return `${((ci.lowerBound ?? ci.lower_bound ?? 0) * 100).toFixed(1)}% ~ ${((ci.upperBound ?? ci.upper_bound ?? 0) * 100).toFixed(1)}%`
   }
   return '--'
 }
 
-/** 计算孕周 */
 function calcGestationalWeek(days?: number): number {
   if (!days) return 0
   return Math.floor(days / 7)
 }
 
-/** 时间格式化 */
 function formatTime(t?: string): string {
   if (!t) return ''
   const d = new Date(t)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-/** 根据孕周天数判断阶段 */
 function getGestStage(days?: number): string {
   if (!days) return ''
   const weeks = Math.floor(days / 7)
@@ -336,37 +538,29 @@ function getGestStage(days?: number): string {
   return 'late'
 }
 
-/** 过滤后的孕妇列表 */
 const filteredPregnant = computed(() => {
   let list = pregnant.value
-
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter((p) => p.display_name?.toLowerCase().includes(q))
   }
-
   if (filterRisk.value) {
     list = list.filter((p) => getLatestFgrLevel(p) === filterRisk.value)
   }
-
   if (filterGestWeek.value) {
     list = list.filter((p) => getGestStage(p.gestational_age_days) === filterGestWeek.value)
   }
-
+  if (filterImage.value === 'has') {
+    list = list.filter((p) => hasImage(p.pregnant_id))
+  } else if (filterImage.value === 'none') {
+    list = list.filter((p) => !hasImage(p.pregnant_id))
+  }
   return list
 })
 
-/** 搜索 */
-function handleSearch() {
-  // computed 会自动响应
-}
+function handleSearch() {}
+function handleFilter() {}
 
-/** 筛选 */
-function handleFilter() {
-  // computed 会自动响应
-}
-
-/** 打开趋势抽屉 */
 async function openTrendDrawer(pregnant: Pregnant) {
   trendPregnant.value = pregnant
   trendDrawerVisible.value = true
@@ -374,9 +568,7 @@ async function openTrendDrawer(pregnant: Pregnant) {
   trendData.value = []
   try {
     const res = await fgrApi.trend(pregnant.pregnant_id)
-    trendData.value = (res.data || []).sort(
-      (a, b) => a.gestational_weeks - b.gestational_weeks
-    )
+    trendData.value = (res.data || []).sort((a, b) => a.gestational_weeks - b.gestational_weeks)
   } catch (err) {
     console.error('加载FGR趋势失败:', err)
   } finally {
@@ -384,7 +576,6 @@ async function openTrendDrawer(pregnant: Pregnant) {
   }
 }
 
-/** 当前风险等级 */
 const trendCurrentLevel = computed(() => {
   if (!trendData.value.length) return 'low'
   const latest = trendData.value[trendData.value.length - 1]
@@ -393,55 +584,42 @@ const trendCurrentLevel = computed(() => {
   return 'low'
 })
 
-/** 趋势方向 */
 const trendDirection = computed(() => {
   if (trendData.value.length < 2) return 'stable'
-  const first = trendData.value[0].risk_score
-  const last = trendData.value[trendData.value.length - 1].risk_score
-  const diff = last - first
+  const diff = trendData.value[trendData.value.length - 1].risk_score - trendData.value[0].risk_score
   if (diff > 0.1) return 'up'
   if (diff < -0.1) return 'down'
   return 'stable'
 })
 
-/** 获取柱状图颜色 */
 function getBarColor(score: number): string {
   if (score >= 0.7) return '#D32F2F'
   if (score >= 0.4) return '#E65100'
   return '#4CAF50'
 }
 
-/** 置信区间范围说明 */
 const confidenceRanges = [
-  {
-    level: 'high',
-    label: '高风险',
-    color: '#D32F2F',
-    lower: '70%',
-    upper: '100%',
-    desc: 'FGR可能性较高，建议加强监测频率，考虑进一步影像学检查。',
-  },
-  {
-    level: 'medium',
-    label: '中风险',
-    color: '#E65100',
-    lower: '40%',
-    upper: '70%',
-    desc: '需要关注，建议2周内复查超声，综合评估胎儿生长指标。',
-  },
-  {
-    level: 'low',
-    label: '低风险',
-    color: '#2E7D32',
-    lower: '0%',
-    upper: '40%',
-    desc: '目前风险较低，按常规产检流程进行管理即可。',
-  },
+  { level: 'high', label: '高风险', color: '#D32F2F', lower: '70%', upper: '100%', desc: 'FGR可能性较高，建议加强监测频率，考虑进一步影像学检查。' },
+  { level: 'medium', label: '中风险', color: '#E65100', lower: '40%', upper: '70%', desc: '需要关注，建议2周内复查超声，综合评估胎儿生长指标。' },
+  { level: 'low', label: '低风险', color: '#2E7D32', lower: '0%', upper: '40%', desc: '目前风险较低，按常规产检流程进行管理即可。' },
 ]
 
-/** 点击行查看详情 */
+/** 点击行：打开图片预览或上传 */
 function handleRowClick(row: Pregnant) {
-  // 当前跳转到趋势查看，也可以扩展为跳转孕妇详情
+  previewImage(row)
+}
+
+/** 加载所有患者图片状态 */
+async function loadPatientImages() {
+  const ids = pregnant.value.map((p) => p.pregnant_id)
+  const results = await Promise.allSettled(
+    ids.map((id) => fgrApi.patientImages(id))
+  )
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value?.data) {
+      patientImageMap[ids[i]] = r.value.data
+    }
+  })
 }
 
 /** 加载数据 */
@@ -454,6 +632,7 @@ async function loadData() {
     ])
     pregnant.value = pregnantRes.data || []
     alertList.value = alertsRes.data || []
+    await loadPatientImages()
   } catch (err) {
     console.error('加载FGR看板数据失败:', err)
   } finally {
@@ -465,178 +644,58 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.stat-grid-row {
-  margin-bottom: 24px;
-}
+.stat-grid-row { margin-bottom: 28px; }
 
-.search-bar {
-  margin-bottom: 20px;
-}
+.gest-week { font-weight: 700; color: var(--text-primary); }
+.confidence-range { font-size: 13px; color: var(--text-secondary); font-family: 'SF Mono', 'Fira Code', monospace; }
 
-/* 孕周标签 */
-.gest-week {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.confidence-range {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-family: 'SF Mono', 'Fira Code', monospace;
-}
-
-/* 置信区间卡片 */
+/* 置信区间卡片 - 玻璃拟态 */
 .confidence-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
   border-left: 3px solid var(--primary);
-  border-radius: var(--radius-sm);
-  padding: 16px;
+  border-radius: var(--radius);
+  padding: 18px;
   transition: var(--transition);
 }
+.confidence-card:hover { box-shadow: var(--shadow); border-color: rgba(255, 255, 255, 0.55); }
+.confidence-card__header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.confidence-card__range { font-size: 16px; font-weight: 700; color: var(--text-primary); font-family: 'SF Mono', 'Fira Code', monospace; }
+.confidence-card__desc { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin: 0; }
 
-.confidence-card:hover {
-  box-shadow: var(--shadow-hover);
-}
+/* 分析结果 */
+.result-main { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.result-label { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.result-prob { font-size: 18px; color: var(--text-primary); font-weight: 600; }
+.result-row { display: flex; gap: 24px; margin-bottom: 10px; color: var(--text-secondary); font-size: 13px; }
+.result-explain { color: var(--text-secondary); font-size: 13px; line-height: 1.8; }
 
-.confidence-card__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.confidence-card__range {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: 'SF Mono', 'Fira Code', monospace;
-}
-
-.confidence-card__desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0;
-}
-
-/* 趋势摘要 */
+/* 趋势 */
 .trend-summary {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 16px;
+  display: flex; gap: 24px; margin-bottom: 24px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 18px;
+  border: 1px solid var(--border);
 }
+.trend-summary__item { display: flex; flex-direction: column; gap: 6px; }
+.trend-summary__label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
 
-.trend-summary__item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+.bar-chart { display: flex; height: 240px; margin-bottom: 16px; padding: 16px 0; position: relative; }
+.bar-chart__y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-right: 8px; font-size: 11px; color: var(--text-muted); width: 32px; flex-shrink: 0; }
+.bar-chart__canvas { flex: 1; position: relative; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.bar-chart__grid { position: absolute; inset: 0; }
+.bar-chart__grid-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.4; }
+.bar-chart__bar-group { position: absolute; bottom: 0; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%); }
+.bar-chart__bar { width: 10px; border-radius: 5px 5px 0 0; min-height: 4px; transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; position: relative; }
+.bar-chart__dot { width: 12px; height: 12px; border-radius: 50%; position: absolute; top: -6px; left: -1px; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+.bar-chart__dot:hover { transform: scale(1.4); }
+.bar-chart__label { font-size: 10px; color: var(--text-muted); margin-top: 6px; white-space: nowrap; }
 
-.trend-summary__label {
-  font-size: 12px;
-  color: var(--text-light);
-}
-
-/* CSS 柱状图 */
-.bar-chart {
-  display: flex;
-  height: 240px;
-  margin-bottom: 16px;
-  padding: 16px 0;
-  position: relative;
-}
-
-.bar-chart__y-axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding-right: 8px;
-  font-size: 11px;
-  color: var(--text-light);
-  width: 32px;
-  flex-shrink: 0;
-}
-
-.bar-chart__canvas {
-  flex: 1;
-  position: relative;
-  border-left: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.bar-chart__grid {
-  position: absolute;
-  inset: 0;
-}
-
-.bar-chart__grid-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--border);
-  opacity: 0.5;
-}
-
-.bar-chart__bar-group {
-  position: absolute;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transform: translateX(-50%);
-}
-
-.bar-chart__bar {
-  width: 8px;
-  border-radius: 4px 4px 0 0;
-  min-height: 4px;
-  transition: height 0.5s ease;
-  cursor: pointer;
-  position: relative;
-}
-
-.bar-chart__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  position: absolute;
-  top: -5px;
-  left: -1px;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.bar-chart__dot:hover {
-  transform: scale(1.5);
-}
-
-.bar-chart__label {
-  font-size: 10px;
-  color: var(--text-light);
-  margin-top: 6px;
-  white-space: nowrap;
-}
-
-.text-light {
-  font-size: 12px;
-  color: var(--text-light);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 0;
-  gap: 12px;
-}
-
-.empty-state p {
-  color: var(--text-light);
-  font-size: 14px;
-}
+.text-light { font-size: 12px; color: var(--text-muted); }
+.empty-state p { color: var(--text-muted); font-size: 14px; font-weight: 500; }
 </style>

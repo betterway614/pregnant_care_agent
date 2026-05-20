@@ -239,24 +239,33 @@ onUnmounted(() => {
 }
 
 .stat-grid-row {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 /* 随访列表项 */
 .followup-item {
-  padding: 14px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
 }
 
 .followup-item:last-child {
   border-bottom: none;
 }
 
+.followup-item:hover {
+  background: rgba(232, 245, 233, 0.2);
+  border-radius: var(--radius-sm);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 .followup-item__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .followup-item__name {
@@ -273,7 +282,7 @@ onUnmounted(() => {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .followup-item__footer {
@@ -284,19 +293,20 @@ onUnmounted(() => {
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 0;
-  gap: 12px;
+  padding: 48px 0;
+  gap: 14px;
 }
 
 .empty-state p {
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 14px;
+  font-weight: 500;
 }
 </style>

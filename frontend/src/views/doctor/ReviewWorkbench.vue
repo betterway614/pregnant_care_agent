@@ -409,6 +409,63 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 补充资料对话框 -->
+    <el-dialog
+      v-model="supplementDialogVisible"
+      title="补充资料"
+      width="520px"
+      destroy-on-close
+    >
+      <div v-if="selectedAlert" class="dialog-body">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          为 {{ selectedAlert.patient_name }} 的预警补充临床资料，辅助后续审核决策。
+        </el-alert>
+        <el-form label-width="90px">
+          <el-form-item label="临床备注">
+            <el-input
+              v-model="supplementForm.clinical_notes"
+              type="textarea"
+              :rows="4"
+              placeholder="补充临床观察、症状描述、既往病史等信息..."
+              maxlength="2000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="参考链接">
+            <el-input
+              v-model="supplementForm.reference_links"
+              type="textarea"
+              :rows="2"
+              placeholder="相关文献、指南链接（每行一条）"
+              maxlength="1000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="补充数据">
+            <el-input
+              v-model="supplementForm.additional_data"
+              type="textarea"
+              :rows="3"
+              placeholder="实验室检查结果、影像学描述、用药记录等..."
+              maxlength="2000"
+              show-word-limit
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="supplementDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="doSaveSupplement">
+          保存资料
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -457,6 +514,14 @@ const generatedOrder = ref<MedicalOrder | null>(null)
 // AI分析状态
 const aiAnalyzing = ref(false)
 const aiAnalysisResult = ref<any>(null)
+
+// 补充资料状态
+const supplementDialogVisible = ref(false)
+const supplementForm = ref({
+  clinical_notes: '',
+  reference_links: '',
+  additional_data: '',
+})
 
 /** 风险级别映射 */
 function mapRiskLevel(level: string): string {
@@ -646,7 +711,27 @@ async function confirmDowngrade() {
 
 /** 补充资料 */
 function handleSupplement() {
-  // 预留补充资料功能
+  supplementForm.value = { clinical_notes: '', reference_links: '', additional_data: '' }
+  supplementDialogVisible.value = true
+}
+
+/** 保存补充资料 */
+async function doSaveSupplement() {
+  if (!selectedAlert.value) return
+  submitting.value = true
+  try {
+    const reason = [
+      supplementForm.value.clinical_notes ? `临床备注：${supplementForm.value.clinical_notes}` : '',
+      supplementForm.value.reference_links ? `参考链接：${supplementForm.value.reference_links}` : '',
+      supplementForm.value.additional_data ? `补充数据：${supplementForm.value.additional_data}` : '',
+    ].filter(Boolean).join('\n')
+    await alertApi.review(selectedAlert.value.id, 'supplement', reason)
+    supplementDialogVisible.value = false
+  } catch (err) {
+    console.error('保存补充资料失败:', err)
+  } finally {
+    submitting.value = false
+  }
 }
 
 /** 生成医嘱建议 */
@@ -823,7 +908,7 @@ onUnmounted(() => {
 
 /* 预警列表项 */
 .alert-list-item {
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: var(--transition);
@@ -831,18 +916,19 @@ onUnmounted(() => {
 }
 
 .alert-list-item:hover {
-  background: var(--primary-bg);
+  background: rgba(232, 245, 233, 0.25);
 }
 
 .alert-list-item--active {
-  background: var(--primary-bg);
+  background: rgba(232, 245, 233, 0.35);
   border-left: 3px solid var(--primary);
+  box-shadow: inset 0 0 0 1px rgba(46, 125, 50, 0.08);
 }
 
 /* 新预警样式 */
 .alert-list-item--new {
   border-left: 3px solid var(--warning);
-  background: var(--warning-light);
+  background: rgba(255, 243, 224, 0.5);
 }
 
 .new-alert-badge {
@@ -852,32 +938,33 @@ onUnmounted(() => {
   background: var(--warning);
   color: white;
   font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(245, 124, 0, 0.3);
 }
 
 .alert-list-item__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .alert-list-item__name {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
 }
 
 .alert-list-item__msg {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .alert-list-item__meta {
@@ -892,41 +979,48 @@ onUnmounted(() => {
 
 .detail-section__title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 14px;
 }
 
 .detail-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .detail-item__label {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .detail-item__value {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 /* 规则卡片 */
 .rule-card {
-  background: var(--danger-light);
-  border-radius: var(--radius-sm);
-  padding: 14px;
+  background: rgba(211, 47, 47, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid rgba(211, 47, 47, 0.12);
 }
 
 .rule-card__header {
@@ -934,14 +1028,15 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--danger);
 }
 
 .rule-card__desc {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   margin: 0;
 }
 
@@ -955,78 +1050,101 @@ onUnmounted(() => {
 .data-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 10px;
-  background: var(--bg-page);
-  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.data-row:hover {
+  background: rgba(232, 245, 233, 0.3);
 }
 
 .data-row__key {
   font-size: 13px;
-  color: var(--text-light);
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .data-row__value {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 /* 底部审核操作栏 */
 .review-actions {
-  padding: 14px 20px;
+  padding: 16px 20px;
   border-top: 1px solid var(--border);
   display: flex;
   gap: 10px;
-  background: var(--bg-card);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* 主诉 */
 .chief-complaint {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 14px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
 }
 
 .chief-complaint p {
   font-size: 14px;
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.7;
   margin-bottom: 8px;
 }
 
 /* 随访项 */
 .followup-item {
-  padding: 12px 0;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
 }
 
 .followup-item:last-child {
   border-bottom: none;
 }
 
+.followup-item:hover {
+  background: rgba(232, 245, 233, 0.15);
+  border-radius: var(--radius-xs);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 .followup-item__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .followup-item__date {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .followup-item__summary {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.5;
-  margin-bottom: 6px;
+  line-height: 1.6;
+  margin-bottom: 8px;
 }
 
 .followup-item__complaint {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1034,20 +1152,23 @@ onUnmounted(() => {
 
 /* 医嘱预览 */
 .order-preview {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 16px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 18px;
+  border: 1px solid var(--border);
 }
 
 .order-preview__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .order-preview__label {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
 }
 
@@ -1055,11 +1176,13 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text-primary);
   line-height: 1.8;
-  padding: 12px;
-  background: var(--bg-card);
-  border-radius: 6px;
-  margin-bottom: 10px;
-  border: 1px solid var(--border);
+  padding: 14px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  border: 1px solid var(--glass-border);
 }
 
 .order-preview__meta {
@@ -1068,21 +1191,13 @@ onUnmounted(() => {
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 0;
-  gap: 8px;
+  color: var(--text-muted);
 }
 
 .empty-state p {
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .dialog-body {
@@ -1093,7 +1208,7 @@ onUnmounted(() => {
 .chain-steps {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .chain-step {
@@ -1109,14 +1224,15 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--primary-gradient);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.25);
 }
 
 /* 鉴别诊断 */
@@ -1127,28 +1243,36 @@ onUnmounted(() => {
 }
 
 .diagnosis-item {
-  background: var(--bg-page);
-  border-radius: 6px;
-  padding: 12px;
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  border: 1px solid var(--glass-border);
+  transition: all var(--transition-fast);
+}
+
+.diagnosis-item:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 .diagnosis-item__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .diagnosis-item__condition {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
 .diagnosis-item__reasoning {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
   line-height: 1.6;
   margin: 0;
 }
@@ -1158,10 +1282,13 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.8;
-  background: var(--bg-page);
-  border-radius: 6px;
-  padding: 12px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 14px;
   white-space: pre-wrap;
+  border: 1px solid var(--border);
 }
 
 /* 循证参考 */
@@ -1169,7 +1296,7 @@ onUnmounted(() => {
   margin: 0;
   padding-left: 16px;
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
   line-height: 1.8;
 }
 </style>

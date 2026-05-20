@@ -163,7 +163,26 @@
                 }"
               >
                 <!-- 用户消息：柔和圆角气泡 -->
-                <div v-if="msg.role === 'user'" class="bubble-text">{{ msg.content }}</div>
+                <div v-if="msg.role === 'user'" class="bubble-text">
+                  <!-- 音频消息：可播放的音频条 -->
+                  <div v-if="msg.messageType === 'audio' && msg.audioUrl" class="audio-bubble">
+                    <button class="audio-bubble__btn" @click="toggleAudioPlay(msg)">
+                      <el-icon :size="18">
+                        <VideoPause v-if="playingMsgId === msg.id" />
+                        <VideoPlay v-else />
+                      </el-icon>
+                    </button>
+                    <div class="audio-bubble__waveform">
+                      <span v-for="i in 16" :key="i" class="audio-bubble__bar" :style="{ height: (12 + Math.sin(i * 0.9) * 14 + Math.cos(i * 2.1) * 6) + 'px' }" :class="{ 'audio-bubble__bar--play': playingMsgId === msg.id, 'audio-bubble__bar--played': playingMsgId === msg.id && i <= 8 }" />
+                    </div>
+                    <span class="audio-bubble__dur">{{ formatDuration(msg.audioDuration || 0) }}</span>
+                  </div>
+                  <!-- 图片消息：预览 -->
+                  <div v-else-if="(msg as any).messageType === 'image' && (msg as any).audioUrl" class="image-bubble">
+                    <img :src="(msg as any).audioUrl" alt="上传的图片" class="image-bubble__img" @load="" />
+                  </div>
+                  <template v-else>{{ msg.content }}</template>
+                </div>
                 <!-- 助手消息：无边框阅读流 Markdown 渲染 -->
                 <div
                   v-else
@@ -237,11 +256,34 @@
       </transition>
 
       <div class="input-pill-wrapper">
-        <transition name="banner-slide">
-          <div v-if="isRecording" class="recording-bar">
-            <span class="recording-dot" />
-            <span class="recording-text">{{ recordingText }}</span>
-            <el-button size="small" type="danger" text @click="cancelRecording">取消</el-button>
+        <!-- 录音浮层（按住录制时显示） -->
+        <transition name="record-overlay-fade">
+          <div v-if="isRecording" class="record-overlay">
+            <!-- 取消区域（上滑至此取消） -->
+            <div
+              class="cancel-zone"
+              :class="{ 'cancel-zone--active': isInCancelZone }"
+            >
+              <div class="cancel-zone__icon">
+                <el-icon :size="24"><DeleteFilled v-if="isInCancelZone" /><Delete v-else /></el-icon>
+              </div>
+              <span class="cancel-zone__text">{{ isInCancelZone ? '松开取消' : '上滑取消' }}</span>
+            </div>
+            <!-- 录音中心图标 + 状态条 -->
+            <div class="record-center" :class="{ 'record-center--cancel': isInCancelZone }">
+              <div class="record-center__ring">
+                <div class="record-center__icon">
+                  <el-icon :size="36"><Microphone /></el-icon>
+                </div>
+              </div>
+            </div>
+            <div class="record-bar" :class="{ 'record-bar--cancel': isInCancelZone }">
+              <div class="record-bar__wave">
+                <span v-for="i in 7" :key="i" class="record-bar__wave-line" :style="{ animationDelay: i * 0.08 + 's' }" />
+              </div>
+              <span class="record-bar__time">{{ recordingText }}</span>
+              <span class="record-bar__hint">{{ isInCancelZone ? '松手取消' : '松手发送 上滑取消' }}</span>
+            </div>
           </div>
         </transition>
 
@@ -249,11 +291,29 @@
           <button
             class="toolbar-btn interactive-card"
             :class="{ 'toolbar-btn--recording': isRecording }"
-            @click="toggleRecording"
-            :aria-label="isRecording ? '停止录音' : '语音输入'"
+            @pointerdown.prevent="startRecording"
+            aria-label="语音输入"
           >
             <el-icon :size="20"><Microphone /></el-icon>
           </button>
+
+          <!-- 图片上传按钮 -->
+          <button
+            class="toolbar-btn interactive-card"
+            @click="triggerImageUpload"
+            :disabled="isUploadingImage"
+            aria-label="上传图片"
+          >
+            <el-icon :size="20"><Picture /></el-icon>
+          </button>
+          <input
+            ref="imageInputRef"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style="display: none"
+            @change="handleImageSelected"
+          />
 
           <el-input
             ref="inputRef"
@@ -320,8 +380,8 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Delete, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
-  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPause, ArrowRight, DocumentChecked, Avatar, Check
+  Delete, DeleteFilled, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
+  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera
 } from '@element-plus/icons-vue'
 import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
@@ -386,11 +446,22 @@ const followupRecordId = ref<string | null>(null)
 const isFollowupMode = ref(false)
 const followupProgress = ref<{ answered: number; total: number; status: string } | null>(null)
 
-// ASR
+// 音频录制
 const isRecording = ref(false)
-const recordingText = ref('正在录音，请说话...')
+const isInCancelZone = ref(false)
+const recordingText = ref('0:00')
 let mediaRecorder: any = null
 let audioChunks: Blob[] = []
+let recordingTimer: ReturnType<typeof setInterval> | null = null
+let recordingSeconds = 0
+
+// 音频播放
+const playingMsgId = ref<string | null>(null)
+let audioEl: HTMLAudioElement | null = null
+
+// 图片上传
+const imageInputRef = ref<HTMLInputElement | null>(null)
+const isUploadingImage = ref(false)
 
 // 编辑
 const editDialogVisible = ref(false)
@@ -672,43 +743,361 @@ async function handleClearMemory() {
   }
 }
 
-/* ==================== ASR ==================== */
-async function toggleRecording() {
-  isRecording.value ? await stopRecording() : await startRecording()
+/* ==================== 音频录制与发送（按住录制 / 松开发送 / 上滑取消） ==================== */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1] || result
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
 }
 
-async function startRecording() {
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return m + ':' + s.toString().padStart(2, '0')
+}
+
+// ---- 按住录制 ----
+let shouldSendAudio = false  // 标记是否需要发送音频（true=正常结束，false=取消）
+
+async function startRecording(e: PointerEvent) {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaRecorder = new MediaRecorder(stream)
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 44100,
+        channelCount: 1,
+      },
+    })
+    // 优先 ogg/opus（兼容性更好），降级 webm/opus，最后 mp4
+    const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+      ? 'audio/ogg;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm'
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType })
     audioChunks = []
-    mediaRecorder.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) audioChunks.push(e.data) }
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop())
-      if (audioChunks.length === 0) { isRecording.value = false; return }
-      recordingText.value = '语音识别中...'
-      setTimeout(() => { ElMessage.success('语音识别完成（ASR 预留）'); isRecording.value = false }, 800)
-    }
-    mediaRecorder.start()
+    shouldSendAudio = false
     isRecording.value = true
-    recordingText.value = '正在录音，请说话...'
-  } catch {
-    ElMessage.warning('无法访问麦克风，请检查权限')
+    isInCancelZone.value = false
+    recordingSeconds = 0
+    recordingText.value = '0:00'
+
+    mediaRecorder.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) audioChunks.push(e.data)
+    }
+
+    // 在 start 之前就设置 onstop，确保不会丢失事件
+    mediaRecorder.onstop = async () => {
+      // 停止所有音频轨道
+      mediaRecorder.stream.getTracks().forEach((t: MediaStreamTrack) => t.stop())
+      clearInterval(recordingTimer!)
+
+      // 取消、无数据或录制时间过短：仅重置状态
+      if (!shouldSendAudio || isInCancelZone.value || audioChunks.length === 0 || recordingSeconds < 1) {
+        audioChunks = []
+        isRecording.value = false
+        isInCancelZone.value = false
+        return
+      }
+
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' })
+      const mt = mediaRecorder.mimeType || ''
+      const audioFormat = mt.includes('ogg') ? 'ogg' : mt.includes('webm') ? 'webm' : mt.includes('mp4') ? 'mp4' : 'wav'
+
+      // 检查音频数据是否有效
+      if (audioBlob.size === 0) {
+        console.warn('音频数据为空，跳过发送')
+        audioChunks = []
+        isRecording.value = false
+        isInCancelZone.value = false
+        return
+      }
+
+      recordingText.value = '处理中...'
+
+      try {
+        const base64 = await blobToBase64(audioBlob)
+        if (!base64) {
+          throw new Error('音频编码失败')
+        }
+        isRecording.value = false
+        isInCancelZone.value = false
+        await sendAudioMessage(base64, audioFormat, audioBlob, recordingSeconds)
+      } catch (err) {
+        console.error('音频处理失败:', err)
+        ElMessage.error('音频处理失败，请重试')
+        isRecording.value = false
+        isInCancelZone.value = false
+      }
+    }
+
+    // 使用 timeslice 每秒触发 ondataavailable，确保数据被逐步收集
+    mediaRecorder.start(1000)
+    recordingTimer = setInterval(() => {
+      recordingSeconds++
+      recordingText.value = formatDuration(recordingSeconds)
+    }, 1000)
+
+    document.addEventListener('pointermove', onPointerMove)
+    document.addEventListener('pointerup', onPointerUp)
+    document.addEventListener('pointercancel', onPointerUp)
+  } catch (err) {
+    console.error('麦克风访问失败:', err)
+    ElMessage.warning('无法访问麦克风，请检查权限设置')
     isRecording.value = false
   }
 }
 
-async function stopRecording() {
-  mediaRecorder?.state === 'recording' ? mediaRecorder.stop() : (isRecording.value = false)
+function onPointerMove(e: PointerEvent) {
+  if (!isRecording.value) return
+  isInCancelZone.value = e.clientY < window.innerHeight * 0.3
 }
 
-function cancelRecording() {
-  if (mediaRecorder?.state === 'recording') {
-    mediaRecorder.stream.getTracks().forEach((t: MediaStreamTrack) => t.stop())
-    mediaRecorder.stop()
+async function onPointerUp(e: PointerEvent) {
+  if (!isRecording.value) return
+  document.removeEventListener('pointermove', onPointerMove)
+  document.removeEventListener('pointerup', onPointerUp)
+  document.removeEventListener('pointercancel', onPointerUp)
+
+  if (mediaRecorder?.state !== 'recording') {
+    isRecording.value = false
+    isInCancelZone.value = false
+    return
   }
-  audioChunks = []
-  isRecording.value = false
+
+  // 标记是否需要发送音频（非取消区域时才发送）
+  shouldSendAudio = !isInCancelZone.value
+  mediaRecorder.stop()
+}
+
+/** 发送音频消息到后端 */
+async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: Blob, duration: number) {
+  const audioUrl = URL.createObjectURL(audioBlob)
+
+  chatStore.addMessage('user', '', {
+    isUrgent: false,
+    messageType: 'audio',
+    audioUrl,
+    audioDuration: duration,
+  })
+
+  chatStore.loading = true
+  const loadingMsg = chatStore.addMessage('assistant', '', { loading: true })
+  scrollToBottom()
+
+  const req: ChatRequest = {
+    pregnant_id: pregnantId.value,
+    message: '请听取以下语音并给出回复',
+    session_id: chatStore.sessionId || undefined,
+    message_type: 'AUDIO',
+    audio_data: base64,
+    audio_format: audioFormat,
+    ...(followupRecordId.value ? { record_id: followupRecordId.value } : {}),
+  }
+
+  chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
+  chatStore.streaming = true
+
+  const controller = new AbortController()
+  chatStore.setAbortController(controller)
+
+  try {
+    await postChatStream(req, {
+      onThinking(message: string) {
+        chatStore.updateMessage(loadingMsg.id, {
+          thinking: true,
+          thinkingMessage: message,
+          currentStep: message !== '小安正在思考...' ? message : undefined,
+        })
+      },
+      onChunk(chunk: string) {
+        const msg = chatStore.messages.find((m) => m.id === loadingMsg.id)
+        if (msg) {
+          msg.content += chunk
+          msg.thinking = false
+          msg.currentStep = undefined
+          chatStore.persist?.()
+        }
+        if (isAtBottom) scrollToBottom()
+      },
+      onDone(metadata: any) {
+        chatStore.sessionId = metadata.session_id
+        chatStore.updateMessage(loadingMsg.id, {
+          timestamp: new Date().toISOString(),
+          toolSteps: metadata.tool_steps || [],
+          currentStep: undefined,
+        })
+      },
+      onError(err: Error) {
+        console.error('Audio SSE error:', err)
+        if (!loadingMsg.content) {
+          chatStore.updateMessage(loadingMsg.id, {
+            content: '抱歉，语音处理失败，请稍后重试或使用文字输入。',
+          })
+        }
+      },
+    }, controller.signal)
+  } catch {
+    if (!loadingMsg.content) {
+      chatStore.updateMessage(loadingMsg.id, {
+        content: '抱歉，语音处理失败，请稍后重试或使用文字输入。',
+      })
+    }
+  } finally {
+    chatStore.streaming = false
+    chatStore.setAbortController(null)
+  }
+
+  chatStore.loading = false
+  scrollToBottom()
+}
+
+// ---- 图片上传 ----
+function triggerImageUpload() {
+  imageInputRef.value?.click()
+}
+
+async function handleImageSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = '' // 清空以允许重复选择同一文件
+
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过 10MB')
+    return
+  }
+
+  isUploadingImage.value = true
+
+  try {
+    const base64 = await fileToBase64(file)
+    const imageUrl = URL.createObjectURL(file)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpeg'
+    const imageFormat = ext === 'jpg' ? 'jpeg' : ext
+
+    chatStore.addMessage('user', '', {
+      isUrgent: false,
+      messageType: 'image' as any,
+      audioUrl: imageUrl, // 复用 audioUrl 字段存储图片预览 URL
+    })
+
+    await sendImageMessage(base64, imageFormat, file.name)
+  } catch {
+    ElMessage.error('图片处理失败，请重试')
+  } finally {
+    isUploadingImage.value = false
+  }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      resolve(result.split(',')[1] || result)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function sendImageMessage(base64: string, imageFormat: string, fileName: string) {
+  chatStore.loading = true
+  const loadingMsg = chatStore.addMessage('assistant', '', { loading: true })
+  scrollToBottom()
+
+  const req: ChatRequest = {
+    pregnant_id: pregnantId.value,
+    message: '请分析这张图片',
+    session_id: chatStore.sessionId || undefined,
+    message_type: 'IMAGE',
+    audio_data: base64,        // 复用 audio_data 字段传输图片 base64
+    audio_format: imageFormat,  // 复用 audio_format 字段传输图片格式
+    ...(followupRecordId.value ? { record_id: followupRecordId.value } : {}),
+  }
+
+  chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
+  chatStore.streaming = true
+
+  const controller = new AbortController()
+  chatStore.setAbortController(controller)
+
+  try {
+    await postChatStream(req, {
+      onThinking(message: string) {
+        chatStore.updateMessage(loadingMsg.id, {
+          thinking: true,
+          thinkingMessage: message,
+          currentStep: message !== '小安正在思考...' ? message : undefined,
+        })
+      },
+      onChunk(chunk: string) {
+        const msg = chatStore.messages.find((m) => m.id === loadingMsg.id)
+        if (msg) {
+          msg.content += chunk
+          msg.thinking = false
+          msg.currentStep = undefined
+          chatStore.persist?.()
+        }
+        if (isAtBottom) scrollToBottom()
+      },
+      onDone(metadata: any) {
+        chatStore.sessionId = metadata.session_id
+        chatStore.updateMessage(loadingMsg.id, {
+          timestamp: new Date().toISOString(),
+          toolSteps: metadata.tool_steps || [],
+          currentStep: undefined,
+        })
+      },
+      onError(err: Error) {
+        console.error('Image SSE error:', err)
+        if (!loadingMsg.content) {
+          chatStore.updateMessage(loadingMsg.id, {
+            content: '抱歉，图片处理失败，请稍后重试。',
+          })
+        }
+      },
+    }, controller.signal)
+  } catch {
+    if (!loadingMsg.content) {
+      chatStore.updateMessage(loadingMsg.id, {
+        content: '抱歉，图片处理失败，请稍后重试。',
+      })
+    }
+  } finally {
+    chatStore.streaming = false
+    chatStore.setAbortController(null)
+  }
+
+  chatStore.loading = false
+  scrollToBottom()
+}
+
+// ---- 音频播放 ----
+function toggleAudioPlay(msg: ChatMessage) {
+  if (playingMsgId.value === msg.id) {
+    audioEl?.pause()
+    audioEl = null
+    playingMsgId.value = null
+    return
+  }
+  audioEl?.pause()
+  audioEl = new Audio(msg.audioUrl)
+  audioEl.onended = () => { playingMsgId.value = null; audioEl = null }
+  audioEl.onerror = () => { playingMsgId.value = null; audioEl = null }
+  audioEl.play()
+  playingMsgId.value = msg.id
 }
 
 /* ==================== 上下文 ==================== */
@@ -826,6 +1215,14 @@ onMounted(async () => {
   100% { transform: translate(-10vw, 10vh) scale(0.9); }
 }
 
+/* 尊重用户减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .halo-orb, .record-center__ring, .record-bar__wave-line,
+  .audio-bubble__bar--play, .step-dot, .ripple, .ripple-delay,
+  .toolbar-btn--recording, .ai-halo { animation: none !important; }
+  .interactive-card:active { transform: none; }
+}
+
 /* ==================== 交互动效 ==================== */
 .interactive-card {
   cursor: pointer;
@@ -850,7 +1247,10 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; border-radius: 50%; border: none;
   background: transparent; color: #475569;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
 }
+.navbar-btn:hover { background: rgba(251, 113, 133, 0.08); color: #E11D48; }
 .navbar-title {
   font-size: 16px; font-weight: 700; color: #1E293B; margin: 0;
 }
@@ -871,12 +1271,18 @@ onMounted(async () => {
   padding: 4px 10px; border-radius: 12px;
   background: rgba(255, 255, 255, 0.7); border: 1px solid white;
   color: #0284C7; font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
 }
+.switch-btn:hover { background: rgba(255, 255, 255, 0.9); }
 .user-actions { margin-left: auto; display: flex; }
 .user-action-btn {
   width: 36px; height: 36px; border-radius: 50%; border: none;
   background: transparent; color: #94A3B8; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
 }
+.user-action-btn:hover { background: rgba(251, 113, 133, 0.08); color: #E11D48; }
 .user-action-btn.active { color: #FB7185; background: #FFF1F2; }
 
 /* ==================== 主区域 ==================== */
@@ -990,7 +1396,7 @@ onMounted(async () => {
 .msg-action-btn {
   width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent;
   color: #94A3B8; display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s; cursor: pointer;
+  transition: background 0.2s, color 0.2s; cursor: pointer;
 }
 .msg-action-btn:hover { background: white; color: #1E293B; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
 
@@ -1017,6 +1423,12 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
   border: 1px solid white; box-shadow: 0 4px 12px rgba(148, 163, 184, 0.08);
   font-size: 13px; font-weight: 600; color: #0284C7;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.prompt-chip:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 16px rgba(148, 163, 184, 0.12);
 }
 
 .input-pill-wrapper {
@@ -1027,21 +1439,232 @@ onMounted(async () => {
 /* 胶囊灵动岛 */
 .input-pill {
   width: 100%;
-  display: flex; align-items: flex-end; gap: 8px;
-  background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  display: flex; align-items: flex-end; gap: 6px;
+  background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 28px;
   padding: 6px;
-  box-shadow: 0 8px 32px rgba(148, 163, 184, 0.15);
+  box-shadow: 0 8px 32px rgba(148, 163, 184, 0.12), 0 2px 8px rgba(148, 163, 184, 0.06);
 }
 
 .toolbar-btn {
   width: 40px; height: 40px; border-radius: 50%; border: none;
   background: white; color: #475569; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, color 0.2s;
 }
-.toolbar-btn--recording { background: #FFE4E6; color: #E11D48; }
+.toolbar-btn:hover {
+  background: #FFF1F2; color: #E11D48;
+  box-shadow: 0 4px 12px rgba(251, 113, 133, 0.15);
+}
+.toolbar-btn--recording {
+  background: #FFE4E6; color: #E11D48;
+  animation: pulse-record 1.5s ease-in-out infinite;
+}
+@keyframes pulse-record {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(251, 113, 133, 0); }
+}
 .toolbar-btn--stop { background: #1E293B; color: white; }
+
+/* ==================== 录音浮层 ==================== */
+.record-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 120px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.record-overlay-fade-enter-active { transition: all 0.25s ease-out; }
+.record-overlay-fade-leave-active { transition: all 0.2s ease-in; }
+.record-overlay-fade-enter-from,
+.record-overlay-fade-leave-to { opacity: 0; }
+
+/* 取消区域 */
+.cancel-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 32px;
+  border-radius: 20px;
+  margin-bottom: 40px;
+  transition: all 0.25s ease;
+  background: rgba(255, 255, 255, 0.1);
+}
+.cancel-zone--active {
+  background: rgba(239, 68, 68, 0.25);
+  border: 2px solid rgba(239, 68, 68, 0.6);
+  transform: scale(1.08);
+}
+.cancel-zone__icon {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  transition: all 0.25s ease;
+}
+.cancel-zone--active .cancel-zone__icon {
+  background: #EF4444;
+  color: #fff;
+}
+.cancel-zone__text {
+  font-size: 14px; font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  transition: color 0.25s;
+}
+.cancel-zone--active .cancel-zone__text { color: #FCA5A5; }
+
+/* 录音状态条 */
+.record-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 40px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: all 0.25s ease;
+  min-width: 200px;
+}
+.record-bar--cancel {
+  background: rgba(239, 68, 68, 0.2);
+}
+.record-bar__wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+}
+.record-bar__wave-line {
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: #FB7185;
+  animation: wave-pulse 0.6s ease-in-out infinite alternate;
+}
+.record-bar--cancel .record-bar__wave-line {
+  background: #EF4444;
+}
+@keyframes wave-pulse {
+  0% { height: 8px; opacity: 0.5; }
+  100% { height: 28px; opacity: 1; }
+}
+.record-bar__time {
+  font-size: 18px; font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.record-bar__hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* 录音中心图标 */
+.record-center {
+  margin-bottom: 24px;
+}
+.record-center__ring {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: rgba(251, 113, 133, 0.2);
+  display: flex; align-items: center; justify-content: center;
+  animation: ring-pulse 1.5s ease-in-out infinite;
+}
+.record-center__icon {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: rgba(251, 113, 133, 0.3);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.record-center--cancel .record-center__ring {
+  background: rgba(239, 68, 68, 0.2);
+  animation: none;
+}
+.record-center--cancel .record-center__icon {
+  background: rgba(239, 68, 68, 0.4);
+}
+@keyframes ring-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+/* ==================== 音频播放气泡 ==================== */
+.audio-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+.audio-bubble__btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(251, 113, 133, 0.15);
+  color: #E11D48;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.audio-bubble__btn:active { transform: scale(0.9); }
+.audio-bubble__waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  height: 36px;
+}
+.audio-bubble__bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: #CBD5E1;
+  transition: background 0.2s;
+}
+.audio-bubble__bar--play {
+  background: #FB7185;
+  animation: bar-bounce 0.6s ease-in-out infinite alternate;
+}
+.audio-bubble__bar--played {
+  background: #FDA4AF;
+}
+@keyframes bar-bounce {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+.audio-bubble__dur {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+/* ==================== 图片消息气泡 ==================== */
+.image-bubble {
+  max-width: 240px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(148, 163, 184, 0.15);
+}
+.image-bubble__img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 16px;
+  object-fit: cover;
+}
 
 .chat-input { flex: 1; }
 .chat-input :deep(.el-textarea__inner) {
@@ -1055,8 +1678,15 @@ onMounted(async () => {
   width: 40px; height: 40px; border-radius: 50%; border: none;
   background: #FB7185; color: white; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 4px 12px rgba(251, 113, 133, 0.3); flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
 }
-.send-btn:disabled { background: #E2E8F0; box-shadow: none; color: #94A3B8; }
+.send-btn:hover:not(:disabled) {
+  background: #E11D48;
+  box-shadow: 0 6px 16px rgba(225, 29, 72, 0.35);
+}
+.send-btn:active:not(:disabled) { transform: scale(0.92); }
+.send-btn:disabled { background: #E2E8F0; box-shadow: none; color: #94A3B8; cursor: not-allowed; }
 
 .stop-btn {
   background: #1E293B;

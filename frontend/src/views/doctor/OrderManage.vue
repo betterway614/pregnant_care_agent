@@ -176,6 +176,53 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑医嘱对话框 -->
+    <el-dialog
+      v-model="editDialogVisible"
+      title="编辑医嘱"
+      width="560px"
+      destroy-on-close
+    >
+      <div v-if="editingOrder" class="dialog-body">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          孕妇：{{ editingOrder.patient_name }} ｜ 当前状态：草稿
+        </el-alert>
+        <el-form label-width="80px">
+          <el-form-item label="医嘱类型">
+            <el-select v-model="editForm.order_type" style="width: 100%">
+              <el-option label="用药医嘱" value="用药医嘱" />
+              <el-option label="检查医嘱" value="检查医嘱" />
+              <el-option label="检验医嘱" value="检验医嘱" />
+              <el-option label="治疗医嘱" value="治疗医嘱" />
+              <el-option label="护理医嘱" value="护理医嘱" />
+              <el-option label="饮食医嘱" value="饮食医嘱" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="医嘱内容" required>
+            <el-input
+              v-model="editForm.content"
+              type="textarea"
+              :rows="5"
+              placeholder="请输入医嘱内容"
+              maxlength="1000"
+              show-word-limit
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" :disabled="!editForm.content.trim()" @click="doEditOrder">
+          保存修改
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -201,6 +248,11 @@ const detailOrder = ref<MedicalOrder | null>(null)
 // 签署弹窗
 const signDialogVisible = ref(false)
 const signOrder = ref<MedicalOrder | null>(null)
+
+// 编辑弹窗
+const editDialogVisible = ref(false)
+const editingOrder = ref<MedicalOrder | null>(null)
+const editForm = ref({ content: '', order_type: '' })
 
 /** 格式化日期 */
 function formatDate(t?: string): string {
@@ -292,7 +344,28 @@ function showDetail(order: MedicalOrder) {
 
 /** 编辑 */
 function handleEdit(order: MedicalOrder) {
-  // 预留编辑功能，可跳转或打开编辑弹窗
+  editingOrder.value = order
+  editForm.value = { content: order.content, order_type: order.order_type }
+  editDialogVisible.value = true
+}
+
+/** 保存编辑 */
+async function doEditOrder() {
+  if (!editingOrder.value || !editForm.value.content.trim()) return
+  submitting.value = true
+  try {
+    await orderApi.update(editingOrder.value.id, {
+      content: editForm.value.content,
+      order_type: editForm.value.order_type,
+    })
+    editDialogVisible.value = false
+    editingOrder.value = null
+    await loadOrders()
+  } catch (err) {
+    console.error('编辑医嘱失败:', err)
+  } finally {
+    submitting.value = false
+  }
 }
 
 /** 签署确认弹窗 */
@@ -326,7 +399,7 @@ onMounted(loadOrders)
 .order-content-truncate {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* 详情卡片 */
@@ -335,31 +408,41 @@ onMounted(loadOrders)
 }
 
 .detail-card__section {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .detail-card__divider {
   height: 1px;
   background: var(--border);
-  margin: 16px 0;
+  margin: 18px 0;
 }
 
 .detail-row {
   display: flex;
   align-items: center;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px dashed var(--border);
+  transition: background var(--transition-fast);
 }
 
 .detail-row:last-child {
   border-bottom: none;
 }
 
+.detail-row:hover {
+  background: rgba(232, 245, 233, 0.15);
+  border-radius: var(--radius-xs);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 .detail-row__label {
   width: 90px;
   font-size: 13px;
-  color: var(--text-light);
+  color: var(--text-muted);
   flex-shrink: 0;
+  font-weight: 500;
 }
 
 .detail-row__value {
@@ -370,16 +453,18 @@ onMounted(loadOrders)
 
 .detail-section-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .detail-content-box {
-  background: var(--bg-page);
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 16px;
+  border-radius: var(--radius);
+  padding: 18px;
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-primary);
@@ -388,39 +473,36 @@ onMounted(loadOrders)
 
 /* 签署预览 */
 .sign-preview {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 14px;
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
 }
 
 .sign-preview__patient {
   font-size: 14px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .sign-preview__content {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 60px 0;
-  gap: 12px;
+  color: var(--text-muted);
 }
 
 .empty-state p {
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .dialog-body {

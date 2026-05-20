@@ -17,7 +17,7 @@ from ..core.agno_client import get_agno_client
 from ..core.agno_rag import agno_rag_engine
 from ..core.conversation_store import conversation_store
 from ..core.prompts import get_pregnant_system_prompt
-from ..models import HealthDataPoint, Pregnant, FollowUpRecord
+from ..models import HealthDataPoint, Pregnant, FollowUpRecord, ConversationMessage
 from ..database import SessionLocal, db_call
 from ..config import settings
 
@@ -49,22 +49,21 @@ def _debug_log(msg: str):
 def _query_patient_context(pregnant_id: str) -> str:
     """同步函数：查询孕妇上下文信息（在 db_call 线程池中执行）"""
     from datetime import datetime, timedelta
-    from ..models import HealthDataPoint, Pregnant
+    from ..models import HealthDataPoint
     from ..core.trend_engine import trend_engine
     from ..database import SessionLocal
+    from ..services.patient_context_service import get_patient_basic
 
     patient_context = ""
     patient_db = SessionLocal()
     try:
-        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if pregnant and pregnant.gestational_age_days:
-            gw = pregnant.gestational_age_days // 7
-            gd = pregnant.gestational_age_days % 7
-            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
-            if pregnant.risk_tags:
-                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
-            if pregnant.nickname:
-                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
+        basic = get_patient_basic(patient_db, pregnant_id)
+        if basic:
+            patient_context = f"当前孕妇孕周：{basic['gestational_week']}周。"
+            if basic["risk_tags"]:
+                patient_context += f" 风险标签：{', '.join(basic['risk_tags'])}。"
+            if basic.get("nickname"):
+                patient_context += f" 孕妇昵称：{basic['nickname']}。"
 
             # 注入健康趋势分析
             try:
@@ -79,7 +78,7 @@ def _query_patient_context(pregnant_id: str) -> str:
                         {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
                         for r in recent_records
                     ]
-                    trends = trend_engine.analyze(records_data, gest_week=gw)
+                    trends = trend_engine.analyze(records_data, gest_week=basic["gest_week"])
                     if trends:
                         trend_summaries = [t.summary for t in trends if t.summary]
                         if trend_summaries:
@@ -93,21 +92,19 @@ def _query_patient_context(pregnant_id: str) -> str:
 
 def _get_patient_context_simple(pregnant_id: str) -> str:
     """同步函数：简单查询孕妇基本信息（在线程池中执行）"""
-    from ..models import Pregnant
     from ..database import SessionLocal
+    from ..services.patient_context_service import get_patient_basic
 
     patient_context = ""
     patient_db = SessionLocal()
     try:
-        pregnant = patient_db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if pregnant and pregnant.gestational_age_days:
-            gw = pregnant.gestational_age_days // 7
-            gd = pregnant.gestational_age_days % 7
-            patient_context = f"当前孕妇孕周：{gw}+{gd}周。"
-            if pregnant.risk_tags:
-                patient_context += f" 风险标签：{', '.join(pregnant.risk_tags)}。"
-            if pregnant.nickname:
-                patient_context += f" 孕妇昵称：{pregnant.nickname}。"
+        basic = get_patient_basic(patient_db, pregnant_id)
+        if basic:
+            patient_context = f"当前孕妇孕周：{basic['gestational_week']}周。"
+            if basic["risk_tags"]:
+                patient_context += f" 风险标签：{', '.join(basic['risk_tags'])}。"
+            if basic.get("nickname"):
+                patient_context += f" 孕妇昵称：{basic['nickname']}。"
     finally:
         patient_db.close()
     return patient_context
@@ -251,14 +248,64 @@ async def send_message(req: ChatSendRequest):
 
 @router.get("/conversation/{pregnant_id}")
 async def get_conversation_history(pregnant_id: str, session_id: str = ""):
-    """获取对话历史记录（当前为会话内缓存，不持久化）"""
-    return {"session_id": session_id, "messages": [], "message": "对话历史仅在会话内有效"}
+    """获取对话历史记录
+
+    当 persist_chat_messages=True 时从数据库加载，
+    否则返回空列表（对话仅在前端 localStorage 保留）。
+    如果指定 session_id 则只返回该会话的消息，否则返回该孕妇所有会话的消息。
+    """
+    if not settings.persist_chat_messages:
+        return {"session_id": session_id, "messages": [], "message": "对话持久化未启用"}
+
+    db = SessionLocal()
+    try:
+        query = db.query(ConversationMessage).filter(
+            ConversationMessage.pregnant_id == pregnant_id,
+        )
+        if session_id:
+            query = query.filter(ConversationMessage.session_id == session_id)
+
+        messages = (
+            query.order_by(ConversationMessage.created_at.asc())
+            .limit(200)
+            .all()
+        )
+        return {
+            "session_id": session_id,
+            "messages": [
+                {"role": m.role, "content": m.content, "session_id": m.session_id, "created_at": m.created_at.isoformat() if m.created_at else None}
+                for m in messages
+            ],
+        }
+    finally:
+        db.close()
 
 
 @router.delete("/conversation/{pregnant_id}")
 async def clear_conversation_history(pregnant_id: str, session_id: str = ""):
-    """清除对话历史（当前为会话内缓存，无需清除）"""
-    return {"message": "对话历史仅在会话内有效，无需清除"}
+    """清除对话历史
+
+    如果指定 session_id 则只清除该会话，否则清除该孕妇所有会话。
+    """
+    if not settings.persist_chat_messages:
+        return {"message": "对话持久化未启用，无需清除"}
+
+    db = SessionLocal()
+    try:
+        query = db.query(ConversationMessage).filter(
+            ConversationMessage.pregnant_id == pregnant_id,
+        )
+        if session_id:
+            query = query.filter(ConversationMessage.session_id == session_id)
+
+        deleted = query.delete()
+        db.commit()
+        return {"message": f"已清除 {deleted} 条对话记录", "deleted_count": deleted}
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "清除对话历史失败")
+    finally:
+        db.close()
 
 
 # ==================== SSE 流式输出 ====================
@@ -269,9 +316,22 @@ from ..core import MockLLMClient
 
 async def _build_chat_context(req: ChatSendRequest) -> dict:
     """构建对话上下文，供流式/非流式端点共用"""
-    # 1. NLU解析
-    nlu_result = nlu_engine.parse(req.message)
-    _extract_extra_entities(req.message, nlu_result)
+    import base64 as _b64
+
+    # 多模态消息：记录日志，构建多模态消息
+    if req.message_type in ("AUDIO", "IMAGE") and req.audio_data:
+        logger.info(
+            "收到多模态消息 type={} pregnant_id={} data_len={} format={}",
+            req.message_type, req.pregnant_id[:8], len(req.audio_data), req.audio_format,
+        )
+
+    # 1. NLU解析（多模态消息跳过NLU，避免对空文本做无用解析）
+    if req.message_type in ("AUDIO", "IMAGE"):
+        from ..core.nlu_engine import NLUResult
+        nlu_result = NLUResult(intent="UNKNOWN", entities={}, is_emergency=False)
+    else:
+        nlu_result = nlu_engine.parse(req.message)
+        _extract_extra_entities(req.message, nlu_result)
 
     # 2. 紧急检测
     is_emergency = bool(nlu_result.is_emergency)
@@ -315,11 +375,40 @@ async def _build_chat_context(req: ChatSendRequest) -> dict:
 
     # 7. 加载对话历史（异步）
     session_id = req.session_id or _generate_session_id(req.pregnant_id)
-    history = await conversation_store.async_load_history(session_id, req.pregnant_id)
+    history = []
+    if settings.persist_chat_messages:
+        history = await conversation_store.async_load_history(session_id, req.pregnant_id)
 
     messages = [{"role": "system", "content": system_prompt_content}]
     messages.extend(history)
-    messages.append({"role": "user", "content": req.message})
+
+    # 构建用户消息（支持多模态音频/图片格式）
+    if req.message_type == "AUDIO" and req.audio_data:
+        content_parts = []
+        text = req.message.strip() or "请分析这段语音内容并给出回复"
+        content_parts.append({"type": "text", "text": text})
+        content_parts.append({
+            "type": "input_audio",
+            "input_audio": {
+                "data": req.audio_data,
+                "format": req.audio_format or "webm",
+            },
+        })
+        messages.append({"role": "user", "content": content_parts})
+    elif req.message_type == "IMAGE" and req.audio_data:
+        content_parts = []
+        text = req.message.strip() or "请分析这张图片并给出回复"
+        content_parts.append({"type": "text", "text": text})
+        fmt = req.audio_format or "jpeg"
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/{fmt};base64,{req.audio_data}",
+            },
+        })
+        messages.append({"role": "user", "content": content_parts})
+    else:
+        messages.append({"role": "user", "content": req.message})
 
     return {
         "nlu_result": nlu_result,
@@ -428,6 +517,9 @@ async def send_message_stream(req: ChatSendRequest):
         # 持久化对话消息
         try:
             user_msg = ctx["messages"][-1]  # 最后一条是用户消息
+            if not settings.persist_chat_messages:
+                return
+
             await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "user", user_msg["content"])
             await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "assistant", full_response)
         except Exception:

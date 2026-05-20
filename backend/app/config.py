@@ -13,17 +13,24 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = True
 
-    # LLM配置
-    llm_mode: Literal["cloud", "local", "mock", "mixed"] = "mock"
-    llm_pregnant_mode: Literal["cloud", "local", "mock"] = "cloud"
-    llm_api_key: str = "sk-placeholder"
-    llm_base_url: str = "https://api.deepseek.com/v1"
-    llm_model: str = "deepseek-chat"
+    # LLM配置 - 全局默认（护士/医生端使用）
+    llm_mode: Literal["cloud", "local", "mock", "mixed"] = "local"
+    llm_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
+    llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_model: str = "qwen3.5-35b-a3b"
     ollama_host: str = "http://localhost:11434"
     local_model: str = "qwen2.5:7b"
 
+    # LLM配置 - 角色专属（优先级高于全局配置）
+    # 孕妇端：使用云模型
+    llm_pregnant_mode: Literal["cloud", "local", "mock", ""] = "cloud"
+    # 护士端：使用本地模型
+    llm_nurse_mode: Literal["cloud", "local", "mock", ""] = "local"
+    # 医生端：使用本地模型
+    llm_doctor_mode: Literal["cloud", "local", "mock", ""] = "local"
+
     # FGR配置
-    fgr_mode: Literal["mock", "npu"] = "mock"
+    fgr_mode: bool = True
 
     # NLU配置
     nlu_mode: Literal["cloud", "npu", "hybrid"] = "hybrid"
@@ -68,10 +75,13 @@ class Settings(BaseSettings):
     seed_data: bool = True
 
     # Agno 配置
-    agno_enabled: bool = True
+    agno_enabled: bool = False
     agno_model_id: str = "gpt-4o"
     agno_knowledge_dir: str = "data/knowledge"
     agno_knowledge_table: str = "knowledge_chunks"
+    agno_memory_enabled: bool = True
+    agno_planning_enabled: bool = True
+    persist_chat_messages: bool = True
 
     model_config = {"env_file": _env_path, "env_file_encoding": "utf-8"}
 

@@ -145,152 +145,18 @@
         </div>
       </el-col>
     </el-row>
-
-    <!-- Dr.智 AI 会诊面板 -->
-    <div class="content-card" style="margin-top: 16px">
-      <div class="content-card__header">
-        <span class="content-card__title" style="display: flex; align-items: center; gap: 8px">
-          <AgentAvatar agent="zhiyi" :size="24" />
-          Dr.智 AI 智能会诊
-        </span>
-        <el-button text type="primary" size="small" @click="showAiPanel = !showAiPanel">
-          {{ showAiPanel ? '收起' : '展开' }}
-        </el-button>
-      </div>
-      <div class="content-card__body" v-if="showAiPanel">
-        <div class="ai-panel">
-          <div class="ai-panel__input">
-            <el-select
-              v-model="aiPatientId"
-              filterable
-              placeholder="选择孕妇进行AI分析"
-              style="flex: 1"
-              clearable
-            >
-              <el-option
-                v-for="p in pregnantList"
-                :key="p.pregnant_id"
-                :label="`${p.display_name} (孕${(p.gestational_age_days||0)/7|0}周)${p.risk_tags?.length ? ' ['+p.risk_tags.join(',')+']' : ''}`"
-                :value="p.pregnant_id"
-              />
-            </el-select>
-            <el-input
-              v-model="aiQuery"
-              placeholder="补充查询内容（可选）"
-              style="width: 200px"
-              clearable
-            />
-            <el-button
-              type="primary"
-              :loading="aiLoading"
-              :disabled="!aiPatientId"
-              @click="runAiAnalysis"
-            >
-              <el-icon><MagicStick /></el-icon> AI 分析
-            </el-button>
-          </div>
-
-          <div v-if="aiResult" class="ai-result" v-loading="aiLoading">
-            <el-alert
-              v-if="aiResult.risk_summary"
-              title="风险总结"
-              :description="aiResult.risk_summary"
-              type="error"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px"
-            />
-            <el-alert
-              v-if="aiResult.analysis"
-              title="综合分析"
-              :description="aiResult.analysis"
-              type="info"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px"
-            />
-
-            <!-- 鉴别诊断推理链 -->
-            <div v-if="aiResult.reasoning_chain?.length" class="reasoning-chain">
-              <h4 class="section-title">
-                <el-icon><Guide /></el-icon> 推理链
-              </h4>
-              <div class="chain-steps">
-                <div
-                  v-for="(step, idx) in aiResult.reasoning_chain"
-                  :key="idx"
-                  class="chain-step"
-                >
-                  <span class="chain-step__num">{{ idx + 1 }}</span>
-                  <span class="chain-step__text">{{ step }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 鉴别诊断 -->
-            <div v-if="aiResult.differential_diagnosis?.length" class="differential-diagnosis">
-              <h4 class="section-title">
-                <el-icon><FirstAidKit /></el-icon> 鉴别诊断
-              </h4>
-              <div class="diagnosis-list">
-                <div
-                  v-for="(dx, idx) in aiResult.differential_diagnosis"
-                  :key="idx"
-                  class="diagnosis-item"
-                >
-                  <div class="diagnosis-item__header">
-                    <span class="diagnosis-item__condition">{{ dx.condition }}</span>
-                    <el-tag
-                      :type="dx.confidence >= 0.7 ? 'danger' : dx.confidence >= 0.4 ? 'warning' : 'info'"
-                      size="small"
-                      effect="plain"
-                    >
-                      {{ (dx.confidence * 100).toFixed(0) }}%
-                    </el-tag>
-                  </div>
-                  <p v-if="dx.reasoning" class="diagnosis-item__reasoning">{{ dx.reasoning }}</p>
-                </div>
-              </div>
-            </div>
-
-            <el-alert
-              v-if="aiResult.suggested_orders"
-              title="建议医嘱"
-              :description="aiResult.suggested_orders"
-              type="warning"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 12px; margin-top: 12px"
-            />
-            <div v-if="aiResult.evidence_references?.length" class="evidence-refs">
-              <p class="refs-title">循证参考：</p>
-              <ul>
-                <li v-for="(ref, idx) in aiResult.evidence_references" :key="idx">{{ ref }}</li>
-              </ul>
-            </div>
-          </div>
-
-          <div v-if="!aiResult && !aiLoading" class="ai-empty">
-            <el-icon :size="40" color="var(--text-muted)"><MagicStick /></el-icon>
-            <p>选择孕妇后点击"AI分析"，Dr.智将提供智能综合分析建议</p>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Bell, Document, MagicStick, Guide, FirstAidKit } from '@element-plus/icons-vue'
-import { dashboardApi, alertApi, orderApi, doctorAiApi } from '@/api/endpoints'
+import { Refresh, Bell, Document } from '@element-plus/icons-vue'
+import { dashboardApi, alertApi, orderApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
-import type { Pregnant } from '@/types'
 import type { Alert, MedicalOrder, DashboardStats } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
-import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { ElNotification } from 'element-plus'
 
 const router = useRouter()
@@ -424,40 +290,6 @@ async function handleSignOrder(order: MedicalOrder) {
   }
 }
 
-// ==================== AI 智能会诊 ====================
-const showAiPanel = ref(false)
-const aiPatientId = ref('')
-const aiQuery = ref('')
-const aiLoading = ref(false)
-const aiResult = ref<any>(null)
-const pregnantList = ref<Pregnant[]>([])
-
-async function loadPatientList() {
-  try {
-    const res = await dashboardApi.pregnant()
-    pregnantList.value = res.data || []
-  } catch { /* ignore */ }
-}
-
-async function runAiAnalysis() {
-  if (!aiPatientId.value) return
-  aiLoading.value = true
-  aiResult.value = null
-  try {
-    const res = await doctorAiApi.analyze(aiPatientId.value, aiQuery.value)
-    aiResult.value = res.data
-  } catch (err: any) {
-    aiResult.value = {
-      risk_summary: '',
-      analysis: 'AI会诊暂时不可用，请查看孕妇详情进行手动评估',
-      suggested_orders: '',
-      evidence_references: [],
-    }
-  } finally {
-    aiLoading.value = false
-  }
-}
-
 /**
  * 处理连接状态变化回调（命名函数以便注销）
  */
@@ -538,7 +370,6 @@ function goToReview(alert: Alert) {
 
 onMounted(() => {
   loadAllData()
-  loadPatientList()
   initWebSocket()
 })
 
@@ -559,15 +390,9 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-  100% {
-    opacity: 1;
-  }
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
 .page-header__actions {
@@ -577,28 +402,37 @@ onUnmounted(() => {
 }
 
 .stat-grid-row {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 /* 医嘱列表项 */
 .order-item {
-  padding: 14px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
 }
 
 .order-item:last-child {
   border-bottom: none;
 }
 
+.order-item:hover {
+  background: rgba(232, 245, 233, 0.2);
+  border-radius: var(--radius-sm);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 .order-item__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .order-item__patient {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   color: var(--text-primary);
 }
@@ -606,12 +440,12 @@ onUnmounted(() => {
 .order-item__content {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .order-item__footer {
@@ -622,150 +456,12 @@ onUnmounted(() => {
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 0;
-  gap: 12px;
+  color: var(--text-muted);
 }
 
 .empty-state p {
-  color: var(--text-light);
-  font-size: 14px;
-}
-
-/* AI 面板 */
-.ai-panel__input {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.ai-result {
-  min-height: 100px;
-}
-
-.ai-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px 0;
   color: var(--text-muted);
-  font-size: 13px;
-}
-
-.evidence-refs {
-  background: var(--info-light);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-}
-
-.refs-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.evidence-refs ul {
-  margin-left: 16px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
-
-/* 推理链 */
-.reasoning-chain {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  margin-bottom: 12px;
-  border-left: 3px solid var(--primary);
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.chain-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.chain-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.chain-step__num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-/* 鉴别诊断 */
-.differential-diagnosis {
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  margin-bottom: 12px;
-}
-
-.diagnosis-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.diagnosis-item {
-  background: var(--bg-card);
-  border-radius: 6px;
-  padding: 12px;
-  border: 1px solid var(--border);
-}
-
-.diagnosis-item__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.diagnosis-item__condition {
   font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.diagnosis-item__reasoning {
-  font-size: 12px;
-  color: var(--text-light);
-  line-height: 1.6;
-  margin: 0;
+  font-weight: 500;
 }
 </style>

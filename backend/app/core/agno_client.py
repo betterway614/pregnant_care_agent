@@ -1,43 +1,80 @@
-"""Agno 模型适配器 - 封装 Agno 模型为兼容 LLMClient 接口"""
-from typing import AsyncGenerator, Optional
+"""Agno 模型适配器 - 封装 Agno 模型为兼容 LLMClient 接口
+
+支持按角色（pregnant/nurse/doctor）配置不同模型：
+- pregnant: 孕妇端智能体（小安），可使用云模型
+- nurse: 护士端智能体（小护），可使用本地模型
+- doctor: 医生端智能体（智医），可使用本地模型
+"""
+from typing import AsyncGenerator, Literal, Optional
 from ..config import settings
 
+# 按角色缓存模型实例
+_model_cache: dict[str, object] = {}
 
-# 模型实例缓存
-_model_instance = None
+# 角色类型定义
+AgentRole = Literal["pregnant", "nurse", "doctor"]
 
 
-def get_agno_model():
-    """根据配置返回 Agno 模型实例（全局复用）"""
-    global _model_instance
-    if _model_instance is not None:
-        return _model_instance
-
+def _create_model(mode: str, model_id: str = None, api_key: str = None, base_url: str = None):
+    """创建 Agno 模型实例"""
     from agno.models.openai import OpenAIChat
     from agno.models.ollama import Ollama
 
-    mode = settings.llm_mode
-
     if mode == "cloud":
-        _model_instance = OpenAIChat(
-            id=settings.llm_model,
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_base_url,
+        return OpenAIChat(
+            id=model_id or settings.llm_model,
+            api_key=api_key or settings.llm_api_key,
+            base_url=base_url or settings.llm_base_url,
             role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
         )
     elif mode == "local":
-        _model_instance = Ollama(
-            id=settings.local_model,
-            host=settings.ollama_host,
+        return Ollama(
+            id=model_id or settings.local_model,
+            host=base_url or settings.ollama_host,
         )
     else:
-        _model_instance = OpenAIChat(
+        return OpenAIChat(
             id="mock-model",
             api_key="mock-key",
             base_url="http://localhost:1/v1",
         )
 
-    return _model_instance
+
+def get_agno_model(role: AgentRole = "pregnant"):
+    """根据角色和配置返回 Agno 模型实例
+
+    配置优先级：
+    1. 角色专属配置（llm_pregnant_mode / llm_nurse_mode / llm_doctor_mode）
+    2. 全局配置（llm_mode）
+
+    Args:
+        role: 智能体角色，可选 "pregnant"（孕妇端）、"nurse"（护士端）、"doctor"（医生端）
+
+    Returns:
+        Agno 模型实例
+    """
+    global _model_cache
+
+    # 检查缓存
+    if role in _model_cache:
+        return _model_cache[role]
+
+    # 根据角色确定模型配置
+    if role == "pregnant":
+        # 孕妇端：优先使用 llm_pregnant_mode，否则使用 llm_mode
+        mode = settings.llm_pregnant_mode if settings.llm_pregnant_mode else settings.llm_mode
+    elif role == "nurse":
+        # 护士端：优先使用 llm_nurse_mode，否则使用 llm_mode
+        mode = settings.llm_nurse_mode if settings.llm_nurse_mode else settings.llm_mode
+    elif role == "doctor":
+        # 医生端：优先使用 llm_doctor_mode，否则使用 llm_mode
+        mode = settings.llm_doctor_mode if settings.llm_doctor_mode else settings.llm_mode
+    else:
+        mode = settings.llm_mode
+
+    # 创建并缓存模型实例
+    _model_cache[role] = _create_model(mode)
+    return _model_cache[role]
 
 
 class AgnoClient:
@@ -108,7 +145,17 @@ def get_agno_client() -> AgnoClient:
     return _agno_client_instance
 
 
-def reset_agno_client():
-    """重置 Agno 客户端"""
-    global _agno_client_instance
+def reset_agno_client(role: AgentRole = None):
+    """重置 Agno 客户端和模型缓存
+
+    Args:
+        role: 指定角色则只清除该角色的模型缓存，否则清除所有缓存
+    """
+    global _agno_client_instance, _model_cache
+
+    if role:
+        _model_cache.pop(role, None)
+    else:
+        _model_cache.clear()
+
     _agno_client_instance = None

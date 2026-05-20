@@ -285,11 +285,6 @@ onMounted(fetchAlerts)
   margin-bottom: 16px;
 }
 
-.search-bar {
-  margin-bottom: 20px;
-  align-items: center;
-}
-
 .filter-summary {
   margin-left: 8px;
 }
@@ -300,44 +295,57 @@ onMounted(fetchAlerts)
 
 .text-light {
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 
 /* 详情抽屉 */
 .detail-section {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .detail-section__title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .detail-section__content {
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
   margin: 0;
 }
 
 .detail-row {
   display: flex;
   align-items: center;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
 }
 
 .detail-row:last-child {
   border-bottom: none;
 }
 
+.detail-row:hover {
+  background: rgba(232, 245, 233, 0.15);
+  border-radius: var(--radius-xs);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 .detail-label {
   width: 80px;
   font-size: 13px;
-  color: var(--text-light);
+  color: var(--text-muted);
   flex-shrink: 0;
+  font-weight: 500;
 }
 
 .detail-value {
@@ -347,27 +355,17 @@ onMounted(fetchAlerts)
 }
 
 .detail-section__pre {
-  background: var(--bg-page);
+  background: rgba(241, 245, 249, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius-sm);
-  padding: 12px;
+  padding: 14px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   overflow-x: auto;
   font-family: 'SF Mono', 'Fira Code', monospace;
   margin: 0;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 60px 0;
-  gap: 12px;
-}
-
-.empty-state p {
-  color: var(--text-light);
-  font-size: 14px;
+  border: 1px solid var(--border);
 }
 
 /* 操作列：表头与单元格居中，与全局 table-row-actions 左对齐区分 */

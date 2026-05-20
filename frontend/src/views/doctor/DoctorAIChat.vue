@@ -1,38 +1,38 @@
 <template>
-  <div class="nurse-chat">
+  <div class="doctor-chat">
     <!-- 消息区域 -->
-    <div class="nurse-chat__messages" ref="messagesRef">
+    <div class="doctor-chat__messages" ref="messagesRef">
       <div
         v-for="msg in messages"
         :key="msg.id"
-        class="nurse-chat__msg"
-        :class="{ 'nurse-chat__msg--user': msg.role === 'user' }"
+        class="doctor-chat__msg"
+        :class="{ 'doctor-chat__msg--user': msg.role === 'user' }"
       >
         <AgentAvatar
           v-if="msg.role === 'assistant'"
-          agent="xiaohu"
+          agent="zhiyi"
           :size="32"
           :thinking="msg.loading && msg.thinking"
         />
-        <div class="nurse-chat__bubble" :class="{ 'nurse-chat__bubble--user': msg.role === 'user' }">
+        <div class="doctor-chat__bubble" :class="{ 'doctor-chat__bubble--user': msg.role === 'user' }">
           <!-- 思考中状态 -->
-          <div v-if="msg.loading && msg.thinking" class="nurse-chat__thinking">
+          <div v-if="msg.loading && msg.thinking" class="doctor-chat__thinking">
             <div class="thinking-pulse"></div>
-            <span class="thinking-text">{{ msg.thinkingMessage || '小护正在思考...' }}</span>
+            <span class="thinking-text">{{ msg.thinkingMessage || 'Dr.智正在思考...' }}</span>
           </div>
           <!-- 加载中 -->
-          <div v-else-if="msg.loading && !msg.content" class="nurse-chat__loading">
+          <div v-else-if="msg.loading && !msg.content" class="doctor-chat__loading">
             <span class="loading-dot" /><span class="loading-dot" /><span class="loading-dot" />
           </div>
           <!-- 消息内容 -->
-          <div v-else class="nurse-chat__text" v-html="renderMarkdown(msg.content)" />
+          <div v-else class="doctor-chat__text" v-html="renderMarkdown(msg.content)" />
         </div>
       </div>
     </div>
 
     <!-- 工具调用步骤指示器 -->
     <transition name="slide-up">
-      <div v-if="currentToolStep" class="nurse-chat__tool-indicator">
+      <div v-if="currentToolStep" class="doctor-chat__tool-indicator">
         <div class="tool-indicator__icon">
           <el-icon :size="14"><Loading /></el-icon>
         </div>
@@ -42,7 +42,7 @@
 
     <!-- 已完成的工具步骤 -->
     <transition name="fade">
-      <div v-if="completedToolSteps.length > 0 && isStreaming" class="nurse-chat__tool-steps">
+      <div v-if="completedToolSteps.length > 0 && isStreaming" class="doctor-chat__tool-steps">
         <div
           v-for="(step, idx) in completedToolSteps"
           :key="idx"
@@ -55,12 +55,12 @@
     </transition>
 
     <!-- 输入区域 -->
-    <div class="nurse-chat__input">
+    <div class="doctor-chat__input">
       <el-input
         v-model="inputText"
         type="textarea"
         :rows="1"
-        placeholder="向小护提问护理问题..."
+        placeholder="向 Dr.智 提问临床问题..."
         @keydown.enter.exact.prevent="handleSend"
         :disabled="isStreaming"
         resize="none"
@@ -81,7 +81,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { Promotion, Loading, Check } from '@element-plus/icons-vue'
-import { nurseAiApi } from '@/api/endpoints'
+import { doctorAiApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -106,7 +106,7 @@ const currentToolStep = ref<string | null>(null)
 const completedToolSteps = ref<string[]>([])
 
 let msgCounter = 0
-function genId() { return `nurse_${Date.now()}_${++msgCounter}` }
+function genId() { return `doctor_${Date.now()}_${++msgCounter}` }
 
 function scrollToBottom() {
   nextTick(() => {
@@ -135,7 +135,7 @@ async function handleSend() {
     content: '',
     loading: true,
     thinking: true,
-    thinkingMessage: '小护正在思考...',
+    thinkingMessage: 'Dr.智正在思考...',
     toolSteps: [],
   }
   messages.value.push(assistantMsg)
@@ -145,7 +145,7 @@ async function handleSend() {
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
 
   try {
-    await nurseAiApi.chatStream(
+    await doctorAiApi.chatStream(
       { message: text, pregnant_id: pregnantId || undefined },
       {
         onThinking(message: string) {
@@ -169,7 +169,7 @@ async function handleSend() {
           scrollToBottom()
         },
         onError() {
-          assistantMsg.content = '抱歉，小护暂时无法回复。请稍后再试。'
+          assistantMsg.content = '抱歉，Dr.智暂时无法回复。请稍后再试。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
           currentToolStep.value = null
@@ -179,7 +179,7 @@ async function handleSend() {
     )
   } catch {
     if (!assistantMsg.content) {
-      assistantMsg.content = '抱歉，小护暂时无法回复。请稍后再试。'
+      assistantMsg.content = '抱歉，Dr.智暂时无法回复。请稍后再试。'
     }
     assistantMsg.loading = false
     assistantMsg.thinking = false
@@ -192,21 +192,21 @@ onMounted(() => {
   messages.value.push({
     id: genId(),
     role: 'assistant',
-    content: '您好！我是**小护**，您的AI护理助手。\n\n可以问我关于：\n- 孕妇数据分析\n- 护理建议\n- 随访计划\n- 健康趋势评估',
+    content: '您好！我是 **Dr.智**，您的AI临床助手。\n\n可以向我咨询：\n- 鉴别诊断\n- 治疗方案\n- 指南解读\n- 病例分析\n- 用药参考',
   })
 })
 </script>
 
 <style scoped>
-.nurse-chat {
+.doctor-chat {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
   position: relative;
 }
 
-.nurse-chat__messages {
+.doctor-chat__messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
@@ -216,20 +216,20 @@ onMounted(() => {
   scroll-behavior: smooth;
 }
 
-.nurse-chat__messages::-webkit-scrollbar {
+.doctor-chat__messages::-webkit-scrollbar {
   width: 4px;
 }
 
-.nurse-chat__messages::-webkit-scrollbar-track {
+.doctor-chat__messages::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.nurse-chat__messages::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+.doctor-chat__messages::-webkit-scrollbar-thumb {
+  background: #a7f3d0;
   border-radius: 2px;
 }
 
-.nurse-chat__msg {
+.doctor-chat__msg {
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -241,11 +241,11 @@ onMounted(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.nurse-chat__msg--user {
+.doctor-chat__msg--user {
   flex-direction: row-reverse;
 }
 
-.nurse-chat__bubble {
+.doctor-chat__bubble {
   max-width: 85%;
   padding: 12px 16px;
   border-radius: 16px;
@@ -255,39 +255,39 @@ onMounted(() => {
 }
 
 /* 助手气泡 - 玻璃态 */
-.nurse-chat__bubble:not(.nurse-chat__bubble--user) {
+.doctor-chat__bubble:not(.doctor-chat__bubble--user) {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 2px 8px rgba(92, 107, 192, 0.08);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
   color: #1e293b;
   border-radius: 4px 16px 16px 16px;
 }
 
 /* 用户气泡 */
-.nurse-chat__bubble--user {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+.doctor-chat__bubble--user {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
   color: white;
   border-radius: 16px 4px 16px 16px;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25);
 }
 
-.nurse-chat__text :deep(p) { margin: 0 0 8px; }
-.nurse-chat__text :deep(p:last-child) { margin-bottom: 0; }
-.nurse-chat__text :deep(strong) { font-weight: 600; color: #1e293b; }
-.nurse-chat__text :deep(ul),
-.nurse-chat__text :deep(ol) { padding-left: 18px; margin: 4px 0; }
-.nurse-chat__text :deep(li) { margin: 2px 0; }
-.nurse-chat__text :deep(code) {
-  background: rgba(99, 102, 241, 0.1);
+.doctor-chat__text :deep(p) { margin: 0 0 8px; }
+.doctor-chat__text :deep(p:last-child) { margin-bottom: 0; }
+.doctor-chat__text :deep(strong) { font-weight: 600; color: #1e293b; }
+.doctor-chat__text :deep(ul),
+.doctor-chat__text :deep(ol) { padding-left: 18px; margin: 4px 0; }
+.doctor-chat__text :deep(li) { margin: 2px 0; }
+.doctor-chat__text :deep(code) {
+  background: rgba(16, 185, 129, 0.1);
   padding: 1px 4px;
   border-radius: 4px;
   font-size: 12px;
 }
 
 /* 思考中状态 */
-.nurse-chat__thinking {
+.doctor-chat__thinking {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -297,7 +297,7 @@ onMounted(() => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #818cf8, #6366f1);
+  background: linear-gradient(135deg, #34d399, #10b981);
   animation: pulse-ring 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   position: relative;
 }
@@ -307,7 +307,7 @@ onMounted(() => {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 2px solid rgba(99, 102, 241, 0.3);
+  border: 2px solid rgba(16, 185, 129, 0.3);
   animation: pulse-ripple 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
@@ -324,11 +324,11 @@ onMounted(() => {
 .thinking-text {
   font-size: 13px;
   font-weight: 500;
-  color: #6366f1;
+  color: #10b981;
 }
 
 /* 加载动画 */
-.nurse-chat__loading {
+.doctor-chat__loading {
   display: flex;
   gap: 6px;
   padding: 4px 0;
@@ -338,7 +338,7 @@ onMounted(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #a5b4fc;
+  background: #6ee7b7;
   animation: dotBounce 1.4s infinite ease-in-out both;
 }
 
@@ -351,19 +351,19 @@ onMounted(() => {
 }
 
 /* 工具调用指示器 */
-.nurse-chat__tool-indicator {
+.doctor-chat__tool-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
   margin: 0 16px;
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(16, 185, 129, 0.08);
   border-radius: 10px;
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.15);
 }
 
 .tool-indicator__icon {
-  color: #6366f1;
+  color: #10b981;
   animation: spin 1s linear infinite;
 }
 
@@ -374,12 +374,12 @@ onMounted(() => {
 
 .tool-indicator__text {
   font-size: 12px;
-  color: #6366f1;
+  color: #10b981;
   font-weight: 500;
 }
 
 /* 已完成的工具步骤 */
-.nurse-chat__tool-steps {
+.doctor-chat__tool-steps {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -409,19 +409,19 @@ onMounted(() => {
 }
 
 /* 输入区域 */
-.nurse-chat__input {
+.doctor-chat__input {
   display: flex;
   gap: 10px;
   padding: 12px 16px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  border-top: 1px solid rgba(209, 250, 229, 0.8);
   align-items: flex-end;
 }
 
-.nurse-chat__input :deep(.el-textarea__inner) {
-  border: 1px solid #e2e8f0;
+.doctor-chat__input :deep(.el-textarea__inner) {
+  border: 1px solid #d1fae5;
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 13px;
@@ -429,9 +429,9 @@ onMounted(() => {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.nurse-chat__input :deep(.el-textarea__inner:focus) {
-  border-color: #818cf8;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+.doctor-chat__input :deep(.el-textarea__inner:focus) {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15);
 }
 
 .send-btn {
@@ -439,8 +439,8 @@ onMounted(() => {
   height: 40px;
   border-radius: 12px;
   border: none;
-  background: #e2e8f0;
-  color: #94a3b8;
+  background: #d1fae5;
+  color: #6ee7b7;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -450,14 +450,14 @@ onMounted(() => {
 }
 
 .send-btn--active {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
   color: white;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .send-btn--active:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .send-btn--active:active {

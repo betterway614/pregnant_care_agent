@@ -30,7 +30,7 @@ def _create_data_collection_agent() -> Agent:
     """数据采集 Agent - 收集孕妇健康数据"""
     return Agent(
         name="数据采集员",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你是健康数据采集专员，负责收集孕妇的最新健康数据。",
             "使用工具获取孕妇的上下文信息和近期数据。",
@@ -45,7 +45,7 @@ def _create_risk_assessment_agent() -> Agent:
     """风险评估 Agent - 评估孕妇风险等级"""
     return Agent(
         name="风险评估师",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你是风险评估专家，负责评估孕妇的健康风险。",
             "使用工具获取数据并评估规则，输出风险等级。",
@@ -60,7 +60,7 @@ def _create_routine_agent() -> Agent:
     """常规处理 Agent - 低危孕妇的标准处理"""
     return Agent(
         name="常规护理员",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你负责低危孕妇的常规护理指导。",
             "提供标准的健康建议和下次产检提醒。",
@@ -74,7 +74,7 @@ def _create_high_risk_agent() -> Agent:
     """高危处理 Agent - 中高危孕妇的特殊处理"""
     return Agent(
         name="高危护理专家",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你负责中高危孕妇的护理指导。",
             "提供更详细的健康建议和注意事项。",
@@ -90,7 +90,7 @@ def _create_emergency_agent() -> Agent:
     """紧急处理 Agent - 紧急情况的处理"""
     return Agent(
         name="紧急响应员",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你负责紧急情况的处理。",
             "立即引导孕妇就医，提供清晰的就医指引。",
@@ -105,7 +105,7 @@ def _create_report_agent() -> Agent:
     """报告生成 Agent - 生成检查报告"""
     return Agent(
         name="报告生成员",
-        model=get_agno_model(),
+        model=get_agno_model(role="pregnant"),
         instructions=[
             "你负责生成孕检报告。",
             "整合数据采集、风险评估的结果，生成结构化报告。",

@@ -118,6 +118,9 @@ class FgrAssessment(Base):
     explanation = Column(Text, nullable=True)
     processing_time_ms = Column(Integer, nullable=True)
     assessed_at = Column(DateTime, default=datetime.utcnow)
+    fgr_probability = Column(Float, nullable=True, comment="集成FGR概率(0-1)")
+    predicted_label = Column(String(8), nullable=True, comment="FGR/NOR")
+    model_confidence = Column(String(8), nullable=True, comment="High/Medium/Low")
 
 
 class Alert(Base):
@@ -238,3 +241,22 @@ class AiAnalysisResult(Base):
     analysis_type = Column(String(32), nullable=False, comment="分析类型: general/followup_summary/risk_assessment")
     result_data = Column(JSON, nullable=False, comment="分析结果数据")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class NurseDoctorIssue(Base):
+    """医护协作问题记录"""
+    __tablename__ = "nurse_doctor_issues"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    reported_by = Column(String(64), nullable=False, comment="上报护士ID")
+    issue_type = Column(String(32), default="risk_alert", comment="risk_alert/abnormal_data/patient_complaint")
+    title = Column(String(128), nullable=False, comment="问题标题")
+    description = Column(Text, nullable=False, comment="问题描述")
+    priority = Column(String(16), default="medium", comment="low/medium/high/urgent")
+    status = Column(String(16), default="pending", comment="pending/acknowledged/processing/resolved")
+    assigned_to = Column(String(64), nullable=True, comment="处理医生ID")
+    resolution = Column(Text, nullable=True, comment="处理结果")
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

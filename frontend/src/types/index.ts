@@ -125,10 +125,21 @@ export interface FgrAssessment {
   case_id: string
   risk_level: string
   risk_label: string
-  confidence_interval: { lowerBound: number; upperBound: number }
+  fgr_probability: number | null
+  predicted_label: string | null
+  model_confidence: string | null
+  confidence_interval: Record<string, number>
   explanation: string
   processing_time: number
   hardware: string
+  fold_details: Array<Record<string, any>> | null
+}
+
+export interface PatientImageInfo {
+  pregnant_id: string
+  has_image: boolean
+  image_url: string
+  display_name: string
 }
 
 export interface FgrTrendPoint {
@@ -167,8 +178,10 @@ export interface ChatRequest {
   pregnant_id: string
   message: string
   session_id?: string
-  message_type?: string
+  message_type?: string  // TEXT | AUDIO
   record_id?: string  // 随访记录ID，存在时进入随访Agent模式
+  audio_data?: string  // base64 编码的音频数据（message_type=AUDIO 时使用）
+  audio_format?: string  // 音频格式: webm, wav, mp3
 }
 
 export interface ChatResponse {
@@ -178,6 +191,14 @@ export interface ChatResponse {
   memory_updated: string[]
   source?: string
   followup_progress?: { answered: number; total: number; status: string }
+  tool_steps?: string[]  // Agent 工具调用步骤（Plan-and-Execute 可见化）
+}
+
+export interface ConversationMessage {
+  role: string
+  content: string
+  session_id?: string
+  created_at?: string
 }
 
 // 角色
