@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # LLM配置 - 全局默认（护士/医生端使用）
-    llm_mode: Literal["cloud", "local", "mock", "mixed"] = "local"
+    llm_mode: Literal["cloud", "local", "mock", "mixed"] = "cloud"
     llm_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.5-35b-a3b"
@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     # 孕妇端：使用云模型
     llm_pregnant_mode: Literal["cloud", "local", "mock", ""] = "cloud"
     # 护士端：使用本地模型
-    llm_nurse_mode: Literal["cloud", "local", "mock", ""] = "local"
+    llm_nurse_mode: Literal["cloud", "local", "mock", ""] = "cloud"
     # 医生端：使用本地模型
-    llm_doctor_mode: Literal["cloud", "local", "mock", ""] = "local"
+    llm_doctor_mode: Literal["cloud", "local", "mock", ""] = "cloud"
 
     # FGR配置
     fgr_mode: bool = True

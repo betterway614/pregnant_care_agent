@@ -385,6 +385,7 @@ class DoctorAnalyzeResponse(BaseModel):
     risk_summary: str = ""
     differential_diagnosis: list[dict] = []  # [{condition, confidence, reasoning}]
     reasoning_chain: list[str] = []  # 逐步推理链
+    source: str = "llm"  # "llm" | "template" — 区分数据来源
 
 
 # === Order Explain ===

@@ -163,30 +163,59 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
                                    risk_tags: list, context: dict,
                                    query: str) -> DoctorAnalyzeResponse | None:
     """尝试通过LLM综合分析孕妇数据，失败返回None"""
-    try:
-        prompt = _build_doctor_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, context, query)
+    import json as _json
+    from loguru import logger
 
+    prompt = _build_doctor_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, context, query)
+    system_prompt = get_doctor_system_prompt()
+
+    try:
         if settings.agno_enabled:
             from ..core.agno_medical_agents import create_doctor_agent
             agent = create_doctor_agent()
             response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
             content = response.content or ""
-            import json
             try:
-                data = json.loads(content) if isinstance(content, str) else content
-            except json.JSONDecodeError:
-                return None
+                data = _json.loads(content) if isinstance(content, str) else content
+            except _json.JSONDecodeError:
+                data = parse_llm_json(content)
+                if not data:
+                    return None
         else:
             client = get_llm_client()
             messages = [
-                {"role": "system", "content": get_doctor_system_prompt()},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
-            response = await client.chat(messages)
+            # 优先使用 JSON mode 强制输出格式
+            response = None
+            try:
+                response = await client.chat(messages, response_format={"type": "json_object"})
+            except (TypeError, Exception) as e:
+                logger.debug("JSON mode 不可用，降级普通调用: {}", e)
+                response = await client.chat(messages)
+
             if not response or not response.strip():
                 return None
+
             data = parse_llm_json(response)
             if not data:
+                # 重试：明确要求修复 JSON
+                logger.warning("首次JSON解析失败，尝试重试修复")
+                retry_messages = messages + [
+                    {"role": "assistant", "content": response},
+                    {"role": "user", "content": "你的回复不是合法JSON。请只返回一个纯粹的JSON对象，不要包含任何其他文本或markdown标记。"}
+                ]
+                try:
+                    retry_response = await client.chat(retry_messages, response_format={"type": "json_object"})
+                except (TypeError, Exception):
+                    retry_response = await client.chat(retry_messages)
+
+                if retry_response:
+                    data = parse_llm_json(retry_response)
+
+            if not data:
+                logger.warning("LLM分析JSON解析最终失败，将使用模板兜底")
                 return None
 
         return DoctorAnalyzeResponse(
@@ -197,8 +226,10 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             risk_summary=data.get("risk_summary", ""),
             differential_diagnosis=data.get("differential_diagnosis", []),
             reasoning_chain=data.get("reasoning_chain", []),
+            source="llm",
         )
-    except Exception:
+    except Exception as e:
+        logger.error("LLM医生分析异常: {}", e)
         return None
 
 
@@ -368,6 +399,7 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
         evidence_references=evidence_references[:5],
         suggested_orders=suggested_orders,
         risk_summary=risk_summary,
+        source="template",
     )
 
 
