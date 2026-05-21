@@ -87,18 +87,37 @@ class ScheduleNode(Base):
 
 
 class FollowUpRecord(Base):
-    """随访记录"""
+    """随访记录 — 参照国家基本公共卫生服务规范(2024版)第2~5次产前随访记录表
+
+    状态机: draft → in_progress → completed → confirmed → archived
+    结构: SOAP (S=自报数据+主诉, O=产科检查+化验, A=评估分类, P=指导+转诊+下次随访)
+    """
     __tablename__ = "follow_up_records"
 
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
     gestational_week = Column(String(16), comment="孕周")
     follow_up_date = Column(DateTime, default=datetime.utcnow)
+    # S: 主观 — 孕妇自报数据 + 主诉
     self_reported_data = Column(JSON, default=dict, comment="自报数据")
     chief_complaint = Column(Text, nullable=True, comment="主诉")
-    health_education = Column(JSON, default=list, comment="健康教育内容")
-    status = Column(String(16), default="draft", comment="draft/confirmed/archived")
+    # O: 客观 — 产科检查 + 化验结果
+    obstetric_exam = Column(JSON, default=dict, comment="产科检查：fundal_height/cm, abdominal_circumference/cm, fetal_position, fetal_heart_rate/bpm")
+    lab_results = Column(JSON, default=dict, comment="化验结果：hemoglobin/g·L⁻¹, urine_protein, other")
+    # A: 评估 — 分类 + 摘要
+    classification = Column(String(32), default="normal", comment="分类: normal/abnormal/critical")
     summary = Column(Text, nullable=True, comment="随访摘要")
+    # P: 计划 — 指导 + 转诊 + 下次随访
+    health_education = Column(JSON, default=list, comment="健康教育内容")
+    guidance_tags = Column(JSON, default=list, comment="指导分类标签：营养/运动/心理/生活/监护/母乳/分娩准备")
+    referral = Column(JSON, nullable=True, comment="转诊记录：has_referral, reason, institution, department")
+    next_followup_date = Column(Date, nullable=True, comment="下次随访日期")
+    # 状态 + 审核追溯
+    status = Column(String(16), default="draft", comment="draft/in_progress/completed/confirmed/archived")
+    reviewed_by = Column(String(64), nullable=True, comment="审核人（护士ID）")
+    reviewed_at = Column(DateTime, nullable=True, comment="审核时间")
+    review_comment = Column(Text, nullable=True, comment="审核意见")
+    ai_snapshot = Column(JSON, default=dict, comment="审核时AI分析报告快照（不可变）")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

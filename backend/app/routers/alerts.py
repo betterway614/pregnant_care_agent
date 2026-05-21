@@ -109,7 +109,12 @@ async def create_alert(
     except Exception as e:
         logger.warning(f"WebSocket广播失败，预警已创建: {e}")
 
-    # 5. 返回预警响应
+    # 5. 后台异步调用 LLM 生成分析摘要
+    import asyncio
+    from ..services.alert_service import alert_service
+    asyncio.create_task(alert_service.enrich_alert_with_llm(db, alert, pregnant))
+
+    # 6. 返回预警响应
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name,
@@ -146,7 +151,7 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
 
 
 @router.put("/{alert_id}/review", response_model=AlertResponse)
-def review_alert(alert_id: str, review: AlertReviewRequest,
+async def review_alert(alert_id: str, review: AlertReviewRequest,
                   db: Session = Depends(get_db)):
     """审核预警"""
     alert = db.query(Alert).filter(Alert.id == UUID(alert_id)).first()
@@ -158,13 +163,35 @@ def review_alert(alert_id: str, review: AlertReviewRequest,
     elif review.action == "dismiss":
         alert.status = "DISMISSED"
     elif review.action == "escalate":
-        alert.status = "CONFIRMED"
+        alert.status = "ESCALATED"
+        # 升级预警级别：非 RED 的升级为 RED
+        if alert.level != "RED":
+            alert.level = "RED"
 
     alert.reviewed_at = datetime.utcnow()
     db.commit()
     db.refresh(alert)
 
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == alert.pregnant_id).first()
+
+    # escalate 时广播升级预警给医生端
+    if review.action == "escalate" and pregnant:
+        try:
+            alert_data = {
+                "id": str(alert.id),
+                "pregnant_id": alert.pregnant_id,
+                "patient_name": pregnant.display_name,
+                "level": alert.level,
+                "message": f"[已升级] {alert.message}",
+                "trigger_source": alert.trigger_source,
+                "status": alert.status,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "gestational_age_days": pregnant.gestational_age_days,
+            }
+            await ws_manager.broadcast_alert(alert_data)
+        except Exception as e:
+            logger.warning(f"escalate WebSocket广播失败: {e}")
+
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",

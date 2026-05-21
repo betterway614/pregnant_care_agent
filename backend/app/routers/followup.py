@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 from ..database import get_db
 from ..models import FollowUpRecord, Pregnant
 from ..database import SessionLocal
@@ -87,12 +88,21 @@ def get_records(status: Optional[str] = None,
 @router.put("/records/{record_id}/confirm", response_model=FollowUpRecordResponse)
 def confirm_record(record_id: str, confirm: FollowUpConfirm,
                    db: Session = Depends(get_db)):
-    """确认归档随访记录"""
+    """确认审核随访记录
+
+    写入审核追溯信息：审核人、审核时间、审核意见、AI快照。
+    """
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
 
     record.status = confirm.status
+    record.reviewed_by = confirm.reviewer_id
+    record.reviewed_at = datetime.utcnow()
+    if confirm.review_comment:
+        record.review_comment = confirm.review_comment
+    if confirm.ai_snapshot:
+        record.ai_snapshot = confirm.ai_snapshot
     db.commit()
     db.refresh(record)
 
@@ -101,6 +111,157 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
         **{c.name: getattr(record, c.name) for c in record.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知"
     )
+
+
+@router.get("/records/{record_id}/ai-review")
+async def ai_review_followup(record_id: str):
+    """护士审核随访时的 AI 辅助分析
+
+    收集该次随访数据 + 历史记录 + 健康数据，调用 LLM 生成审核建议。
+    三层降级：Agno Agent → 普通 LLM → 模板兜底。
+    """
+    from ..config import settings
+    from ..models import HealthDataPoint, Alert
+    from ..schemas import FollowUpAiReviewResponse
+    from datetime import timedelta
+
+    db = SessionLocal()
+    try:
+        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+        if not record:
+            raise HTTPException(404, "随访记录不存在")
+
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+        patient_name = (pregnant.display_name if pregnant else "未知")
+        gest_week = record.gestational_week or "未知"
+        risk_tags = pregnant.risk_tags if pregnant else []
+        answers = record.self_reported_data or {}
+
+        # 收集历史随访记录（不含当前）
+        prev_records = db.query(FollowUpRecord).filter(
+            FollowUpRecord.pregnant_id == record.pregnant_id,
+            FollowUpRecord.id != record.id,
+        ).order_by(FollowUpRecord.created_at.desc()).limit(5).all()
+
+        history_text = ""
+        if prev_records:
+            lines = []
+            for pr in prev_records:
+                pr_data = pr.self_reported_data or {}
+                pr_date = pr.created_at.strftime("%Y-%m-%d") if pr.created_at else "?"
+                items = "; ".join(f"{k}={v}" for k, v in pr_data.items() if v)
+                lines.append(f"  [{pr_date}] {items}")
+            history_text = "\n".join(lines)
+
+        # 最近健康数据
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        recent_points = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == record.pregnant_id,
+            HealthDataPoint.recorded_at >= seven_days_ago,
+        ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
+
+        health_text = ""
+        if recent_points:
+            health_text = "\n".join(
+                f"  {hp.metric_code}: {hp.value}{hp.unit} ({hp.recorded_at.strftime('%m-%d')})"
+                for hp in recent_points
+            )
+
+        # 活跃预警
+        active_alerts = db.query(Alert).filter(
+            Alert.pregnant_id == record.pregnant_id,
+            Alert.status == "PENDING",
+        ).all()
+        alert_text = ""
+        if active_alerts:
+            alert_text = "\n".join(f"  [{a.level}] {a.message}" for a in active_alerts)
+
+        # 构造答案文本
+        answer_lines = [f"- {k}: {v}" for k, v in answers.items()]
+        answer_text = "\n".join(answer_lines)
+        risk_text = "、".join(risk_tags) if risk_tags else "无"
+
+        # 拼接上下文
+        context = f"孕妇：{patient_name}，孕{gest_week}周，风险标签：{risk_text}\n\n本次随访数据：\n{answer_text}"
+        if history_text:
+            context += f"\n\n最近随访历史：\n{history_text}"
+        if health_text:
+            context += f"\n\n最近7天健康数据：\n{health_text}"
+        if alert_text:
+            context += f"\n\n活跃预警：\n{alert_text}"
+
+        # 尝试1: Agno Agent
+        if settings.agno_enabled:
+            try:
+                from ..core.agno_medical_agents import create_followup_review_agent
+                import json
+                agent = create_followup_review_agent()
+                response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
+                content = response.content or ""
+                data = json.loads(content) if isinstance(content, str) else content
+                return FollowUpAiReviewResponse(
+                    summary=data.get("summary", ""),
+                    abnormal_flags=data.get("abnormal_flags", []),
+                    action_needed=data.get("action_needed", False),
+                    recommendation=data.get("recommendation", "确认通过"),
+                    detail_analysis=data.get("detail_analysis", ""),
+                )
+            except Exception:
+                pass
+
+        # 尝试2: 普通 LLM
+        try:
+            from ..core import get_llm_client
+            from ..core.json_parser import parse_llm_json
+            client = get_llm_client()
+            system_prompt = (
+                "你是一位专业的产科护理AI助手，帮助护士审核随访记录。请以JSON格式返回：\n"
+                "- summary: 随访要点摘要（100-200字）\n"
+                "- abnormal_flags: 异常指标列表\n"
+                "- action_needed: 是否需要上报医生（布尔值）\n"
+                "- recommendation: 审核建议（确认通过/需进一步沟通/紧急上报）\n"
+                "- detail_analysis: 详细分析（100-200字）\n"
+                "不要包含markdown代码块标记。"
+            )
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"请审核以下随访记录：\n\n{context}"},
+            ]
+            response = await client.chat(messages)
+            if response and response.strip():
+                data = parse_llm_json(response)
+                if data:
+                    return FollowUpAiReviewResponse(
+                        summary=data.get("summary", ""),
+                        abnormal_flags=data.get("abnormal_flags", []),
+                        action_needed=data.get("action_needed", False),
+                        recommendation=data.get("recommendation", "确认通过"),
+                        detail_analysis=data.get("detail_analysis", ""),
+                    )
+        except Exception:
+            pass
+
+        # 降级: 模板兜底
+        abnormal = []
+        bp = answers.get("bp", "")
+        if bp and "/" in str(bp):
+            try:
+                parts = str(bp).split("/")
+                sbp, dbp = float(parts[0]), float(parts[1])
+                if sbp >= 140 or dbp >= 90:
+                    abnormal.append(f"血压偏高（{bp}mmHg）")
+            except (ValueError, IndexError):
+                pass
+
+        return FollowUpAiReviewResponse(
+            summary=f"孕妇{patient_name}孕{gest_week}周随访记录，共回答{len(answers)}项。",
+            abnormal_flags=abnormal,
+            action_needed=len(abnormal) > 0,
+            recommendation="需进一步沟通" if abnormal else "确认通过",
+            detail_analysis="建议护士核实各项指标，如有异常需及时与医生沟通。",
+        )
+    finally:
+        db.close()
 
 
 @router.put("/records/{record_id}")
@@ -326,7 +487,21 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
             gest_week=record.gestational_week or "?",
             answers=reported_data,
             risk_tags=pregnant.risk_tags if pregnant else [],
+            pregnant_id=record.pregnant_id,
         )
+
+        # LLM 个性化健康教育
+        try:
+            gest_week_int = int(record.gestational_week.split("+")[0]) if record.gestational_week and "+" in record.gestational_week else 20
+            personalized_edu = await followup_service.generate_health_education_with_llm(
+                gest_week=gest_week_int,
+                risk_tags=pregnant.risk_tags if pregnant else [],
+                answers=reported_data,
+            )
+            if personalized_edu:
+                record.health_education = personalized_edu
+        except Exception:
+            pass  # 保留原有模板健康教育
 
     db.commit()
 
@@ -337,7 +512,8 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
         "total_count": total,
     }
     if summary:
-        result["summary"] = summary
+        result["summary"] = summary.get("warm_summary", "")
+        result["analysis_report"] = summary
     return result
 
 
@@ -378,30 +554,196 @@ def _save_health_data_point(pregnant_id: str, key: str, value, db):
 
 
 async def _generate_llm_summary(
-    patient_name: str, gest_week: str, answers: dict, risk_tags: list[str]
-) -> str:
-    """调用 LLM 生成温馨的随访汇总（1-2 句话）"""
-    from ..core.agno_agent import get_main_agent
+    patient_name: str, gest_week: str, answers: dict, risk_tags: list[str],
+    pregnant_id: str = "",
+) -> dict:
+    """调用 LLM 生成结构化的随访分析报告
+
+    返回 FollowUpAnalysisReport 字典，包含温馨总结、异常指标、趋势分析、
+    个性化建议和护士行动建议。
+
+    三层降级：Agno Agent → 普通 LLM → 模板兜底
+    """
+    from ..config import settings
+
+    # 收集历史随访数据和最近健康数据
+    history_text = ""
+    recent_health_text = ""
+    db = SessionLocal()
+    try:
+        # 最近 3 次随访记录
+        prev_records = db.query(FollowUpRecord).filter(
+            FollowUpRecord.pregnant_id == pregnant_id,
+            FollowUpRecord.status.in_(["completed", "confirmed", "archived"]),
+        ).order_by(FollowUpRecord.created_at.desc()).limit(3).all()
+
+        if prev_records:
+            history_lines = []
+            for pr in prev_records:
+                pr_data = pr.self_reported_data or {}
+                pr_date = pr.created_at.strftime("%Y-%m-%d") if pr.created_at else "未知"
+                pr_items = [f"{k}={v}" for k, v in pr_data.items() if v]
+                history_lines.append(f"  [{pr_date}] {'; '.join(pr_items)}")
+            history_text = "\n".join(history_lines)
+
+        # 最近 7 天健康数据
+        from datetime import timedelta
+        from ..models import HealthDataPoint
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        recent_points = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pregnant_id,
+            HealthDataPoint.recorded_at >= seven_days_ago,
+        ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
+
+        if recent_points:
+            health_lines = [
+                f"  {hp.metric_code}: {hp.value}{hp.unit} ({hp.recorded_at.strftime('%m-%d')})"
+                for hp in recent_points
+            ]
+            recent_health_text = "\n".join(health_lines)
+    except Exception:
+        pass
+    finally:
+        db.close()
 
     # 构造答案摘要
     answer_lines = []
     for k, v in answers.items():
         answer_lines.append(f"- {k}: {v}")
     answer_text = "\n".join(answer_lines)
-
     risk_text = "、".join(risk_tags) if risk_tags else "无"
 
-    prompt = (
-        f"你是小安，一位温暖的孕期助手。请根据以下随访数据，生成1-2句温馨的随访总结。\n"
-        f"要求：语气温和自然，对孕妇的认可+简短健康提示，不超过50字。不要用emoji。\n\n"
-        f"孕妇：{patient_name}，孕{gest_week}周\n"
-        f"风险标签：{risk_text}\n"
-        f"随访数据：\n{answer_text}"
-    )
+    context_section = ""
+    if history_text:
+        context_section += f"\n\n最近随访历史：\n{history_text}"
+    if recent_health_text:
+        context_section += f"\n\n最近7天健康数据：\n{recent_health_text}"
 
+    # 尝试1: Agno Agent 结构化输出
+    if settings.agno_enabled:
+        try:
+            from ..core.agno_medical_agents import create_followup_analysis_agent
+            agent = create_followup_analysis_agent()
+            prompt = (
+                f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
+                f"孕妇：{patient_name}，孕{gest_week}周\n"
+                f"风险标签：{risk_text}\n"
+                f"本次随访数据：\n{answer_text}"
+                f"{context_section}"
+            )
+            response = await agent.arun(input=prompt)
+            content = response.content or ""
+            import json
+            try:
+                data = json.loads(content) if isinstance(content, str) else content
+                return {
+                    "warm_summary": data.get("warm_summary", ""),
+                    "abnormal_indicators": data.get("abnormal_indicators", []),
+                    "trend_analysis": data.get("trend_analysis", ""),
+                    "personalized_advice": data.get("personalized_advice", ""),
+                    "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
+                }
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        except Exception:
+            pass
+
+    # 尝试2: 普通 LLM
     try:
-        agent = get_main_agent()
-        response = await agent.arun(input=prompt)
-        return response.content or f"{patient_name}，随访已完成，感谢配合~"
+        from ..core import get_llm_client
+        client = get_llm_client()
+        system_prompt = (
+            "你是一位专业的孕期健康分析助手。请根据随访数据生成JSON格式的分析报告。\n"
+            "返回字段：\n"
+            "- warm_summary: 温馨总结（30-50字）\n"
+            "- abnormal_indicators: 异常指标列表（字符串数组）\n"
+            "- trend_analysis: 趋势分析（50-100字）\n"
+            "- personalized_advice: 个性化建议（50-100字）\n"
+            "- nurse_action_suggestion: 护士行动建议（确认通过/需进一步沟通/紧急上报）\n"
+            "不要包含markdown代码块标记，直接返回JSON。"
+        )
+        user_msg = (
+            f"孕妇：{patient_name}，孕{gest_week}周，风险标签：{risk_text}\n"
+            f"本次随访：\n{answer_text}"
+            f"{context_section}"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg},
+        ]
+        response = await client.chat(messages)
+        if response and response.strip():
+            from ..core.json_parser import parse_llm_json
+            data = parse_llm_json(response)
+            if data:
+                return {
+                    "warm_summary": data.get("warm_summary", ""),
+                    "abnormal_indicators": data.get("abnormal_indicators", []),
+                    "trend_analysis": data.get("trend_analysis", ""),
+                    "personalized_advice": data.get("personalized_advice", ""),
+                    "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
+                }
     except Exception:
-        return f"{patient_name}，随访已完成，感谢配合~"
+        pass
+
+    # 降级: 模板兜底
+    return _fallback_analysis_report(patient_name, gest_week, answers, risk_tags)
+
+
+def _fallback_analysis_report(
+    patient_name: str, gest_week: str, answers: dict, risk_tags: list[str]
+) -> dict:
+    """模板兜底的随访分析报告"""
+    # 检测异常指标
+    abnormal = []
+
+    # 血压检查
+    bp_value = answers.get("bp", "")
+    if bp_value and "/" in str(bp_value):
+        try:
+            parts = str(bp_value).split("/")
+            sbp, dbp = float(parts[0]), float(parts[1])
+            if sbp >= 140 or dbp >= 90:
+                abnormal.append(f"血压偏高（{bp_value}mmHg），正常值<140/90")
+            elif sbp >= 135 or dbp >= 85:
+                abnormal.append(f"血压临界（{bp_value}mmHg），需关注")
+        except (ValueError, IndexError):
+            pass
+
+    # 血糖检查
+    bs_fasting = answers.get("blood_sugar_fasting")
+    if bs_fasting:
+        try:
+            val = float(bs_fasting)
+            if val > 5.3:
+                abnormal.append(f"空腹血糖偏高（{val}mmol/L），目标≤5.3")
+        except (ValueError, TypeError):
+            pass
+
+    # 胎动检查
+    fm = answers.get("fetal_movement")
+    if fm:
+        try:
+            val = float(fm)
+            if val < 3:
+                abnormal.append(f"胎动偏少（{val}次/小时），正常≥3次/小时")
+        except (ValueError, TypeError):
+            pass
+
+    # 生成温馨总结
+    if abnormal:
+        warm = f"{patient_name}，感谢您完成本次随访。有{len(abnormal)}项指标需要特别关注，请留意下方详情。"
+        recommendation = "需进一步沟通"
+        action_needed = True
+    else:
+        warm = f"{patient_name}，本次随访各项指标均在正常范围内，继续保持良好的生活习惯哦~"
+        recommendation = "确认通过"
+        action_needed = False
+
+    return {
+        "warm_summary": warm,
+        "abnormal_indicators": abnormal,
+        "trend_analysis": f"本次为孕{gest_week}周随访。建议持续关注各项指标变化趋势。" if not abnormal else f"本次为孕{gest_week}周随访，检测到异常指标，建议密切关注。",
+        "personalized_advice": "请继续保持规律作息和均衡饮食，按时产检。如有不适请及时就医。",
+        "nurse_action_suggestion": recommendation,
+    }

@@ -47,14 +47,16 @@ export const followUpApi = {
     client.post('/followup/trigger', { pregnant_id: pregnantId, template_id: templateId }),
   list: (params?: { status?: string; pregnant_id?: string }) =>
     client.get<FollowUpRecord[]>('/followup/records', { params }),
-  confirm: (recordId: string, status: string = 'confirmed') =>
-    client.put(`/followup/records/${recordId}/confirm`, { status }),
+  confirm: (recordId: string, status: string = 'confirmed', extra?: { reviewer_id?: string; review_comment?: string; ai_snapshot?: Record<string, any> }) =>
+    client.put(`/followup/records/${recordId}/confirm`, { status, ...(extra || {}) }),
   update: (recordId: string, data: any) =>
     client.put(`/followup/records/${recordId}`, data),
   getPending: (pregnantId: string) =>
     client.get<FollowUpPendingResponse>(`/followup/pending/${pregnantId}`),
   respond: (recordId: string, answers: Record<string, any>, totalCount?: number) =>
     client.post('/followup/respond', { record_id: recordId, answers, total_count: totalCount || 0 }),
+  aiReview: (recordId: string) =>
+    client.get<any>(`/followup/records/${recordId}/ai-review`),
 }
 
 // 预警
@@ -72,7 +74,7 @@ export const fgrApi = {
   // 评估已绑定图片的患者
   assess: (pregnantId: string, data: { gestational_weeks: number; image_type?: string }) =>
     client.post<FgrAssessment>(`/fgr/assess/${pregnantId}`, data),
-  // 上传图片 + 评估
+  // 上传图片 + 自动分割 + 评估
   upload: (pregnantId: string, formData: FormData) =>
     client.post<FgrAssessment>(`/fgr/upload/${pregnantId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -169,13 +171,18 @@ export const nurseAiApi = {
   analyze: (pregnantId: string) => client.post<any>('/nurse/analyze', { pregnant_id: pregnantId }),
   generateFollowUp: (pregnantId: string, templateId: string = 'standard') =>
     client.post<any>('/nurse/followup/generate', { pregnant_id: pregnantId, template_id: templateId }),
-  chatStream: (data: { message: string; pregnant_id?: string }, callbacks: SSEStreamCallbacks, signal?: AbortSignal) =>
-    nurseChatStream(data, callbacks, signal),
+  getFollowupRecommendations: () =>
+    client.get<{ recommendations: any[] }>('/nurse/followup-recommendations'),
+  chatStream: (
+    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+    callbacks: SSEStreamCallbacks,
+    signal?: AbortSignal,
+  ) => nurseChatStream(data, callbacks, signal),
 }
 
 /* ========== 护士 AI 流式对话 ========== */
 async function nurseChatStream(
-  data: { message: string; pregnant_id?: string },
+  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -186,8 +193,11 @@ async function nurseChatStream(
 export const doctorAiApi = {
   analyze: (pregnantId: string, query: string = '') =>
     client.post<any>(`/doctor/analyze/${pregnantId}`, { pregnant_id: pregnantId, query }),
-  chatStream: (data: { message: string; pregnant_id?: string }, callbacks: SSEStreamCallbacks, signal?: AbortSignal) =>
-    doctorChatStream(data, callbacks, signal),
+  chatStream: (
+    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+    callbacks: SSEStreamCallbacks,
+    signal?: AbortSignal,
+  ) => doctorChatStream(data, callbacks, signal),
   generateReport: (pregnantId: string) =>
     client.post<any>(`/doctor/report/${pregnantId}`),
 }
@@ -206,7 +216,7 @@ export const collaborationApi = {
 
 /* ========== 医生 AI 流式对话 ========== */
 async function doctorChatStream(
-  data: { message: string; pregnant_id?: string },
+  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {

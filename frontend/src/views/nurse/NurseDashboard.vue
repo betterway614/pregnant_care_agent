@@ -115,6 +115,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Bell, Document } from '@element-plus/icons-vue'
 import { dashboardApi, alertApi, followUpApi } from '@/api/endpoints'
+import { getNurseWebSocketClient } from '@/utils/websocket'
+import { ElNotification } from 'element-plus'
 import type { DashboardStats, Alert, FollowUpRecord, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
@@ -133,24 +135,33 @@ const stats = ref<DashboardStats>({
 const recentAlerts = ref<Alert[]>([])
 const recentFollowUps = ref<FollowUpRecord[]>([])
 
-/** 轮询间隔（毫秒） */
-const POLL_INTERVAL = 30000
-let pollTimer: ReturnType<typeof setInterval> | null = null
+/** 定时刷新间隔（非预警数据） */
+const REFRESH_INTERVAL = 120000 // 2分钟
+let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-/** 开始轮询 */
-function startPolling() {
-  if (pollTimer) return
-  pollTimer = setInterval(() => {
-    fetchData()
-  }, POLL_INTERVAL)
-}
+/** WebSocket 客户端 */
+const nurseId = localStorage.getItem('nurse_id') || 'default_nurse'
+const wsClient = getNurseWebSocketClient(nurseId)
 
-/** 停止轮询 */
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+/** 处理实时预警推送 */
+function handleNewAlert(alert: Alert) {
+  // 更新待处理预警计数
+  stats.value = {
+    ...stats.value,
+    pending_alerts: stats.value.pending_alerts + 1,
   }
+
+  // 将新预警插入列表头部（保持最多5条）
+  recentAlerts.value = [alert, ...recentAlerts.value].slice(0, 5)
+
+  // 弹出通知
+  const levelText: Record<string, string> = { RED: '高危', ORANGE: '预警', YELLOW: '关注' }
+  ElNotification({
+    title: `新${levelText[alert.level] || ''}预警`,
+    message: `${alert.patient_name}: ${alert.message}`,
+    type: alert.level === 'RED' ? 'error' : alert.level === 'ORANGE' ? 'warning' : 'info',
+    duration: 8000,
+  })
 }
 
 /** 统计卡片配置 */
@@ -225,11 +236,20 @@ function handleAlertClick(alert: Alert) {
 
 onMounted(() => {
   fetchData()
-  startPolling()
+  // WebSocket 实时接收预警
+  wsClient.connect()
+  wsClient.onAlert(handleNewAlert)
+  // 非预警数据定时刷新
+  refreshTimer = setInterval(fetchData, REFRESH_INTERVAL)
 })
 
 onUnmounted(() => {
-  stopPolling()
+  wsClient.offAlert(handleNewAlert)
+  wsClient.disconnect()
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 </script>
 

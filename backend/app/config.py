@@ -29,8 +29,46 @@ class Settings(BaseSettings):
     # 医生端：使用本地模型
     llm_doctor_mode: Literal["cloud", "local", "mock", ""] = "cloud"
 
+    # ASR配置 - 全局默认
+    # llm = 多模态LLM直接处理音频（当前行为，零额外依赖）
+    # cloud = DashScope Paraformer ASR
+    # local = Whisper 本地推理
+    asr_mode: Literal["cloud", "local", "llm"] = "llm"
+    # ASR配置 - 角色专属（优先级高于全局配置）
+    asr_pregnant_mode: Literal["cloud", "local", "llm", ""] = ""
+    asr_nurse_mode: Literal["cloud", "local", "llm", ""] = ""
+    asr_doctor_mode: Literal["cloud", "local", "llm", ""] = ""
+    # ASR云配置 (DashScope Paraformer)
+    asr_cloud_api_key: str = ""  # 不填则复用 llm_api_key
+    asr_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    asr_cloud_model: str = "fun-asr-2025-11-07"
+    # ASR本地配置 (Whisper)
+    asr_local_model: str = "base"  # tiny/base/small/medium/large
+
+    # TTS配置 - 全局默认
+    # browser = 前端 SpeechSynthesis（零后端依赖）
+    # cloud = DashScope CosyVoice
+    # local = edge-tts（微软 Edge TTS，免费高质量中文）
+    tts_mode: Literal["browser", "cloud", "local"] = "browser"
+    # TTS配置 - 角色专属
+    tts_pregnant_mode: Literal["browser", "cloud", "local", ""] = ""
+    tts_nurse_mode: Literal["browser", "cloud", "local", ""] = ""
+    tts_doctor_mode: Literal["browser", "cloud", "local", ""] = ""
+    # TTS云配置 (DashScope CosyVoice)
+    tts_cloud_api_key: str = ""
+    tts_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    tts_cloud_model: str = "cosyvoice-v1"
+    tts_cloud_voice: str = "longxiaochun"
+    # TTS本地配置 (edge-tts)
+    tts_local_voice: str = "zh-CN-XiaoxiaoNeural"
+
     # FGR配置
     fgr_mode: bool = True
+
+    # nnU-Net 分割配置
+    nnunet_model_dir: str = "backend/fgr_compete/Dataset001_PlacentaNT"
+    nnunet_dataset_id: int = 1
+    nnunet_folds: str = "all"
 
     # NLU配置
     nlu_mode: Literal["cloud", "npu", "hybrid"] = "hybrid"
@@ -87,3 +125,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_asr_mode(role: str) -> str:
+    """解析ASR模式：角色专属 > 全局 > 默认'llm'"""
+    role_mode = getattr(settings, f"asr_{role}_mode", "")
+    return role_mode if role_mode else settings.asr_mode
+
+
+def get_tts_mode(role: str) -> str:
+    """解析TTS模式：角色专属 > 全局 > 默认'browser'"""
+    role_mode = getattr(settings, f"tts_{role}_mode", "")
+    return role_mode if role_mode else settings.tts_mode

@@ -234,7 +234,7 @@ class HealthDataSubmitResponse(BaseModel):
 
 
 @router.post("/{pregnant_id}/health-data", response_model=HealthDataSubmitResponse)
-def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
+async def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
     """孕妇端直接提交健康数据（不经过NLU，确保100%入库）"""
     from ..core.health_data_service import save_health_metrics, HealthDataSource
 
@@ -274,9 +274,167 @@ def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
     # 调用统一入库服务
     saved = save_health_metrics(pregnant_id, metrics, HealthDataSource.PATIENT_DIRECT)
 
+    # ===== 自动触发规则引擎评估 =====
+    if saved:
+        try:
+            await _auto_evaluate_alerts(pregnant_id)
+        except Exception as e:
+            from loguru import logger
+            logger.warning(f"自动预警评估失败 (pregnant_id={pregnant_id}): {e}")
+
     return HealthDataSubmitResponse(
         success=True,
         saved_metrics=saved,
         count=len(saved),
         message=f"成功保存 {len(saved)} 项数据" if saved else "没有需要保存的数据",
     )
+
+
+async def _auto_evaluate_alerts(pregnant_id: str):
+    """健康数据入库后自动执行规则引擎评估并创建预警"""
+    from ..core.rule_engine import rule_engine
+    from ..services.alert_service import alert_service
+    from ..core.websocket_manager import ws_manager
+    from ..models import FgrAssessment
+    from loguru import logger
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if not pregnant:
+            return
+
+        gest_week = (pregnant.gestational_age_days or 0) // 7
+
+        # 构建评估上下文
+        context = _build_rule_context(db, pregnant_id, gest_week)
+
+        # 执行规则引擎
+        hits = rule_engine.evaluate_all(context)
+        if not hits:
+            return
+
+        # 创建预警（alert_service 内部已做去重）
+        created = alert_service.create_alerts_from_hits(db, pregnant_id, hits, "RULE_ENGINE")
+        new_alerts = [a for a in created if a.status == "PENDING"]
+
+        if not new_alerts:
+            return
+
+        logger.info(f"自动预警: {pregnant_id} 触发 {len(new_alerts)} 条新预警")
+
+        # 后台异步 LLM 分析
+        import asyncio
+        from ..services.alert_service import alert_service
+        for alert in new_alerts:
+            asyncio.create_task(alert_service.enrich_alert_with_llm(db, alert, pregnant))
+
+        # WebSocket 推送给医生端
+        for alert in new_alerts:
+            alert_data = {
+                "id": str(alert.id),
+                "pregnant_id": pregnant_id,
+                "patient_name": pregnant.display_name,
+                "level": alert.level,
+                "message": alert.message,
+                "trigger_source": alert.trigger_source,
+                "status": alert.status,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "gestational_age_days": pregnant.gestational_age_days,
+            }
+            try:
+                await ws_manager.broadcast_alert(alert_data)
+            except Exception as e:
+                logger.warning(f"WebSocket广播失败: {e}")
+    finally:
+        db.close()
+
+
+def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:
+    """构建规则引擎评估上下文，从数据库查询最新健康数据"""
+    from datetime import timedelta
+    from sqlalchemy import func
+
+    context = {"gest_week": gest_week}
+
+    # 最新血压
+    sbp = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "systolic",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    dbp = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "diastolic",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if sbp:
+        context["sbp"] = sbp.value
+    if dbp:
+        context["dbp"] = dbp.value
+
+    # 最新胎动
+    fm = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "fetal_movement",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if fm:
+        context["fetal_movement"] = fm.value
+
+    # 近7天胎动平均值
+    week_ago = datetime.now() - timedelta(days=7)
+    fm_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "fetal_movement",
+        HealthDataPoint.recorded_at >= week_ago,
+    ).scalar()
+    if fm_avg:
+        context["fetal_movement_avg"] = float(fm_avg)
+
+    # 最新体重 + 周增长
+    weight = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "weight",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if weight:
+        context["weight"] = weight.value
+    two_weeks_ago = datetime.now() - timedelta(days=14)
+    weight_prev = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "weight",
+        HealthDataPoint.recorded_at <= two_weeks_ago,
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if weight and weight_prev and weight_prev.value > 0:
+        context["weight_gain_weekly"] = (weight.value - weight_prev.value) / 2.0
+
+    # 最新血糖
+    bs_fasting = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "blood_sugar_fasting",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    bs_post = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "blood_sugar_postprandial",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if bs_fasting:
+        context["blood_sugar_fasting"] = bs_fasting.value
+    if bs_post:
+        context["blood_sugar_postprandial"] = bs_post.value
+
+    # 近7天情绪评分平均
+    emotion_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "emotion_score",
+        HealthDataPoint.recorded_at >= week_ago,
+    ).scalar()
+    if emotion_avg:
+        context["emotion_score_avg_7d"] = float(emotion_avg)
+
+    # 最新睡眠
+    sleep = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.metric_code == "sleep_hours",
+    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+    if sleep:
+        context["sleep_hours"] = sleep.value
+
+    return context

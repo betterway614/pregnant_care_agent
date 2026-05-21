@@ -183,9 +183,19 @@ class FollowUpRecordResponse(BaseModel):
     follow_up_date: Optional[datetime] = None
     self_reported_data: dict = {}
     chief_complaint: Optional[str] = None
+    obstetric_exam: dict = {}
+    lab_results: dict = {}
+    classification: str = "normal"
     health_education: list = []
+    guidance_tags: list = []
+    referral: Optional[dict] = None
+    next_followup_date: Optional[date] = None
     status: str = FOLLOWUP_STATUS_DRAFT
     summary: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    review_comment: Optional[str] = None
+    ai_snapshot: dict = {}
     created_at: Optional[datetime] = None
     patient_name: Optional[str] = None
 
@@ -194,6 +204,9 @@ class FollowUpRecordResponse(BaseModel):
 
 class FollowUpConfirm(BaseModel):
     status: str = FOLLOWUP_STATUS_CONFIRMED
+    reviewer_id: Optional[str] = None        # 审核护士ID
+    review_comment: Optional[str] = None      # 审核意见
+    ai_snapshot: Optional[dict] = None        # 审核时 AI 分析报告快照
 
 
 class FollowUpTrigger(BaseModel):
@@ -357,11 +370,30 @@ class NurseAnalyzeResponse(BaseModel):
     nursing_suggestions: str = ""
     followup_focus: list[str] = []
     followup_schedule: FollowupScheduleResponse | None = None
+    alert_level: str = ""  # LLM 返回的预警级别: RED/ORANGE/YELLOW/NONE
+
+
+class FollowUpAiReviewResponse(BaseModel):
+    """护士审核随访时的 AI 辅助报告"""
+    summary: str = Field(description="本次随访要点摘要（100-200字）")
+    abnormal_flags: list[str] = Field(default_factory=list, description="异常指标标红列表")
+    action_needed: bool = Field(default=False, description="是否需要上报医生")
+    recommendation: str = Field(description="审核建议：确认通过/需进一步沟通/紧急上报")
+    detail_analysis: str = Field(default="", description="详细分析（100-200字）")
 
 
 class FollowUpGenerateRequest(BaseModel):
     pregnant_id: str
     template_id: str = "standard"
+
+
+class FollowUpAnalysisReport(BaseModel):
+    """随访完成后的 LLM 结构化分析报告"""
+    warm_summary: str = Field(description="温馨总结（30-50字），语气温和自然")
+    abnormal_indicators: list[str] = Field(default_factory=list, description="异常指标列表，如['血压较上次升高15mmHg']")
+    trend_analysis: str = Field(default="", description="与历史数据对比的趋势分析（50-100字）")
+    personalized_advice: str = Field(default="", description="基于回答内容的个性化建议（50-100字）")
+    nurse_action_suggestion: str = Field(default="", description="护士行动建议：确认通过/需进一步沟通/紧急上报")
 
 
 class FollowUpGenerateResponse(BaseModel):
@@ -431,7 +463,13 @@ class FollowUpHistoryRecord(BaseModel):
     summary: str | None = None
     chief_complaint: str | None = None
     self_reported_data: dict = {}
+    obstetric_exam: dict = {}
+    lab_results: dict = {}
+    classification: str = "normal"
     health_education: list[str] = []
+    guidance_tags: list = []
+    referral: Optional[dict] = None
+    next_followup_date: str | None = None
 
 
 class FollowUpHistoryResponse(BaseModel):

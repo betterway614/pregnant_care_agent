@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import text
 from loguru import logger
 from ..database import SessionLocal
-from ..models import Pregnant, HealthDataPoint, ScheduleNode, FollowUpRecord, FgrAssessment, Alert, MedicalOrder, ConversationMessage, MentalHealthScreening, FetalMovementSession, Feedback
+from ..models import Pregnant, HealthDataPoint, ScheduleNode, FollowUpRecord, FgrAssessment, MedicalOrder, ConversationMessage, MentalHealthScreening, FetalMovementSession, Feedback
 
 # 存储对话消息ID供反馈关联（seed_feedback 使用）
 _generated_message_ids: list[str] = []
@@ -20,7 +20,6 @@ def seed_all():
         _seed_health_data(db)
         _seed_schedules(db)
         _seed_fgr_assessments(db)
-        _seed_alerts(db)
         seed_followup_records(db)
         seed_medical_orders(db)
         seed_conversation_messages(db)
@@ -341,75 +340,226 @@ def _seed_fgr_assessments(db):
     logger.info("生成 {} 条FGR评估记录", count)
 
 
-def _seed_alerts(db):
-    """生成预警记录"""
-    if db.query(Alert).count() > 0:
-        logger.info("预警数据已存在，跳过")
-        return
-    pregnant = db.query(Pregnant).all()
-    levels = ["RED", "ORANGE", "YELLOW"]
-    count = 0
-    for pregnant in pregnant:
-        alert_count = random.randint(0, 5)
-        for _ in range(alert_count):
-            level = random.choice(levels)
-            if "FGR高危" in (pregnant.risk_tags or []):
-                level = random.choice(["RED", "ORANGE"])
-            messages = {
-                "RED": ["血压异常升高", "胎动显著减少", f"FGR评估: {random.choice(['高风险', '极高风险'])}"],
-                "ORANGE": ["体重周增长过快", "血压偏高", "血糖偏高"],
-                "YELLOW": ["近7日情绪评分偏高", "体重增长偏慢", "轻微贫血"],
-            }
-            alert = Alert(
-                pregnant_id=pregnant.pregnant_id,
-                trigger_source=random.choice(["RULE_ENGINE", "FGR_ALGORITHM"]),
-                rule_id=f"RULE_{random.choice(['BP_HIGH', 'FETAL_DROP', 'WEIGHT_GAIN', 'EMOTION_HIGH'])}",
-                level=level,
-                message=random.choice(messages[level]),
-                status=random.choice(["PENDING", "CONFIRMED", "DISMISSED"]),
-                created_at=datetime.now() - timedelta(days=random.randint(0, 14)),
-            )
-            db.add(alert)
-            count += 1
-    logger.info("生成 {} 条预警记录", count)
-
 
 def seed_followup_records(db):
-    """为每个孕妇生成2-3条随访记录，覆盖draft/confirmed/archived三态"""
+    """为每个孕妇生成2-3条随访记录，覆盖draft/confirmed/archived三态
+
+    参照国家基本公共卫生服务规范(2024版)的随访记录表 + SOAP格式，
+    生成具有临床真实性的mock数据：
+
+    S(主观): self_reported_data + chief_complaint
+    O(客观): obstetric_exam(宫高/腹围/胎位/胎心率) + lab_results(血红蛋白/尿蛋白)
+    A(评估): classification(normal/abnormal/critical) + summary
+    P(计划): guidance_tags(分类标签) + health_education + referral + next_followup
+    """
+    import random as _random
+
     if db.query(FollowUpRecord).count() > 0:
         logger.info("随访记录已存在，跳过")
         return
+
     pregnant_list = db.query(Pregnant).all()
     count = 0
     statuses = ["draft", "confirmed", "archived"]
-    complaints = ["胎动减少", "下肢水肿", "轻微头晕", "食欲下降", "睡眠质量差", "腰背酸痛"]
-    education_topics = ["饮食指导", "运动建议", "情绪管理", "产检提醒", "体重控制"]
+
+    # 主诉词库
+    complaints_pool = [
+        "胎动减少", "下肢水肿", "轻微头晕", "食欲下降",
+        "睡眠质量差，入睡困难", "腰背酸痛明显", "偶有腹部发紧",
+        "近期体重增长较快", "偶有头痛", "无特殊不适",
+    ]
+
+    # 生理分布参数
+    def _clamp(val, lo, hi):
+        return max(lo, min(hi, val))
+
+    def _norm(mean, std, lo=None, hi=None):
+        """近似正态分布（Box-Muller简化版，用多个均匀随机数近似）"""
+        # 用 6 个 [0,1] 均匀随机数的和近似 N(3*mean/mean, ...)
+        # 更简单直接的方式: triangular 近似
+        v = _random.triangular(mean - std * 2, mean + std * 2, mean)
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        return round(v, 1)
 
     for p in pregnant_list:
-        current_gw = (p.gestational_age_days or 168) // 7
-        record_count = random.randint(2, 3)
+        gw = (p.gestational_age_days or 168) // 7  # 当前孕周(整数)
+        risk_tags = p.risk_tags or []
+        is_hypertensive = any(t in risk_tags for t in ("高血压", "子痫前期"))
+        is_gdm = "GDM" in risk_tags
+        is_fgr = any(t in risk_tags for t in ("FGR高危", "FGR"))
+        is_high_risk = is_hypertensive or is_gdm or is_fgr
+
+        record_count = _random.randint(2, 3)
         for idx in range(record_count):
-            gw = max(12, current_gw - random.randint(4, 12) * idx)
+            record_gw = max(12, gw - _random.randint(4, 12) * idx)
             record_status = statuses[idx % 3]
-            self_reported = {
-                "weight": round(55 + (gw - 12) * 0.3 + random.uniform(-1, 1), 1),
-                "blood_pressure": f"{random.randint(105, 135)}/{random.randint(65, 85)}",
-                "fetal_movement": random.randint(3, 10),
-                "sleep_quality": random.choice(["好", "一般", "差"]),
+
+            # ---- S: 主观数据 ----
+            self_reported = {}
+            # 体重: base 55 + 每周0.35kg
+            base_weight = 55 + record_gw * 0.35 + _random.uniform(-2, 2)
+            self_reported["weight"] = round(base_weight, 1)
+            # 胎动自述
+            if record_gw >= 18:
+                self_reported["fetal_movement"] = _clamp(_random.randint(2, 10), 2, 12)
+            else:
+                self_reported["fetal_movement"] = "未感知"
+            # 饮食
+            self_reported["diet"] = _random.choice(["正常", "正常", "胃口不佳", "食欲好", "偏食"])
+            # 情绪
+            self_reported["mood"] = _random.choice(["良好", "良好", "良好", "一般", "焦虑"])
+
+            chief_complaint = _random.choice(complaints_pool) if _random.random() > 0.3 else None
+
+            # ---- O: 客观数据 ----
+            # 宫高 (cm): 20w~18cm, 每周+0.8cm, ±2cm抖动
+            fh = _clamp(round(18.0 + (record_gw - 20) * 0.8 + _random.uniform(-2, 2), 1), 10, 40)
+            # 腹围 (cm): 20w~75cm, 每周+0.85cm, ±3cm抖动
+            ac = _clamp(round(75.0 + (record_gw - 20) * 0.85 + _random.uniform(-3, 3), 1), 60, 110)
+            # 胎心率 (bpm): N(140, 10), clip [110, 170]
+            fhr = int(_clamp(_norm(140, 10, 110, 170), 110, 170))
+            # 胎位: 28w前随机, 28w后90%头位
+            if record_gw < 28:
+                fp = _random.choice(["头位", "臀位", "横位", "头位", "头位"])
+            else:
+                fp = _random.choice(["头位"] * 9 + ["臀位"])
+            obstetric_exam = {
+                "fundal_height_cm": fh,
+                "abdominal_circumference_cm": ac,
+                "fetal_position": fp,
+                "fetal_heart_rate_bpm": fhr,
+                "blood_pressure": f"{_clamp(int(_norm(115, 12) + (20 if is_hypertensive else 0)), 95, 160)}/{_clamp(int(_norm(75, 8) + (10 if is_hypertensive else 0)), 55, 105)}",
             }
+
+            # 化验结果
+            hb = _norm(120, 8, lo=80, hi=150)
+            lab_results = {
+                "hemoglobin_g_L": round(hb, 1),
+                "urine_protein": _random.choice(["阴性"] * 9 + ["弱阳性", "阳性"]),
+            }
+            if is_gdm and _random.random() > 0.5:
+                lab_results["blood_sugar_fasting"] = round(_norm(5.5, 0.8, lo=4.0, hi=8.0), 1)
+                lab_results["blood_sugar_2h"] = round(_norm(7.0, 1.2, lo=5.0, hi=12.0), 1)
+
+            # ---- A: 评估 ----
+            has_abnormal_bp = int(obstetric_exam["blood_pressure"].split("/")[0]) >= 140
+            has_low_hb = hb < 100
+            has_high_glucose = lab_results.get("blood_sugar_fasting", 5.0) > 6.0
+            has_abnormal_up = lab_results["urine_protein"] in ("弱阳性", "阳性")
+
+            if has_abnormal_bp or has_low_hb or has_high_glucose or is_high_risk:
+                if is_hypertensive and has_abnormal_bp:
+                    classification = "critical"
+                else:
+                    classification = "abnormal"
+            else:
+                classification = "normal"
+
+            # ---- P: 计划 ----
+            guidance_tags = [
+                {"tag": "营养", "content": "均衡饮食，每周体重增长控制在0.3-0.5kg"},
+                {"tag": "运动", "content": "餐后散步30分钟，避免剧烈运动"},
+                {"tag": "监护", "content": "每日固定时间自数胎动，每小时不少于3次"},
+            ]
+            if record_gw >= 36:
+                guidance_tags.append({"tag": "分娩准备", "content": "确认待产包准备完毕，了解临产征兆"})
+            if is_hypertensive:
+                guidance_tags.append({"tag": "生活", "content": "低盐饮食（<6g/天），每日早晚测血压并记录"})
+            if is_gdm:
+                guidance_tags.append({"tag": "营养", "content": "控制碳水摄入，监测空腹及餐后血糖"})
+            if is_fgr:
+                guidance_tags.append({"tag": "监护", "content": "高蛋白饮食，左侧卧位，定期B超监测胎儿生长"})
+
+            # health_education 保持兼容旧格式（纯文本列表）
+            health_edu_texts = [f"{g['content']}" for g in guidance_tags]
+
+            # 转诊
+            referral = None
+            if classification == "critical":
+                referral = {
+                    "has_referral": True,
+                    "reason": "血压持续偏高，需专科评估",
+                    "institution": "XX市妇幼保健院",
+                    "department": "高危妊娠门诊",
+                }
+
+            # 下次随访日期
+            if record_gw >= 36:
+                interval = 7
+            elif is_high_risk:
+                interval = 10
+            else:
+                interval = 21
+            nf_date = (datetime.now() + timedelta(days=interval)).date()
+
+            # 审核追溯 (confirmed/archived 状态时写入)
+            reviewed_by = None
+            reviewed_at = None
+            review_comment = None
+            ai_snapshot = {}
+            if record_status in ("confirmed", "archived"):
+                reviewed_by = f"nurse_{_random.choice(['WANG', 'LI', 'ZHANG', 'CHEN'])}"
+                reviewed_at = datetime.now() - timedelta(days=_random.randint(0, 30))
+
+                # 用 _fallback_analysis_report 真实分析 mock 数据生成 AI 快照
+                # 构造 answers 字典（映射自报数据+产科检查+化验结果，模拟真实分析输入）
+                bp_str = obstetric_exam.get("blood_pressure", "")
+                analysis_answers = {
+                    "bp": bp_str,
+                    "weight": str(self_reported.get("weight", "")),
+                    "fetal_movement": str(self_reported.get("fetal_movement", "")),
+                }
+                if lab_results.get("blood_sugar_fasting"):
+                    analysis_answers["blood_sugar_fasting"] = str(lab_results["blood_sugar_fasting"])
+                if lab_results.get("blood_sugar_2h"):
+                    analysis_answers["blood_sugar_postprandial"] = str(lab_results["blood_sugar_2h"])
+
+                from ..routers.followup import _fallback_analysis_report
+                analysis_result = _fallback_analysis_report(
+                    patient_name=p.display_name,
+                    gest_week=f"{record_gw}",
+                    answers=analysis_answers,
+                    risk_tags=risk_tags,
+                )
+                ai_snapshot = analysis_result
+
+                # 审核意见与 AI 分析结论保持一致
+                if analysis_result["abnormal_indicators"]:
+                    review_comment = f"已复核，关注：{'；'.join(analysis_result['abnormal_indicators'][:2])}"
+                else:
+                    review_comment = "各项指标正常，确认通过"
+
             record = FollowUpRecord(
                 pregnant_id=p.pregnant_id,
-                gestational_week=f"{gw}周",
-                follow_up_date=datetime.now() - timedelta(days=random.randint(0, 60)),
+                gestational_week=f"{record_gw}+{_random.randint(0, 6)}",
+                follow_up_date=datetime.now() - timedelta(days=_random.randint(0, 60)),
+                # S
                 self_reported_data=self_reported,
-                chief_complaint=random.choice(complaints) if random.random() > 0.4 else None,
-                health_education=random.sample(education_topics, random.randint(1, 3)),
+                chief_complaint=chief_complaint,
+                # O
+                obstetric_exam=obstetric_exam,
+                lab_results=lab_results,
+                # A
+                classification=classification,
+                summary=f"孕{record_gw}周随访完成，{'指标正常' if classification == 'normal' else '异常指标需关注' if classification == 'abnormal' else '高危需紧急处理'}",
+                # P
+                health_education=health_edu_texts,
+                guidance_tags=guidance_tags,
+                referral=referral,
+                next_followup_date=nf_date,
+                # 状态 + 追溯
                 status=record_status,
-                summary=f"孕{gw}周随访完成，{'各项指标正常' if record_status == 'confirmed' else '待医生确认' if record_status == 'draft' else '已归档'}",
+                reviewed_by=reviewed_by,
+                reviewed_at=reviewed_at,
+                review_comment=review_comment,
+                ai_snapshot=ai_snapshot,
             )
             db.add(record)
             count += 1
-    logger.info("生成 {} 条随访记录", count)
+    logger.info("生成 {} 条随访记录（含产科检查/化验/追溯链）", count)
 
 
 def seed_medical_orders(db):

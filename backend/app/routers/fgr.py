@@ -1,4 +1,5 @@
 """FGR评估 API（模拟 HIS 集成：图片预绑定到患者）"""
+import os
 import random
 import time
 import uuid as uuid_lib
@@ -13,6 +14,7 @@ from ..models import FgrAssessment, Pregnant, Alert
 from ..schemas import FgrAssessRequest, FgrAssessResponse, FgrTrendPoint, PatientImageResponse
 from ..core import rule_engine
 from ..config import settings
+from ..services.segmentation_service import SegmentationError, get_segmentation_service
 import numpy as np
 
 router = APIRouter(prefix="/api/v1/fgr", tags=["FGR评估"])
@@ -268,41 +270,75 @@ async def upload_and_assess(
     gestational_weeks: float = Form(...),
     image_type: str = Form("AC"),
     image: UploadFile = File(...),
-    mask: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    """上传超声图像 + 自动分析入库（用于无绑定图片的患者）"""
+    """上传超声图像 + 自动分割 + FGR分析入库"""
     # 先异步读取文件（I/O 密集，不阻塞）
     image_bytes = await image.read()
-    mask_bytes = await mask.read()
-    if not image_bytes or not mask_bytes:
-        raise HTTPException(400, "image 和 mask 文件均不能为空")
+    if not image_bytes:
+        raise HTTPException(400, "上传图像不能为空")
 
-    # 后续阻塞操作（DB + 模型推理）放到线程池
+    # 后续阻塞操作（DB + 分割 + 模型推理）放到线程池
     return await run_in_threadpool(
         _upload_assess_sync, pregnant_id, gestational_weeks, image_type,
-        image_bytes, mask_bytes, db,
+        image_bytes, db,
     )
 
 
 def _upload_assess_sync(
     pregnant_id: str, gestational_weeks: float, image_type: str,
-    image_bytes: bytes, mask_bytes: bytes, db: Session,
+    image_bytes: bytes, db: Session,
 ):
-    """同步的上传+评估逻辑，在线程池中运行"""
+    """同步的上传+分割+评估逻辑，在线程池中运行"""
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
 
-    # 保存到 uploads 目录并注册映射
-    from fgr_compete.image_registry import register_uploaded_images
-    raw_path, mask_path = register_uploaded_images(
+    # 1. 保存原图到 uploads/{pregnant_id}/image.png
+    from fgr_compete.image_registry import UPLOAD_DIR, register_uploaded_images
+    patient_dir = os.path.join(UPLOAD_DIR, pregnant_id)
+    os.makedirs(patient_dir, exist_ok=True)
+    raw_path = os.path.join(patient_dir, "image.png")
+    with open(raw_path, "wb") as f:
+        f.write(image_bytes)
+    logger.info("[FGR-上传] 原图已保存: {}", raw_path)
+
+    # 2. nnU-Net 5折集成自动分割
+    seg_service = get_segmentation_service()
+    seg_output_dir = os.path.join(patient_dir, "_seg_output")
+    try:
+        mask_path = seg_service.segment(raw_path, seg_output_dir)
+    except SegmentationError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("[FGR-上传] 分割异常: {}", e)
+        raise HTTPException(500, "服务端分割错误，请稍后重试")
+
+    # 3. 验证掩码非空，空则 400
+    try:
+        from PIL import Image
+        import numpy as np
+        mask_data = np.array(Image.open(mask_path) if not mask_path.endswith(".nii.gz") else None)
+        if mask_data is None:
+            import nibabel as nib
+            mask_data = nib.load(mask_path).get_fdata()
+        if not np.any(mask_data > 0):
+            raise HTTPException(400, "图像质量不符合要求，请上传清晰的NT期超声图像")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("[FGR-上传] 掩码验证跳过: {}", e)
+
+    # 4. 注册到映射表
+    with open(mask_path, "rb") as f:
+        mask_bytes = f.read()
+    raw_path_reg, mask_path_reg = register_uploaded_images(
         pregnant_id, pregnant.display_name, image_bytes, mask_bytes
     )
 
-    # 执行评估
+    # 5. 执行 FGR 评估
     if settings.fgr_mode:
-        result = _run_fgr_model(raw_path, mask_path, pregnant_id)
+        result = _run_fgr_model(raw_path_reg, mask_path_reg, pregnant_id)
     else:
         result = _mock_fgr_assess(gestational_weeks)
 

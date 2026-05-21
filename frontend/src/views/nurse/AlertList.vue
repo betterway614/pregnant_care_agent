@@ -32,6 +32,7 @@
         <el-option label="待处理" value="PENDING" />
         <el-option label="已确认" value="CONFIRMED" />
         <el-option label="已驳回" value="DISMISSED" />
+        <el-option label="已升级" value="ESCALATED" />
       </el-select>
       <span class="text-light filter-summary" v-if="alerts.length">
         共 {{ alerts.length }} 条预警
@@ -77,6 +78,9 @@
                 <template v-if="isAlertPending(row.status)">
                   <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'confirm')">
                     确认
+                  </el-button>
+                  <el-button type="danger" size="small" @click.stop="handleReview(row, 'escalate')">
+                    升级
                   </el-button>
                   <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'dismiss')">
                     驳回
@@ -148,9 +152,38 @@
           <p class="detail-section__content">{{ selectedAlert.message || '--' }}</p>
         </div>
 
-        <div class="detail-section" v-if="Object.keys(selectedAlert.details || {}).length">
+        <!-- LLM 分析结果 -->
+        <template v-if="selectedAlert.details?.llm_analysis">
+          <el-divider />
+          <div class="detail-section">
+            <h4 class="detail-section__title">
+              <el-icon><MagicStick /></el-icon>
+              AI 分析
+            </h4>
+            <div class="llm-analysis">
+              <div class="llm-block">
+                <span class="llm-block__label">风险解读</span>
+                <p class="llm-block__content">{{ selectedAlert.details.llm_analysis.risk_interpretation }}</p>
+              </div>
+              <div class="llm-block">
+                <span class="llm-block__label">建议措施</span>
+                <ul class="llm-block__list">
+                  <li v-for="(action, i) in selectedAlert.details.llm_analysis.recommended_actions" :key="i">
+                    {{ action }}
+                  </li>
+                </ul>
+              </div>
+              <div class="llm-block">
+                <span class="llm-block__label">严重程度评估</span>
+                <p class="llm-block__content">{{ selectedAlert.details.llm_analysis.severity_assessment }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="detail-section" v-if="hasRawDetails(selectedAlert.details)">
           <h4 class="detail-section__title">原始数据</h4>
-          <pre class="detail-section__pre">{{ JSON.stringify(selectedAlert.details, null, 2) }}</pre>
+          <pre class="detail-section__pre">{{ formatRawDetails(selectedAlert.details) }}</pre>
         </div>
       </template>
     </el-drawer>
@@ -159,7 +192,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { Refresh, Bell } from '@element-plus/icons-vue'
+import { Refresh, Bell, MagicStick } from '@element-plus/icons-vue'
 import { alertApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -208,6 +241,7 @@ function statusLabel(status: string): string {
     PENDING: '待处理',
     CONFIRMED: '已确认',
     DISMISSED: '已驳回',
+    ESCALATED: '已升级',
   }
   return map[normalizeAlertStatus(status)] || status
 }
@@ -218,6 +252,7 @@ function statusTagType(status: string): string {
     PENDING: 'warning',
     CONFIRMED: 'success',
     DISMISSED: 'info',
+    ESCALATED: 'danger',
   }
   return map[normalizeAlertStatus(status)] || 'info'
 }
@@ -232,6 +267,21 @@ function formatTime(t?: string): string {
 /** 筛选变化时重新加载 */
 function handleFilterChange() {
   fetchAlerts()
+}
+
+/** 判断是否有原始数据（排除 llm_analysis） */
+function hasRawDetails(details: Record<string, any> | undefined): boolean {
+  if (!details) return false
+  const raw = { ...details }
+  delete raw.llm_analysis
+  return Object.keys(raw).length > 0
+}
+
+/** 格式化原始数据（排除 llm_analysis） */
+function formatRawDetails(details: Record<string, any>): string {
+  const raw = { ...details }
+  delete raw.llm_analysis
+  return JSON.stringify(raw, null, 2)
 }
 
 /** 加载预警列表 */
@@ -253,14 +303,18 @@ async function fetchAlerts() {
   }
 }
 
-/** 处理预警（确认/驳回），action 与后端 AlertReviewRequest 一致 */
-async function handleReview(alert: Alert, action: 'confirm' | 'dismiss') {
-  const actionText = action === 'confirm' ? '确认' : '驳回'
+/** 处理预警（确认/驳回/升级），action 与后端 AlertReviewRequest 一致 */
+async function handleReview(alert: Alert, action: 'confirm' | 'dismiss' | 'escalate') {
+  const actionMap: Record<string, string> = { confirm: '确认', dismiss: '驳回', escalate: '升级' }
+  const actionText = actionMap[action] || action
+  const msgType = action === 'escalate' ? 'warning' : action === 'confirm' ? 'primary' : 'warning'
   try {
     await ElMessageBox.confirm(
-      `确定${actionText}该预警？`,
+      action === 'escalate'
+        ? `确定升级该预警？升级后级别将变为红色高危并通知医生。`
+        : `确定${actionText}该预警？`,
       `${actionText}预警`,
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: action === 'confirm' ? 'primary' : 'warning' }
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: msgType }
     )
   } catch {
     return
@@ -371,5 +425,51 @@ onMounted(fetchAlerts)
 /* 操作列：表头与单元格居中，与全局 table-row-actions 左对齐区分 */
 .table-row-actions.table-row-actions--alert {
   justify-content: center;
+}
+
+/* LLM 分析区块 */
+.llm-analysis {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(168, 85, 247, 0.04));
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.llm-block {
+  margin-bottom: 14px;
+}
+
+.llm-block:last-child {
+  margin-bottom: 0;
+}
+
+.llm-block__label {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.llm-block__content {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.llm-block__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.llm-block__list li {
+  margin-bottom: 4px;
 }
 </style>

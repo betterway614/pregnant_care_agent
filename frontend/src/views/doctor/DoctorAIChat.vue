@@ -25,8 +25,27 @@
             <span class="loading-dot" /><span class="loading-dot" /><span class="loading-dot" />
           </div>
           <!-- 消息内容 -->
+          <div v-else-if="msg.messageType === 'audio'" class="doctor-chat__audio">
+            <button class="audio-play-btn" @click="playAudio(msg)">
+              <el-icon :size="16"><VideoPlay v-if="!msg.isPlaying" /><VideoPause v-else /></el-icon>
+            </button>
+            <div class="audio-waveform">
+              <span v-for="i in 12" :key="i" class="audio-bar" :style="{ animationDelay: `${i * 0.05}s` }" />
+            </div>
+            <span class="audio-duration">{{ formatAudioDuration(msg.audioDuration || 0) }}</span>
+          </div>
           <div v-else class="doctor-chat__text" v-html="renderMarkdown(msg.content)" />
         </div>
+        <!-- TTS 播报按钮（助手消息） -->
+        <button
+          v-if="msg.role === 'assistant' && !msg.loading && msg.content"
+          class="tts-btn"
+          :class="{ 'tts-btn--speaking': ttsSpeakingId === msg.id }"
+          @click="toggleTTS(msg)"
+          title="语音播报"
+        >
+          <el-icon :size="13"><Headset /></el-icon>
+        </button>
       </div>
     </div>
 
@@ -54,8 +73,31 @@
       </div>
     </transition>
 
+    <!-- 录音覆盖层 -->
+    <transition name="record-fade">
+      <div v-if="isRecording" class="doctor-chat__record-overlay">
+        <div class="record-center">
+          <div class="record-ring" :class="{ 'record-ring--cancel': isInCancelZone }">
+            <el-icon :size="28" color="#fff"><Microphone /></el-icon>
+          </div>
+          <span class="record-timer">{{ recordingText }}</span>
+          <span class="record-hint" :class="{ 'record-hint--cancel': isInCancelZone }">
+            {{ isInCancelZone ? '松手取消' : '松手发送' }}
+          </span>
+        </div>
+      </div>
+    </transition>
+
     <!-- 输入区域 -->
     <div class="doctor-chat__input">
+      <button
+        class="mic-btn"
+        :class="{ 'mic-btn--active': !isStreaming }"
+        @pointerdown.prevent="startRecording"
+        :disabled="isStreaming"
+      >
+        <el-icon :size="18"><Microphone /></el-icon>
+      </button>
       <el-input
         v-model="inputText"
         type="textarea"
@@ -80,10 +122,12 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { Promotion, Loading, Check } from '@element-plus/icons-vue'
+import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset } from '@element-plus/icons-vue'
 import { doctorAiApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown } from '@/utils/markdown'
+import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { useTTS } from '@/composables/useTTS'
 
 interface ChatMsg {
   id: string
@@ -94,6 +138,10 @@ interface ChatMsg {
   thinkingMessage?: string
   toolSteps?: string[]
   currentStep?: string
+  messageType?: 'text' | 'audio'
+  audioUrl?: string
+  audioDuration?: number
+  isPlaying?: boolean
 }
 
 const messages = ref<ChatMsg[]>([])
@@ -107,6 +155,136 @@ const completedToolSteps = ref<string[]>([])
 
 let msgCounter = 0
 function genId() { return `doctor_${Date.now()}_${++msgCounter}` }
+
+// ---- 语音录制 ----
+const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioRecorder({
+  onComplete: async (result) => {
+    await sendAudioMessage(result.base64, result.format, result.blob, result.duration)
+  },
+})
+
+// ---- TTS 播报 ----
+const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'doctor' })
+const ttsSpeakingId = ref<string | null>(null)
+let currentAudioEl: HTMLAudioElement | null = null
+
+function toggleTTS(msg: ChatMsg) {
+  if (ttsSpeakingId.value === msg.id) {
+    stopTTS()
+    ttsSpeakingId.value = null
+  } else {
+    ttsSpeakingId.value = msg.id
+    speak(cleanForTTS(msg.content))
+    const checkEnd = setInterval(() => {
+      if (!isSpeaking.value) {
+        ttsSpeakingId.value = null
+        clearInterval(checkEnd)
+      }
+    }, 500)
+  }
+}
+
+function playAudio(msg: ChatMsg) {
+  if (!msg.audioUrl) return
+  if (msg.isPlaying) {
+    currentAudioEl?.pause()
+    msg.isPlaying = false
+    return
+  }
+  if (currentAudioEl) {
+    currentAudioEl.pause()
+    const prev = messages.value.find(m => m.isPlaying)
+    if (prev) prev.isPlaying = false
+  }
+  currentAudioEl = new Audio(msg.audioUrl)
+  msg.isPlaying = true
+  currentAudioEl.onended = () => { msg.isPlaying = false; currentAudioEl = null }
+  currentAudioEl.onerror = () => { msg.isPlaying = false; currentAudioEl = null }
+  currentAudioEl.play()
+}
+
+function formatAudioDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return m + ':' + s.toString().padStart(2, '0')
+}
+
+async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: Blob, duration: number) {
+  const audioUrl = URL.createObjectURL(audioBlob)
+  messages.value.push({
+    id: genId(),
+    role: 'user',
+    content: '',
+    messageType: 'audio',
+    audioUrl,
+    audioDuration: duration,
+  })
+  scrollToBottom()
+
+  const assistantMsg: ChatMsg = {
+    id: genId(),
+    role: 'assistant',
+    content: '',
+    loading: true,
+    thinking: true,
+    thinkingMessage: 'Dr.智正在听取语音...',
+    toolSteps: [],
+  }
+  messages.value.push(assistantMsg)
+  isStreaming.value = true
+  scrollToBottom()
+
+  const pregnantId = localStorage.getItem('currentPregnantId') || ''
+
+  try {
+    await doctorAiApi.chatStream(
+      {
+        message: '请听取以下语音并给出回复',
+        pregnant_id: pregnantId || undefined,
+        message_type: 'AUDIO',
+        audio_data: base64,
+        audio_format: audioFormat,
+      },
+      {
+        onThinking(message: string) {
+          assistantMsg.thinkingMessage = message
+          currentToolStep.value = message
+          scrollToBottom()
+        },
+        onChunk(chunk: string) {
+          assistantMsg.content += chunk
+          assistantMsg.thinking = false
+          currentToolStep.value = null
+          scrollToBottom()
+        },
+        onDone(metadata: any) {
+          assistantMsg.loading = false
+          assistantMsg.thinking = false
+          assistantMsg.toolSteps = metadata?.tool_steps || []
+          completedToolSteps.value = metadata?.tool_steps || []
+          currentToolStep.value = null
+          isStreaming.value = false
+          scrollToBottom()
+        },
+        onError() {
+          assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
+          assistantMsg.loading = false
+          assistantMsg.thinking = false
+          currentToolStep.value = null
+          isStreaming.value = false
+        },
+      }
+    )
+  } catch {
+    if (!assistantMsg.content) {
+      assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
+    }
+    assistantMsg.loading = false
+    assistantMsg.thinking = false
+    currentToolStep.value = null
+    isStreaming.value = false
+  }
+}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -489,5 +667,192 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* ---- 麦克风按钮 ---- */
+.mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: #d1fae5;
+  color: #6ee7b7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.mic-btn--active {
+  background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%);
+  color: #10b981;
+}
+
+.mic-btn--active:hover {
+  background: linear-gradient(135deg, #6ee7b7 0%, #34d399 100%);
+  color: white;
+}
+
+.mic-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ---- 录音覆盖层 ---- */
+.doctor-chat__record-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 185, 129, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 16px;
+}
+
+.record-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.record-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: recordPulse 1.2s ease-in-out infinite;
+}
+
+.record-ring--cancel {
+  background: rgba(239, 68, 68, 0.6);
+  animation: none;
+}
+
+@keyframes recordPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); }
+}
+
+.record-timer {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.record-hint--cancel {
+  color: #fca5a5;
+}
+
+.record-fade-enter-active,
+.record-fade-leave-active {
+  transition: opacity 0.2s;
+}
+
+.record-fade-enter-from,
+.record-fade-leave-to {
+  opacity: 0;
+}
+
+/* ---- TTS 播报按钮 ---- */
+.tts-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #d1fae5;
+  background: white;
+  color: #6ee7b7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.tts-btn:hover {
+  color: #10b981;
+  border-color: #a7f3d0;
+}
+
+.tts-btn--speaking {
+  color: #10b981;
+  border-color: #34d399;
+  background: #ecfdf5;
+  animation: ttsPulse 1s ease-in-out infinite;
+}
+
+@keyframes ttsPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* ---- 音频消息气泡 ---- */
+.doctor-chat__audio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+
+.audio-play-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.audio-play-btn:active {
+  transform: scale(0.9);
+}
+
+.audio-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+}
+
+.audio-bar {
+  width: 3px;
+  height: 100%;
+  background: #6ee7b7;
+  border-radius: 2px;
+  animation: audioWave 1.2s ease-in-out infinite;
+}
+
+.audio-bar:nth-child(even) { animation-delay: 0.15s; }
+
+@keyframes audioWave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.audio-duration {
+  font-size: 11px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 </style>

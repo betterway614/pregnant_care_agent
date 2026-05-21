@@ -1,57 +1,57 @@
 /**
- * WebSocket 客户端管理器
- * 用于接收实时预警推送
+ * 通用 WebSocket 客户端管理器
+ * 支持医生端和护士端的实时预警推送
  */
 
 type AlertCallback = (alert: any) => void;
 type StateChangeCallback = (state: string) => void;
 
+export type WSRole = 'doctor' | 'nurse';
+
 class WebSocketClient {
   private ws: WebSocket | null = null;
-  private doctorId: string;
+  private userId: string;
+  private role: WSRole;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectInterval = 3000; // 3秒
+  private reconnectInterval = 3000;
   private alertCallbacks: AlertCallback[] = [];
   private stateChangeCallbacks: StateChangeCallback[] = [];
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private intentionalClose = false;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(doctorId: string) {
-    this.doctorId = doctorId;
+  constructor(userId: string, role: WSRole = 'doctor') {
+    this.userId = userId;
+    this.role = role;
   }
 
-  /**
-   * 连接 WebSocket
-   */
   connect(): void {
-    // 清理旧的重连 timeout (C2 修复)
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
 
-    // 关闭旧连接，但不使用 disconnect() 避免设置 intentionalClose (C1 修复)
     if (this.ws) {
       this.stopHeartbeat();
-      this.ws.onclose = null;  // 移除旧 ws 的 onclose 处理器
+      this.ws.onclose = null;
       this.ws.close();
       this.ws = null;
     }
 
     this.intentionalClose = false;
-    // 不要在此处重置 reconnectAttempts (M1 修复)
-    // reconnectAttempts 的重置保留在 onopen 中即可
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/alerts/${this.doctorId}`;
+    const path = this.role === 'nurse'
+      ? `/ws/nurse-alerts/${this.userId}`
+      : `/ws/alerts/${this.userId}`;
+    const wsUrl = `${protocol}//${window.location.host}${path}`;
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('WebSocket 连接成功');
-        this.reconnectAttempts = 0;  // 连接成功后重置重连次数
+        console.log(`[${this.role}] WebSocket 连接成功`);
+        this.reconnectAttempts = 0;
         this.startHeartbeat();
         this.notifyStateChange();
       };
@@ -59,9 +59,7 @@ class WebSocketClient {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-
           if (data.type === 'NEW_ALERT') {
-            // 触发所有注册的回调
             this.alertCallbacks.forEach(callback => callback(data.data));
           }
         } catch (error) {
@@ -70,7 +68,7 @@ class WebSocketClient {
       };
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket 连接关闭:', event.code, event.reason);
+        console.log(`[${this.role}] WebSocket 连接关闭:`, event.code, event.reason);
         this.stopHeartbeat();
         this.notifyStateChange();
         if (!this.intentionalClose) {
@@ -79,7 +77,7 @@ class WebSocketClient {
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket 错误:', error);
+        console.error(`[${this.role}] WebSocket 错误:`, error);
       };
     } catch (error) {
       console.error('创建 WebSocket 连接失败:', error);
@@ -87,9 +85,6 @@ class WebSocketClient {
     }
   }
 
-  /**
-   * 断开连接
-   */
   disconnect(): void {
     this.intentionalClose = true;
     this.stopHeartbeat();
@@ -103,36 +98,26 @@ class WebSocketClient {
     }
   }
 
-  /**
-   * 尝试重连
-   */
   private attemptReconnect(): void {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-
+      console.log(`[${this.role}] 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
       this.reconnectTimeout = setTimeout(() => {
         this.connect();
       }, this.reconnectInterval);
     } else {
-      console.error('达到最大重连次数，停止重连');
+      console.error(`[${this.role}] 达到最大重连次数，停止重连`);
     }
   }
 
-  /**
-   * 开始心跳
-   */
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send('ping');
       }
-    }, 30000); // 每30秒发送心跳
+    }, 30000);
   }
 
-  /**
-   * 停止心跳
-   */
   private stopHeartbeat(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -140,85 +125,66 @@ class WebSocketClient {
     }
   }
 
-  /**
-   * 注册预警回调
-   */
   onAlert(callback: AlertCallback): void {
     this.alertCallbacks.push(callback);
   }
 
-  /**
-   * 移除预警回调
-   */
   offAlert(callback: AlertCallback): void {
     this.alertCallbacks = this.alertCallbacks.filter(cb => cb !== callback);
   }
 
-  /**
-   * 注册连接状态变化回调
-   */
   onStateChange(callback: StateChangeCallback): void {
     this.stateChangeCallbacks.push(callback);
   }
 
-  /**
-   * 移除连接状态变化回调
-   */
   offStateChange(callback: StateChangeCallback): void {
     this.stateChangeCallbacks = this.stateChangeCallbacks.filter(cb => cb !== callback);
   }
 
-  /**
-   * 通知连接状态变化
-   */
   private notifyStateChange(): void {
     const state = this.getConnectionState();
     this.stateChangeCallbacks.forEach(cb => cb(state));
   }
 
-  /**
-   * 获取连接状态
-   */
   getConnectionState(): string {
     if (!this.ws) return 'CLOSED';
-
     switch (this.ws.readyState) {
-      case WebSocket.CONNECTING:
-        return 'CONNECTING';
-      case WebSocket.OPEN:
-        return 'OPEN';
-      case WebSocket.CLOSING:
-        return 'CLOSING';
-      case WebSocket.CLOSED:
-        return 'CLOSED';
-      default:
-        return 'UNKNOWN';
+      case WebSocket.CONNECTING: return 'CONNECTING';
+      case WebSocket.OPEN: return 'OPEN';
+      case WebSocket.CLOSING: return 'CLOSING';
+      case WebSocket.CLOSED: return 'CLOSED';
+      default: return 'UNKNOWN';
     }
   }
 
-  /**
-   * 获取 doctorId
-   */
-  getDoctorId(): string {
-    return this.doctorId;
-  }
+  getUserId(): string { return this.userId; }
+  getRole(): WSRole { return this.role; }
 }
 
-// 创建单例实例
-let wsClient: WebSocketClient | null = null;
+// 医生端单例
+let doctorWsClient: WebSocketClient | null = null;
 
-/**
- * 获取 WebSocket 客户端实例
- */
 export function getWebSocketClient(doctorId: string): WebSocketClient {
-  if (!wsClient) {
-    wsClient = new WebSocketClient(doctorId);
-  } else if (wsClient.getDoctorId() !== doctorId) {
-    // 如果 doctorId 变化，断开旧连接并创建新实例
-    wsClient.disconnect();
-    wsClient = new WebSocketClient(doctorId);
+  if (!doctorWsClient) {
+    doctorWsClient = new WebSocketClient(doctorId, 'doctor');
+  } else if (doctorWsClient.getUserId() !== doctorId) {
+    doctorWsClient.disconnect();
+    doctorWsClient = new WebSocketClient(doctorId, 'doctor');
   }
-  return wsClient;
+  return doctorWsClient;
+}
+
+// 护士端单例
+let nurseWsClient: WebSocketClient | null = null;
+
+export function getNurseWebSocketClient(nurseId: string): WebSocketClient {
+  if (!nurseWsClient) {
+    nurseWsClient = new WebSocketClient(nurseId, 'nurse');
+  } else if (nurseWsClient.getUserId() !== nurseId) {
+    nurseWsClient.disconnect();
+    nurseWsClient = new WebSocketClient(nurseId, 'nurse');
+  }
+  return nurseWsClient;
 }
 
 export default WebSocketClient;

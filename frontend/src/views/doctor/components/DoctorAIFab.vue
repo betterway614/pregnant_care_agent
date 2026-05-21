@@ -1,6 +1,5 @@
 <template>
   <div class="doctor-ai-fab-container">
-    <!-- 悬浮球 -->
     <el-button
       class="doctor-ai-fab brand-gradient-btn"
       type="primary"
@@ -11,216 +10,260 @@
       <AgentAvatar agent="zhiyi" :size="24" />
     </el-button>
 
-    <!-- 展开的面板 -->
     <transition name="el-zoom-in-bottom">
-      <div v-if="panelVisible" class="doctor-ai-panel">
-        <div class="doctor-ai-panel__header">
-          <div class="doctor-ai-panel__title">
+      <div v-if="panelVisible" class="agent-fab-panel agent-fab-panel--doctor">
+        <div class="agent-fab-panel__header">
+          <div class="agent-fab-panel__title">
             <AgentAvatar agent="zhiyi" :size="20" />
             <span>Dr.智 AI 临床助手</span>
           </div>
           <el-button text circle :icon="Close" @click="panelVisible = false" />
         </div>
 
-        <el-tabs v-model="activeTab" class="doctor-ai-panel__tabs">
-          <!-- 对话 Tab -->
-          <el-tab-pane label="对话" name="chat">
+        <CapsuleTabBar v-model="activeTab" :tabs="DOCTOR_FAB_TABS" role="doctor" />
+
+        <div class="agent-fab-panel__body">
+          <div v-show="activeTab === 'chat'" class="agent-fab-panel__pane">
             <DoctorAIChat />
-          </el-tab-pane>
+          </div>
 
-          <!-- 分析 Tab -->
-          <el-tab-pane label="分析" name="analysis">
-            <div class="analysis-tab">
-              <div class="analysis-input">
-                <el-select
-                  v-model="aiPatientId"
-                  filterable
-                  placeholder="选择孕妇进行分析"
-                  style="flex: 1"
-                  clearable
-                >
-                  <el-option
-                    v-for="p in pregnantList"
-                    :key="p.pregnant_id"
-                    :label="`${p.display_name} (孕${Math.floor((p.gestational_age_days||0)/7)}周)${p.risk_tags?.length ? ' ['+p.risk_tags.join(',')+']' : ''}`"
-                    :value="p.pregnant_id"
+          <div v-show="activeTab === 'analysis'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
+            <ToolActionBar
+              v-model:patient-id="aiPatientId"
+              v-model:active-section="activeAnalysisSection"
+              :patients="pregnantList"
+              role="doctor"
+              :loading="aiLoading"
+              action-label="开始分析"
+              patient-placeholder="选择孕妇进行分析"
+              show-risk-tags
+              :section-options="analysisSectionChips"
+              @action="runAiAnalysis"
+            >
+              <template #extra>
+                <div class="analysis-query-capsule">
+                  <input
+                    v-model="aiQuery"
+                    class="analysis-query-capsule__input"
+                    placeholder="补充查询（可选）"
                   />
-                </el-select>
-                <el-input
-                  v-model="aiQuery"
-                  placeholder="补充查询（可选）"
-                  style="width: 150px"
-                  clearable
-                />
-                <el-button
-                  type="primary"
-                  :loading="aiLoading"
-                  :disabled="!aiPatientId"
-                  @click="runAiAnalysis"
-                >
-                  <el-icon><MagicStick /></el-icon> AI 分析
-                </el-button>
-              </div>
+                </div>
+              </template>
+            </ToolActionBar>
 
-              <!-- AI分析结果 -->
-              <div v-if="aiResult" class="analysis-result" v-loading="aiLoading">
-                <el-alert
-                  v-if="aiResult.risk_summary"
-                  title="风险总结"
-                  :description="aiResult.risk_summary"
-                  type="error"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
-                <el-alert
-                  v-if="aiResult.analysis"
-                  title="综合分析"
-                  :description="aiResult.analysis"
-                  type="info"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
+            <AnalysisSkeleton v-if="aiLoading" role="doctor" />
 
-                <!-- 鉴别诊断推理链 -->
-                <div v-if="aiResult.reasoning_chain?.length" class="reasoning-chain">
-                  <h4 class="section-title">
-                    <el-icon><Guide /></el-icon> 推理链
-                  </h4>
-                  <div class="chain-steps">
-                    <div
-                      v-for="(step, idx) in aiResult.reasoning_chain"
-                      :key="idx"
-                      class="chain-step"
-                    >
-                      <span class="chain-step__num">{{ idx + 1 }}</span>
-                      <span class="chain-step__text">{{ step }}</span>
-                    </div>
+            <div v-else-if="aiResult" ref="analysisResultRef" class="analysis-results">
+              <AnalysisResultCard
+                v-if="aiResult.risk_summary"
+                id="section-risk_summary"
+                title="风险总结"
+                icon="Warning"
+                severity="danger"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'risk_summary'"
+              >
+                <p>{{ aiResult.risk_summary }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.analysis"
+                id="section-analysis"
+                title="综合分析"
+                icon="DataAnalysis"
+                severity="info"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'analysis'"
+              >
+                <p>{{ aiResult.analysis }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.reasoning_chain?.length"
+                id="section-reasoning_chain"
+                title="推理链"
+                icon="Guide"
+                severity="info"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'reasoning_chain'"
+              >
+                <div class="reasoning-timeline">
+                  <div
+                    v-for="(step, idx) in aiResult.reasoning_chain"
+                    :key="idx"
+                    class="reasoning-timeline__step"
+                  >
+                    <span class="reasoning-timeline__num">{{ idx + 1 }}</span>
+                    <span class="reasoning-timeline__text">{{ step }}</span>
                   </div>
                 </div>
+              </AnalysisResultCard>
 
-                <!-- 鉴别诊断 -->
-                <div v-if="aiResult.differential_diagnosis?.length" class="differential-diagnosis">
-                  <h4 class="section-title">
-                    <el-icon><FirstAidKit /></el-icon> 鉴别诊断
-                  </h4>
-                  <div class="diagnosis-list">
-                    <div
-                      v-for="(dx, idx) in aiResult.differential_diagnosis"
-                      :key="idx"
-                      class="diagnosis-item"
+              <AnalysisResultCard
+                v-if="aiResult.differential_diagnosis?.length"
+                id="section-differential_diagnosis"
+                title="鉴别诊断"
+                icon="FirstAidKit"
+                severity="warning"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'differential_diagnosis'"
+              >
+                <div class="diagnosis-list">
+                  <div
+                    v-for="(dx, idx) in aiResult.differential_diagnosis"
+                    :key="idx"
+                    class="diagnosis-row"
+                  >
+                    <span class="diagnosis-row__condition">{{ dx.condition }}</span>
+                    <span
+                      class="diagnosis-row__confidence"
+                      :class="confidenceClass(dx.confidence)"
                     >
-                      <div class="diagnosis-item__header">
-                        <span class="diagnosis-item__condition">{{ dx.condition }}</span>
-                        <el-tag
-                          :type="dx.confidence >= 0.7 ? 'danger' : dx.confidence >= 0.4 ? 'warning' : 'info'"
-                          size="small"
-                          effect="plain"
-                        >
-                          {{ (dx.confidence * 100).toFixed(0) }}%
-                        </el-tag>
-                      </div>
-                      <p v-if="dx.reasoning" class="diagnosis-item__reasoning">{{ dx.reasoning }}</p>
-                    </div>
+                      {{ (dx.confidence * 100).toFixed(0) }}%
+                    </span>
+                    <p v-if="dx.reasoning" class="diagnosis-row__reasoning">{{ dx.reasoning }}</p>
                   </div>
                 </div>
+              </AnalysisResultCard>
 
-                <el-alert
-                  v-if="aiResult.suggested_orders"
-                  title="建议医嘱"
-                  :description="aiResult.suggested_orders"
-                  type="warning"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
-                <div v-if="aiResult.evidence_references?.length" class="evidence-refs">
-                  <p class="refs-title">循证参考：</p>
-                  <ul>
-                    <li v-for="(ref, idx) in aiResult.evidence_references" :key="idx">{{ ref }}</li>
-                  </ul>
+              <AnalysisResultCard
+                v-if="aiResult.suggested_orders"
+                id="section-suggested_orders"
+                title="建议医嘱"
+                icon="Document"
+                severity="warning"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'suggested_orders'"
+              >
+                <p>{{ aiResult.suggested_orders }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.evidence_references?.length"
+                id="section-evidence_references"
+                title="循证参考"
+                icon="Reading"
+                severity="info"
+                role="doctor"
+                :default-expanded="firstSectionKey === 'evidence_references'"
+              >
+                <div class="evidence-chips">
+                  <span
+                    v-for="(ref, idx) in aiResult.evidence_references"
+                    :key="idx"
+                    class="evidence-chip"
+                  >{{ ref }}</span>
                 </div>
-              </div>
-
-              <!-- 空状态 -->
-              <div v-if="!aiResult && !aiLoading" class="analysis-empty">
-                <el-icon :size="40" color="var(--text-muted)"><MagicStick /></el-icon>
-                <p>选择孕妇后点击"AI分析"，Dr.智将提供鉴别诊断、治疗建议等临床分析</p>
-              </div>
+              </AnalysisResultCard>
             </div>
-          </el-tab-pane>
 
-          <!-- 报告 Tab -->
-          <el-tab-pane label="报告" name="report">
-            <DoctorReport />
-          </el-tab-pane>
+            <EmptyToolState
+              v-else
+              :icon="MagicStick"
+              role="doctor"
+              message="选择孕妇后点击「开始分析」，Dr.智将提供鉴别诊断、治疗建议等临床分析"
+            />
+          </div>
 
-          <!-- 问题 Tab -->
-          <el-tab-pane label="问题" name="issues">
-            <div class="issues-tab">
-              <div class="issues-list">
-                <div v-for="issue in issues" :key="issue.id" class="issue-item">
-                  <div class="issue-header">
-                    <el-tag :type="getPriorityType(issue.priority)" size="small">
-                      {{ getPriorityLabel(issue.priority) }}
-                    </el-tag>
-                    <span class="issue-time">{{ formatTime(issue.created_at) }}</span>
-                  </div>
-                  <div class="issue-title">{{ issue.title }}</div>
-                  <div class="issue-desc">{{ issue.description }}</div>
-                  <div class="issue-footer">
-                    <span class="issue-patient">{{ issue.patient_name }}</span>
-                    <el-button
-                      v-if="issue.status === 'pending'"
-                      type="primary"
-                      size="small"
-                      @click="resolveIssue(issue)"
-                    >
-                      处理
-                    </el-button>
-                    <el-tag v-else type="success" size="small">已处理</el-tag>
-                  </div>
-                </div>
-                <div v-if="!issues.length" class="issues-empty">
-                  <el-icon :size="40" color="var(--text-muted)"><Bell /></el-icon>
-                  <p>暂无待处理问题</p>
-                </div>
-              </div>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
+          <div v-show="activeTab === 'report'" class="agent-fab-panel__pane">
+            <DoctorReport :patients="pregnantList" />
+          </div>
+
+          <div v-show="activeTab === 'issues'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
+            <CapsuleChipGroup
+              v-model="issueFilter"
+              :options="ISSUE_FILTER_OPTIONS"
+              role="doctor"
+              class="issues-filter"
+            />
+            <IssueCard
+              v-for="issue in filteredIssues"
+              :key="issue.id"
+              :title="issue.title"
+              :description="issue.description"
+              :patient-name="issue.patient_name"
+              :priority="issue.priority"
+              :status="issue.status"
+              :time="formatTime(issue.created_at)"
+              role="doctor"
+              @resolve="resolveIssue(issue)"
+            />
+            <EmptyToolState
+              v-if="!filteredIssues.length"
+              :icon="Bell"
+              role="doctor"
+              message="暂无相关问题"
+            />
+          </div>
+        </div>
       </div>
     </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Close, MagicStick, Guide, FirstAidKit, Bell } from '@element-plus/icons-vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { Close, MagicStick, Bell } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import DoctorAIChat from '../DoctorAIChat.vue'
 import DoctorReport from '../DoctorReport.vue'
+import {
+  CapsuleTabBar,
+  ToolActionBar,
+  AnalysisResultCard,
+  EmptyToolState,
+  IssueCard,
+  AnalysisSkeleton,
+  CapsuleChipGroup,
+} from '@/components/agent-fab'
+import {
+  DOCTOR_FAB_TABS,
+  DOCTOR_ANALYSIS_SECTIONS,
+  ISSUE_FILTER_OPTIONS,
+} from '@/config/agentFabTools'
 import { dashboardApi, doctorAiApi, collaborationApi } from '@/api/endpoints'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)
 const activeTab = ref('chat')
-
-function togglePanel() {
-  panelVisible.value = !panelVisible.value
-  if (panelVisible.value && !pregnantList.value.length) {
-    loadPatientList()
-  }
-}
-
-// ==================== AI 智能分析 ====================
 const aiPatientId = ref('')
 const aiQuery = ref('')
 const aiLoading = ref(false)
 const aiResult = ref<any>(null)
 const pregnantList = ref<Pregnant[]>([])
+const activeAnalysisSection = ref('')
+const analysisResultRef = ref<HTMLElement | null>(null)
+const issueFilter = ref('pending')
+const allIssues = ref<any[]>([])
+
+const analysisSectionChips = computed(() =>
+  DOCTOR_ANALYSIS_SECTIONS.map(s => ({ value: s.key, label: s.label, icon: s.icon })),
+)
+
+const firstSectionKey = computed(() => {
+  if (!aiResult.value) return ''
+  for (const s of DOCTOR_ANALYSIS_SECTIONS) {
+    const val = aiResult.value[s.key]
+    if (Array.isArray(val) ? val.length : val) return s.key
+  }
+  return ''
+})
+
+const filteredIssues = computed(() => allIssues.value)
+
+watch(activeAnalysisSection, (key) => {
+  if (!key) return
+  const section = DOCTOR_ANALYSIS_SECTIONS.find(s => s.key === key)
+  if (section?.scrollTarget) {
+    document.getElementById(section.scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
+
+function togglePanel() {
+  panelVisible.value = !panelVisible.value
+  if (panelVisible.value && !pregnantList.value.length) loadPatientList()
+}
 
 async function loadPatientList() {
   try {
@@ -236,53 +279,37 @@ async function runAiAnalysis() {
   try {
     const res = await doctorAiApi.analyze(aiPatientId.value, aiQuery.value)
     aiResult.value = res.data
-  } catch (err: any) {
+  } catch {
     aiResult.value = {
-      risk_summary: '',
       analysis: 'AI分析暂时不可用，请查看孕妇详情进行手动评估',
-      suggested_orders: '',
-      evidence_references: [],
     }
   } finally {
     aiLoading.value = false
   }
 }
 
-onMounted(() => {
-  // 预加载孕妇列表
-  loadPatientList()
-  // 加载待处理问题
-  loadIssues()
-})
-
-// ==================== 问题处理 ====================
-const issues = ref<any[]>([])
+watch(issueFilter, () => loadIssues())
 
 async function loadIssues() {
   try {
-    const res = await collaborationApi.listDoctorIssues('pending')
-    issues.value = res.data || []
+    if (issueFilter.value === 'all') {
+      const [pending, resolved] = await Promise.all([
+        collaborationApi.listDoctorIssues('pending'),
+        collaborationApi.listDoctorIssues('resolved'),
+      ])
+      allIssues.value = [...(pending.data || []), ...(resolved.data || [])]
+    } else {
+      const status = issueFilter.value === 'resolved' ? 'resolved' : 'pending'
+      const res = await collaborationApi.listDoctorIssues(status)
+      allIssues.value = res.data || []
+    }
   } catch { /* ignore */ }
 }
 
-function getPriorityType(priority: string) {
-  const map: Record<string, string> = {
-    low: 'info',
-    medium: 'warning',
-    high: 'danger',
-    urgent: 'danger',
-  }
-  return map[priority] || 'info'
-}
-
-function getPriorityLabel(priority: string) {
-  const map: Record<string, string> = {
-    low: '低',
-    medium: '中',
-    high: '高',
-    urgent: '紧急',
-  }
-  return map[priority] || '中'
+function confidenceClass(confidence: number) {
+  if (confidence >= 0.7) return 'diagnosis-row__confidence--high'
+  if (confidence >= 0.4) return 'diagnosis-row__confidence--medium'
+  return 'diagnosis-row__confidence--low'
 }
 
 function formatTime(t?: string): string {
@@ -299,6 +326,11 @@ async function resolveIssue(issue: any) {
     loadIssues()
   } catch { /* ignore */ }
 }
+
+onMounted(() => {
+  loadPatientList()
+  loadIssues()
+})
 </script>
 
 <style scoped>
@@ -315,39 +347,40 @@ async function resolveIssue(issue: any) {
 .doctor-ai-fab {
   width: 56px;
   height: 56px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s;
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition);
 }
 
 .doctor-ai-fab:hover {
   transform: scale(1.05);
 }
 
-.doctor-ai-panel {
+.agent-fab-panel {
   position: absolute;
   bottom: 72px;
   right: 0;
-  width: 420px;
-  height: 600px;
+  width: var(--fab-panel-width);
+  height: var(--fab-panel-height);
   background: var(--bg-page);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
 }
 
-.doctor-ai-panel__header {
+.agent-fab-panel__header {
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
+  flex-shrink: 0;
 }
 
-.doctor-ai-panel__title {
+.agent-fab-panel__title {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -356,113 +389,83 @@ async function resolveIssue(issue: any) {
   font-size: 15px;
 }
 
-.doctor-ai-panel__tabs {
+.agent-fab-panel__body {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-fab-panel__pane {
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.doctor-ai-panel__tabs :deep(.el-tabs__header) {
-  margin: 0;
-  padding: 0 16px;
-  background: var(--bg-card);
-}
-
-.doctor-ai-panel__tabs :deep(.el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  padding: 0;
-}
-
-.doctor-ai-panel__tabs :deep(.el-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 分析 Tab 样式 */
-.analysis-tab {
-  padding: 16px;
-  height: 100%;
+.agent-fab-panel__pane--scroll {
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  padding: 12px 16px 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
-.analysis-input {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+.analysis-query-capsule {
+  flex: 1;
+  min-width: 0;
 }
 
-.analysis-result {
+.analysis-query-capsule__input {
+  width: 100%;
+  min-height: var(--capsule-min-height);
+  padding: 8px 14px;
+  border: 1px solid var(--capsule-border);
+  border-radius: var(--capsule-radius);
+  background: var(--capsule-bg);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.analysis-query-capsule__input:focus-visible {
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.analysis-results {
   flex: 1;
 }
 
-.mb-3 {
-  margin-bottom: 12px;
-}
-
-/* 推理链 */
-.reasoning-chain {
-  background: rgba(241, 245, 249, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 12px;
-  border-left: 3px solid var(--primary);
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.chain-steps {
+.reasoning-timeline {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.chain-step {
+.reasoning-timeline__step {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  gap: 10px;
 }
 
-.chain-step__num {
+.reasoning-timeline__num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  border-radius: 50%;
-  background: var(--primary-gradient);
+  min-width: 24px;
+  height: 24px;
+  border-radius: var(--capsule-radius);
+  background: var(--doctor-accent-gradient);
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
-/* 鉴别诊断 */
-.differential-diagnosis {
-  background: rgba(241, 245, 249, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 12px;
+.reasoning-timeline__text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding-top: 2px;
 }
 
 .diagnosis-list {
@@ -471,133 +474,78 @@ async function resolveIssue(issue: any) {
   gap: 8px;
 }
 
-.diagnosis-item {
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.diagnosis-row {
+  padding: 8px 10px;
+  background: var(--bg-surface);
   border-radius: var(--radius-sm);
-  padding: 10px;
-  border: 1px solid var(--glass-border);
 }
 
-.diagnosis-item__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.diagnosis-item__condition {
+.diagnosis-row__condition {
+  font-weight: 600;
   font-size: 13px;
-  font-weight: 700;
   color: var(--text-primary);
 }
 
-.diagnosis-item__reasoning {
+.diagnosis-row__confidence {
+  float: right;
+  padding: 2px 10px;
+  border-radius: var(--capsule-radius);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.diagnosis-row__confidence--high {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.diagnosis-row__confidence--medium {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.diagnosis-row__confidence--low {
+  background: var(--info-light);
+  color: var(--info);
+}
+
+.diagnosis-row__reasoning {
+  clear: both;
+  margin: 6px 0 0;
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.5;
-  margin: 0;
 }
 
-.evidence-refs {
-  background: rgba(21, 101, 192, 0.06);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  border: 1px solid rgba(21, 101, 192, 0.1);
-}
-
-.refs-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.evidence-refs ul {
-  margin-left: 16px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.analysis-empty {
+.evidence-chips {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-  padding: 0 24px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-/* 覆盖 DoctorAIChat 的默认高度 */
+.evidence-chip {
+  padding: 6px 12px;
+  border-radius: var(--capsule-radius);
+  background: var(--info-light);
+  border: 1px solid rgba(21, 101, 192, 0.15);
+  font-size: 11px;
+  color: var(--info);
+  line-height: 1.4;
+}
+
+.issues-filter {
+  margin-bottom: 12px;
+}
+
 :deep(.doctor-chat) {
   height: 100%;
   border: none;
   border-radius: 0;
 }
 
-/* 问题 Tab 样式 */
-.issues-tab {
-  padding: 16px;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.issue-item {
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  margin-bottom: 12px;
-}
-
-.issue-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.issue-time {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.issue-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.issue-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.issue-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.issue-patient {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.issues-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
-  gap: 12px;
-  color: var(--text-muted);
+@media (prefers-reduced-motion: reduce) {
+  .doctor-ai-fab {
+    transition: none;
+  }
 }
 </style>

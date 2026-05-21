@@ -1,6 +1,5 @@
 <template>
   <div class="nurse-ai-fab-container">
-    <!-- 悬浮球 -->
     <el-button
       class="nurse-ai-fab brand-gradient-btn"
       type="primary"
@@ -11,162 +10,177 @@
       <AgentAvatar agent="xiaohu" :size="24" />
     </el-button>
 
-    <!-- 展开的面板 -->
     <transition name="el-zoom-in-bottom">
-      <div v-if="panelVisible" class="nurse-ai-panel">
-        <div class="nurse-ai-panel__header">
-          <div class="nurse-ai-panel__title">
+      <div v-if="panelVisible" class="agent-fab-panel agent-fab-panel--nurse">
+        <div class="agent-fab-panel__header">
+          <div class="agent-fab-panel__title">
             <AgentAvatar agent="xiaohu" :size="20" />
             <span>小护 AI 智能助手</span>
           </div>
           <el-button text circle :icon="Close" @click="panelVisible = false" />
         </div>
 
-        <el-tabs v-model="activeTab" class="nurse-ai-panel__tabs">
-          <!-- 对话 Tab -->
-          <el-tab-pane label="对话" name="chat">
+        <CapsuleTabBar v-model="activeTab" :tabs="NURSE_FAB_TABS" role="nurse" />
+
+        <div class="agent-fab-panel__body">
+          <div v-show="activeTab === 'chat'" class="agent-fab-panel__pane">
             <NurseAIChat />
-          </el-tab-pane>
+          </div>
 
-          <!-- 分析 Tab -->
-          <el-tab-pane label="分析" name="analysis">
-            <div class="analysis-tab">
-              <div class="analysis-input">
-                <el-select
-                  v-model="aiPatientId"
-                  filterable
-                  placeholder="选择孕妇进行分析"
-                  style="flex: 1"
-                  clearable
-                >
-                  <el-option
-                    v-for="p in pregnantList"
-                    :key="p.pregnant_id"
-                    :label="`${p.display_name} (孕${Math.floor((p.gestational_age_days||0)/7)}周)`"
-                    :value="p.pregnant_id"
-                  />
-                </el-select>
-                <el-button
-                  type="primary"
-                  :loading="aiLoading"
-                  :disabled="!aiPatientId"
-                  @click="runAiAnalysis"
-                >
-                  <el-icon><MagicStick /></el-icon> AI 分析
-                </el-button>
-              </div>
+          <div v-show="activeTab === 'analysis'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
+            <ToolActionBar
+              v-model:patient-id="aiPatientId"
+              v-model:active-section="activeAnalysisSection"
+              :patients="pregnantList"
+              role="nurse"
+              :loading="aiLoading"
+              action-label="开始分析"
+              patient-placeholder="选择孕妇进行分析"
+              :section-options="analysisSectionChips"
+              @action="runAiAnalysis"
+            />
 
-              <!-- AI分析结果 -->
-              <div v-if="aiResult" class="analysis-result" v-loading="aiLoading">
-                <el-alert
-                  v-if="aiResult.summary"
-                  title="综合分析"
-                  :description="aiResult.summary"
-                  type="info"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
-                <el-alert
-                  v-if="aiResult.risk_assessment"
-                  title="风险评估"
-                  :description="aiResult.risk_assessment"
-                  :type="aiResult.risk_assessment.includes('高危') ? 'error' : 'warning'"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
-                <el-alert
-                  v-if="aiResult.nursing_suggestions"
-                  title="护理建议"
-                  :description="aiResult.nursing_suggestions"
-                  type="success"
-                  show-icon
-                  :closable="false"
-                  class="mb-3"
-                />
-                <div v-if="aiResult.followup_focus?.length" class="followup-focus">
-                  <p class="focus-title">随访重点关注：</p>
-                  <el-tag
+            <AnalysisSkeleton v-if="aiLoading" role="nurse" />
+
+            <div v-else-if="aiResult" class="analysis-results">
+              <AnalysisResultCard
+                v-if="aiResult.summary"
+                id="section-summary"
+                title="综合分析"
+                icon="DataAnalysis"
+                severity="info"
+                role="nurse"
+                :default-expanded="firstSectionKey === 'summary'"
+              >
+                <p>{{ aiResult.summary }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.risk_assessment"
+                id="section-risk_assessment"
+                title="风险评估"
+                icon="Warning"
+                :severity="aiResult.risk_assessment.includes('高危') ? 'danger' : 'warning'"
+                role="nurse"
+                :default-expanded="firstSectionKey === 'risk_assessment'"
+              >
+                <p>{{ aiResult.risk_assessment }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.nursing_suggestions"
+                id="section-nursing_suggestions"
+                title="护理建议"
+                icon="FirstAidKit"
+                severity="success"
+                role="nurse"
+                :default-expanded="firstSectionKey === 'nursing_suggestions'"
+              >
+                <p>{{ aiResult.nursing_suggestions }}</p>
+              </AnalysisResultCard>
+
+              <AnalysisResultCard
+                v-if="aiResult.followup_focus?.length"
+                id="section-followup_focus"
+                title="随访重点关注"
+                icon="Calendar"
+                severity="info"
+                role="nurse"
+                :default-expanded="firstSectionKey === 'followup_focus'"
+              >
+                <div class="followup-chips">
+                  <span
                     v-for="(item, idx) in aiResult.followup_focus"
                     :key="idx"
-                    size="small"
-                    class="focus-tag"
-                  >{{ item }}</el-tag>
+                    class="followup-chip"
+                  >{{ item }}</span>
                 </div>
-              </div>
-
-              <!-- 空状态 -->
-              <div v-if="!aiResult && !aiLoading" class="analysis-empty">
-                <el-icon :size="40" color="var(--text-muted)"><MagicStick /></el-icon>
-                <p>选择孕妇后点击"AI分析"，小护将为您提供智能护理分析建议</p>
-              </div>
+              </AnalysisResultCard>
             </div>
-          </el-tab-pane>
 
-          <!-- 上报 Tab -->
-          <el-tab-pane label="上报" name="report">
-            <div class="report-tab">
-              <el-form :model="reportForm" label-position="top" size="small">
-                <el-form-item label="问题类型">
-                  <el-select v-model="reportForm.issue_type" placeholder="选择问题类型" style="width: 100%">
-                    <el-option label="风险预警" value="risk_alert" />
-                    <el-option label="异常数据" value="abnormal_data" />
-                    <el-option label="患者投诉" value="patient_complaint" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="优先级">
-                  <el-radio-group v-model="reportForm.priority">
-                    <el-radio-button label="low">低</el-radio-button>
-                    <el-radio-button label="medium">中</el-radio-button>
-                    <el-radio-button label="high">高</el-radio-button>
-                    <el-radio-button label="urgent">紧急</el-radio-button>
-                  </el-radio-group>
-                </el-form-item>
-                <el-form-item label="问题标题">
-                  <el-input v-model="reportForm.title" placeholder="简要描述问题" />
-                </el-form-item>
-                <el-form-item label="详细描述">
-                  <el-input v-model="reportForm.description" type="textarea" :rows="3" placeholder="详细描述问题情况" />
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" @click="submitReport" :loading="reportLoading" style="width: 100%">
-                    上报给医生
-                  </el-button>
-                </el-form-item>
-              </el-form>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
+            <EmptyToolState
+              v-else
+              :icon="MagicStick"
+              role="nurse"
+              message="选择孕妇后点击「开始分析」，小护将为您提供智能护理分析建议"
+            />
+          </div>
+
+          <div v-show="activeTab === 'report'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
+            <ReportFormCapsule
+              v-model="reportForm"
+              role="nurse"
+              :loading="reportLoading"
+              :show-success="reportSuccess"
+              @submit="submitReport"
+            />
+          </div>
+        </div>
       </div>
     </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Close, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import NurseAIChat from '../NurseAIChat.vue'
+import {
+  CapsuleTabBar,
+  ToolActionBar,
+  AnalysisResultCard,
+  EmptyToolState,
+  AnalysisSkeleton,
+  ReportFormCapsule,
+} from '@/components/agent-fab'
+import type { ReportFormData } from '@/components/agent-fab'
+import { NURSE_FAB_TABS, NURSE_ANALYSIS_SECTIONS } from '@/config/agentFabTools'
 import { dashboardApi, nurseAiApi, aiAnalysisApi, collaborationApi } from '@/api/endpoints'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)
 const activeTab = ref('chat')
-
-function togglePanel() {
-  panelVisible.value = !panelVisible.value
-  if (panelVisible.value && !pregnantList.value.length) {
-    loadPatientList()
-  }
-}
-
-// ==================== AI 智能分析 ====================
 const aiPatientId = ref('')
 const aiLoading = ref(false)
 const aiResult = ref<any>(null)
 const pregnantList = ref<Pregnant[]>([])
+const activeAnalysisSection = ref('')
+const reportLoading = ref(false)
+const reportSuccess = ref(false)
+const reportForm = ref<ReportFormData>({
+  issue_type: 'risk_alert',
+  priority: 'medium',
+  title: '',
+  description: '',
+})
+
+const analysisSectionChips = computed(() =>
+  NURSE_ANALYSIS_SECTIONS.map(s => ({ value: s.key, label: s.label, icon: s.icon })),
+)
+
+const firstSectionKey = computed(() => {
+  if (!aiResult.value) return ''
+  for (const s of NURSE_ANALYSIS_SECTIONS) {
+    const val = aiResult.value[s.key]
+    if (Array.isArray(val) ? val.length : val) return s.key
+  }
+  return ''
+})
+
+watch(activeAnalysisSection, (key) => {
+  if (!key) return
+  const section = NURSE_ANALYSIS_SECTIONS.find(s => s.key === key)
+  if (section?.scrollTarget) {
+    document.getElementById(section.scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
+
+function togglePanel() {
+  panelVisible.value = !panelVisible.value
+  if (panelVisible.value && !pregnantList.value.length) loadPatientList()
+}
 
 async function loadPatientList() {
   try {
@@ -182,65 +196,49 @@ async function runAiAnalysis() {
   try {
     const res = await nurseAiApi.analyze(aiPatientId.value)
     aiResult.value = res.data
-
-    // 保存到后端
     await aiAnalysisApi.save({
       pregnant_id: aiPatientId.value,
       result_data: res.data,
       analysis_type: 'general',
     })
-  } catch (err: any) {
+  } catch {
     aiResult.value = {
       summary: 'AI分析暂时不可用，请联系管理员',
-      nursing_suggestions: '',
-      risk_assessment: '',
-      followup_focus: [],
     }
   } finally {
     aiLoading.value = false
   }
 }
 
-onMounted(() => {
-  // 预加载孕妇列表
-  loadPatientList()
-})
-
-// ==================== 问题上报 ====================
-const reportForm = ref({
-  issue_type: 'risk_alert',
-  priority: 'medium',
-  title: '',
-  description: '',
-})
-const reportLoading = ref(false)
-
 async function submitReport() {
   if (!reportForm.value.title || !reportForm.value.description) {
     ElMessage.warning('请填写问题标题和描述')
     return
   }
-
   reportLoading.value = true
+  reportSuccess.value = false
   try {
     const pregnantId = localStorage.getItem('currentPregnantId') || ''
     await collaborationApi.reportIssue({
       pregnant_id: pregnantId,
       ...reportForm.value,
     })
-    ElMessage.success('问题已上报给医生')
+    reportSuccess.value = true
     reportForm.value = {
       issue_type: 'risk_alert',
       priority: 'medium',
       title: '',
       description: '',
     }
-  } catch (error) {
+    setTimeout(() => { reportSuccess.value = false }, 3000)
+  } catch {
     ElMessage.error('上报失败，请重试')
   } finally {
     reportLoading.value = false
   }
 }
+
+onMounted(loadPatientList)
 </script>
 
 <style scoped>
@@ -257,39 +255,40 @@ async function submitReport() {
 .nurse-ai-fab {
   width: 56px;
   height: 56px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s;
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition);
 }
 
 .nurse-ai-fab:hover {
   transform: scale(1.05);
 }
 
-.nurse-ai-panel {
+.agent-fab-panel {
   position: absolute;
   bottom: 72px;
   right: 0;
-  width: 380px;
-  height: 560px;
+  width: var(--fab-panel-width);
+  height: var(--fab-panel-height);
   background: var(--bg-page);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
 }
 
-.nurse-ai-panel__header {
+.agent-fab-panel__header {
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
+  flex-shrink: 0;
 }
 
-.nurse-ai-panel__title {
+.agent-fab-panel__title {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -298,95 +297,55 @@ async function submitReport() {
   font-size: 15px;
 }
 
-.nurse-ai-panel__tabs {
+.agent-fab-panel__body {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-fab-panel__pane {
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.nurse-ai-panel__tabs :deep(.el-tabs__header) {
-  margin: 0;
-  padding: 0 16px;
-  background: var(--bg-card);
-}
-
-.nurse-ai-panel__tabs :deep(.el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  padding: 0;
-}
-
-.nurse-ai-panel__tabs :deep(.el-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 分析 Tab 样式 */
-.analysis-tab {
-  padding: 16px;
-  height: 100%;
+.agent-fab-panel__pane--scroll {
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  padding: 12px 16px 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
-.analysis-input {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.analysis-result {
+.analysis-results {
   flex: 1;
 }
 
-.mb-3 {
-  margin-bottom: 12px;
+.followup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.followup-focus {
-  background: var(--primary-bg);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-}
-
-.focus-title {
-  font-size: 13px;
+.followup-chip {
+  padding: 6px 14px;
+  border-radius: var(--capsule-radius);
+  background: var(--nurse-accent-bg);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
+  color: var(--nurse-accent);
 }
 
-.focus-tag {
-  margin: 0 8px 8px 0;
-}
-
-.analysis-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-  padding: 0 24px;
-}
-
-/* 覆盖 NurseAIChat 的默认高度 */
 :deep(.nurse-chat) {
   height: 100%;
   border: none;
   border-radius: 0;
 }
 
-/* 上报 Tab 样式 */
-.report-tab {
-  padding: 16px;
-  height: 100%;
-  overflow-y: auto;
+@media (prefers-reduced-motion: reduce) {
+  .nurse-ai-fab {
+    transition: none;
+  }
 }
 </style>

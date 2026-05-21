@@ -56,19 +56,27 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
             # 模板兜底
             result = _fallback_nurse_analyze(pregnant, gest_week, gest_day, risk_tags, patient_data)
 
-        # 分析完成后自动创建预警（如果检测到高风险）
+        # 分析完成后自动创建预警（基于 LLM 动态判断的预警级别）
         # 应用患者安全后处理：拦截诊断性/用药性结论
         from ..core.agno_guardrails import apply_patient_facing_safety
         result.summary = apply_patient_facing_safety(result.summary or "")
         result.risk_assessment = apply_patient_facing_safety(result.risk_assessment or "")
         result.nursing_suggestions = apply_patient_facing_safety(result.nursing_suggestions or "")
 
-        if "高风险" in (result.risk_assessment or "") or "异常" in (result.risk_assessment or ""):
-            # 创建预警记录
+        # 动态判断预警级别：优先使用 LLM 返回的 alert_level，回退到关键词匹配
+        llm_level = (result.alert_level or "").upper()
+        if llm_level in ("RED", "ORANGE", "YELLOW"):
+            alert_level = llm_level
+        elif "高风险" in (result.risk_assessment or "") or "异常" in (result.risk_assessment or ""):
+            alert_level = "ORANGE"
+        else:
+            alert_level = None
+
+        if alert_level:
             alert = Alert(
                 pregnant_id=req.pregnant_id,
                 trigger_source="MANUAL",
-                level="ORANGE",
+                level=alert_level,
                 message=f"护士AI分析提示：{result.risk_assessment[:100]}",
                 status="PENDING",
             )
@@ -76,12 +84,11 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
             db.commit()
             db.refresh(alert)
 
-            # 构建推送数据
             alert_data = {
                 "id": str(alert.id),
                 "pregnant_id": req.pregnant_id,
                 "patient_name": pregnant.display_name,
-                "level": "ORANGE",
+                "level": alert_level,
                 "message": f"护士AI分析提示：{result.risk_assessment[:100]}",
                 "trigger_source": "MANUAL",
                 "status": alert.status,
@@ -89,7 +96,6 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
                 "gestational_age_days": pregnant.gestational_age_days,
             }
 
-            # 推送给医生端
             await ws_manager.broadcast_alert(alert_data)
 
         # 生成随访排期推荐
@@ -208,6 +214,7 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             risk_assessment=data.get("risk_assessment", ""),
             nursing_suggestions=data.get("nursing_suggestions", ""),
             followup_focus=data.get("followup_focus", []),
+            alert_level=data.get("alert_level", "NONE"),
         )
     except Exception:
         return None
@@ -250,6 +257,11 @@ def _build_nurse_analyze_prompt(pregnant: Pregnant, gest_week: int, gest_day: in
 2. risk_assessment: 风险评估（100-200字），分析当前主要风险因素
 3. nursing_suggestions: 护理建议（150-300字），具体的护理措施和健康教育要点
 4. followup_focus: 随访重点（字符串数组，3-5个项目），列出随访时需要特别关注的内容
+5. alert_level: 预警级别判断，取值：
+   - "RED"（高危）：需要立即医疗干预，如血压≥140/90、胎动极少、餐后血糖>7.0
+   - "ORANGE"（预警）：需要密切关注，如血压偏高、体重增长异常、血糖偏高
+   - "YELLOW"（关注）：需要一般关注，如情绪偏高、睡眠不足
+   - "NONE"：无需预警
 
 请以JSON格式返回，键名使用英文，值使用中文。"""
 
@@ -458,11 +470,81 @@ from sse_starlette.sse import EventSourceResponse
 from ..core.prompts import get_nurse_chat_system_prompt
 
 
+async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: str) -> str:
+    """使用多模态 LLM 转录音频为文本（预处理步骤）。
+
+    构建与 chat.py 相同的 multimodal message，调用 LLM 获取转录文本，
+    然后返回纯文本供 Agno agent 使用。
+    """
+    from ..core.agno_client import get_agno_model
+    from openai import AsyncOpenAI
+
+    model_info = get_agno_model(role)
+    # 构建多模态消息
+    messages = [
+        {"role": "system", "content": "你是一个语音识别助手。请将用户的语音内容准确转录为文字，只输出转录文本，不要添加任何解释或补充。"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "请将这段语音转录为文字"},
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": audio_data,
+                        "format": audio_format or "webm",
+                    },
+                },
+            ],
+        },
+    ]
+
+    try:
+        if hasattr(model_info, 'id') and not hasattr(model_info, 'host'):
+            # 云端 OpenAI 兼容模型
+            client = AsyncOpenAI(
+                api_key=settings.llm_api_key,
+                base_url=settings.llm_base_url,
+            )
+            resp = await client.chat.completions.create(
+                model=settings.llm_model,
+                messages=messages,
+                max_tokens=500,
+            )
+            text = resp.choices[0].message.content or ""
+            return text.strip() or "（语音识别为空）"
+        else:
+            # 本地模型暂不支持多模态，降级提示
+            return "（本地模型不支持语音识别，请切换到云模式或使用文字输入）"
+    except Exception as e:
+        from loguru import logger
+        logger.error("[ASR] LLM 转录失败: {}", e)
+        return "（语音识别失败，请重试或使用文字输入）"
+
+
 @router.post("/chat/stream")
 async def nurse_chat_stream(req: dict):
     """护士 AI 持续对话（SSE 流式）— 使用 Agno Agent 自动工具路由"""
     message = req.get("message", "")
     pregnant_id = req.get("pregnant_id", "")
+    message_type = req.get("message_type", "TEXT")
+    audio_data = req.get("audio_data")
+    audio_format = req.get("audio_format", "webm")
+
+    # ASR 预处理：音频输入转文本
+    if message_type == "AUDIO" and audio_data:
+        from ..config import get_asr_mode
+        from ..services.asr_service import asr_service
+
+        asr_mode = get_asr_mode("nurse")
+        if asr_mode in ("cloud", "local"):
+            transcribed = await asr_service.transcribe(audio_data, audio_format, "nurse")
+            if transcribed:
+                message = transcribed
+            else:
+                message = "（语音识别失败，请重试或使用文字输入）"
+        elif asr_mode == "llm":
+            # 使用多模态 LLM 转录音频为文本（预处理步骤）
+            message = await _transcribe_audio_with_llm(audio_data, audio_format, "nurse")
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
@@ -561,7 +643,7 @@ async def nurse_chat_stream(req: dict):
 
         yield {"event": "done", "data": json.dumps({"source": "NURSE_AI"})}
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(fallback_event_generator())
 
 
 # ==================== 小Hu 工具函数 ====================
@@ -846,6 +928,57 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
             "risk_tags": risk_tags,
         },
     }
+
+
+@router.get("/followup-recommendations")
+def get_followup_recommendations():
+    """批量获取所有孕妇的随访排期推荐
+
+    查询所有孕妇，对每人调用排期推荐算法，聚合返回 Top 10 推荐。
+    按优先级排序：immediate > high > medium > low。
+    """
+    db = SessionLocal()
+    try:
+        all_pregnant = db.query(Pregnant).all()
+        all_recommendations = []
+
+        for p in all_pregnant:
+            result = tool_recommend_followup_schedule(db, p.pregnant_id)
+            if "error" in result:
+                continue
+            for rec in result.get("recommendations", []):
+                # 只保留 immediate 和未来 7 天内的推荐
+                if rec["recommended_date"] == "immediate":
+                    all_recommendations.append({
+                        "pregnant_id": p.pregnant_id,
+                        "patient_name": p.display_name,
+                        "gestational_week": result.get("current_gestational_week", ""),
+                        **rec,
+                    })
+                else:
+                    try:
+                        from datetime import date as date_cls
+                        rec_date = date_cls.fromisoformat(rec["recommended_date"])
+                        if (rec_date - date.today()).days <= 7:
+                            all_recommendations.append({
+                                "pregnant_id": p.pregnant_id,
+                                "patient_name": p.display_name,
+                                "gestational_week": result.get("current_gestational_week", ""),
+                                **rec,
+                            })
+                    except (ValueError, TypeError):
+                        pass
+
+        # 排序：immediate优先，然后按 priority
+        priority_order = {"high": 0, "medium": 1, "low": 2}
+        all_recommendations.sort(key=lambda r: (
+            0 if r["recommended_date"] == "immediate" else 1,
+            priority_order.get(r.get("priority", "low"), 2),
+        ))
+
+        return {"recommendations": all_recommendations[:10]}
+    finally:
+        db.close()
 
 
 # ==================== AI 分析结果持久化 ====================

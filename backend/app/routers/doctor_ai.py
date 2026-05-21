@@ -451,11 +451,74 @@ def tool_record_clinical_note(db, pregnant_id: str, content: str) -> dict:
 # ==================== Dr.智 持续对话 ====================
 
 
+async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: str) -> str:
+    """使用多模态 LLM 转录音频为文本（预处理步骤）。"""
+    from ..core.agno_client import get_agno_model
+    from openai import AsyncOpenAI
+
+    model_info = get_agno_model(role)
+    messages = [
+        {"role": "system", "content": "你是一个语音识别助手。请将用户的语音内容准确转录为文字，只输出转录文本，不要添加任何解释或补充。"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "请将这段语音转录为文字"},
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": audio_data,
+                        "format": audio_format or "webm",
+                    },
+                },
+            ],
+        },
+    ]
+
+    try:
+        if hasattr(model_info, 'id') and not hasattr(model_info, 'host'):
+            client = AsyncOpenAI(
+                api_key=settings.llm_api_key,
+                base_url=settings.llm_base_url,
+            )
+            resp = await client.chat.completions.create(
+                model=settings.llm_model,
+                messages=messages,
+                max_tokens=500,
+            )
+            text = resp.choices[0].message.content or ""
+            return text.strip() or "（语音识别为空）"
+        else:
+            return "（本地模型不支持语音识别，请切换到云模式或使用文字输入）"
+    except Exception as e:
+        from loguru import logger
+        logger.error("[ASR] LLM 转录失败: {}", e)
+        return "（语音识别失败，请重试或使用文字输入）"
+
+
 @router.post("/chat/stream")
 async def doctor_chat_stream(req: dict):
     """医生 AI 持续对话（SSE 流式）— 使用 Agno Agent 自动工具路由"""
     message = req.get("message", "")
     pregnant_id = req.get("pregnant_id", "")
+    message_type = req.get("message_type", "TEXT")
+    audio_data = req.get("audio_data")
+    audio_format = req.get("audio_format", "webm")
+
+    # ASR 预处理：音频输入转文本
+    if message_type == "AUDIO" and audio_data:
+        from ..config import get_asr_mode
+        from ..services.asr_service import asr_service
+
+        asr_mode = get_asr_mode("doctor")
+        if asr_mode in ("cloud", "local"):
+            transcribed = await asr_service.transcribe(audio_data, audio_format, "doctor")
+            if transcribed:
+                message = transcribed
+            else:
+                message = "（语音识别失败，请重试或使用文字输入）"
+        elif asr_mode == "llm":
+            # 使用多模态 LLM 转录音频为文本（预处理步骤）
+            message = await _transcribe_audio_with_llm(audio_data, audio_format, "doctor")
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)

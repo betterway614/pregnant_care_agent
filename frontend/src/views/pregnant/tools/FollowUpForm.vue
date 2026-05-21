@@ -147,13 +147,36 @@
           <p class="completion-subtitle">感谢 {{ pending.patient_name }} 的配合</p>
         </div>
 
-        <!-- LLM 汇总 -->
+        <!-- LLM 温馨总结 -->
         <div v-if="summary" class="summary-card">
           <div class="summary-card__header">
             <span class="summary-card__avatar">🤖</span>
             <span class="summary-card__name">小安的总结</span>
           </div>
           <div class="summary-card__body">{{ summary }}</div>
+        </div>
+
+        <!-- 异常指标警告 -->
+        <div v-if="analysisReport?.abnormal_indicators?.length" class="alert-card">
+          <div class="alert-card__header">
+            <span class="alert-card__icon">⚠</span>
+            <span class="alert-card__title">需关注指标</span>
+          </div>
+          <ul class="alert-card__list">
+            <li v-for="(item, i) in analysisReport.abnormal_indicators" :key="i">{{ item }}</li>
+          </ul>
+        </div>
+
+        <!-- 趋势分析 -->
+        <div v-if="analysisReport?.trend_analysis" class="info-card">
+          <div class="info-card__header">📊 趋势分析</div>
+          <div class="info-card__body">{{ analysisReport.trend_analysis }}</div>
+        </div>
+
+        <!-- 个性化建议 -->
+        <div v-if="analysisReport?.personalized_advice" class="advice-card">
+          <div class="advice-card__header">💡 个性化建议</div>
+          <div class="advice-card__body">{{ analysisReport.personalized_advice }}</div>
         </div>
 
         <!-- 健康教育 -->
@@ -207,6 +230,13 @@ const submitting = ref(false)
 const completed = ref(false)
 const summary = ref('')
 const healthEducation = ref<string[]>([])
+const analysisReport = ref<{
+  warm_summary: string
+  abnormal_indicators: string[]
+  trend_analysis: string
+  personalized_advice: string
+  nurse_action_suggestion: string
+} | null>(null)
 
 const pending = ref<PendingData>({
   record_id: '',
@@ -349,6 +379,9 @@ async function handleSubmit() {
     if (data.status === 'completed') {
       completed.value = true
       summary.value = data.summary || ''
+      if (data.analysis_report) {
+        analysisReport.value = data.analysis_report
+      }
       healthEducation.value = pending.value.health_education || []
       ElMessage.success('随访已完成，护士会尽快审核')
     } else {
@@ -768,6 +801,71 @@ onMounted(loadPending)
   color: var(--pt-text-secondary);
 }
 .education-card__list li { margin-bottom: 2px; }
+
+/* ===== 结构化分析卡片 ===== */
+.alert-card {
+  background: #FFF8E1;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1.5px solid #FFB74D;
+  box-shadow: 0 1px 4px rgba(255, 152, 0, 0.08);
+}
+.alert-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.alert-card__icon { font-size: 18px; }
+.alert-card__title { font-size: 14px; font-weight: 700; color: #E65100; }
+.alert-card__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #BF360C;
+}
+.alert-card__list li { margin-bottom: 2px; }
+
+.info-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border-left: 3px solid #42A5F5;
+}
+.info-card__header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pt-text);
+  margin-bottom: 8px;
+}
+.info-card__body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--pt-text-secondary);
+}
+
+.advice-card {
+  background: #E8F5E9;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1.5px solid #A5D6A7;
+}
+.advice-card__header {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2E7D32;
+  margin-bottom: 8px;
+}
+.advice-card__body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1B5E20;
+}
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 430px) {

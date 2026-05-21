@@ -82,6 +82,24 @@ class FollowUpGenerateOutput(BaseModel):
     closing_message: str = Field(description="温暖的结束语（30-50字）")
 
 
+class FollowUpAnalysisOutput(BaseModel):
+    """随访完成后 LLM 结构化分析结果"""
+    warm_summary: str = Field(description="温馨总结（30-50字），语气温和自然")
+    abnormal_indicators: list[str] = Field(default_factory=list, description="异常指标列表")
+    trend_analysis: str = Field(default="", description="与历史数据对比的趋势分析（50-100字）")
+    personalized_advice: str = Field(default="", description="基于回答内容的个性化建议（50-100字）")
+    nurse_action_suggestion: str = Field(default="", description="护士行动建议")
+
+
+class FollowUpAiReviewOutput(BaseModel):
+    """护士审核随访时的 AI 辅助分析结果"""
+    summary: str = Field(description="本次随访要点摘要（100-200字）")
+    abnormal_flags: list[str] = Field(default_factory=list, description="异常指标标红列表")
+    action_needed: bool = Field(default=False, description="是否需要上报医生")
+    recommendation: str = Field(description="审核建议：确认通过/需进一步沟通/紧急上报")
+    detail_analysis: str = Field(default="", description="详细分析（100-200字）")
+
+
 class ChatOutput(BaseModel):
     """对话输出 — 用于流式对话场景"""
     content: str = Field(description="回复内容")
@@ -260,5 +278,67 @@ def create_followup_generate_agent() -> Agent:
             "请严格按结构化格式返回结果。",
         ],
         output_schema=FollowUpGenerateOutput,
+        markdown=True,
+    )
+
+
+def create_followup_analysis_agent() -> Agent:
+    """创建随访分析 Agent — 随访完成后生成结构化分析报告
+
+    用于随访完成时，对比历史数据，生成包含异常指标、趋势分析、
+    个性化建议和护士行动建议的结构化报告。
+    """
+    return Agent(
+        name="小安-随访分析",
+        model=get_agno_model(role="pregnant"),
+        instructions=[
+            "你是一位专业的孕期健康分析助手，负责在孕妇完成随访后生成分析报告。",
+            "",
+            "【分析要求】",
+            "1. warm_summary: 用温暖语气回顾本次随访亮点，30-50字",
+            "2. abnormal_indicators: 对比历史数据和正常范围，列出所有异常指标",
+            "   - 血压: 正常<140/90mmHg，偏高135-140/85-90",
+            "   - 空腹血糖: 正常≤5.3mmol/L",
+            "   - 体重: 孕中晚期每周增长0.3-0.5kg为正常",
+            "   - 胎动: 每小时≥3次为正常",
+            "3. trend_analysis: 对比近几次随访数据的变化趋势",
+            "4. personalized_advice: 根据孕妇的回答给出具体可执行的建议",
+            "5. nurse_action_suggestion: 给出审核建议(确认通过/需进一步沟通/紧急上报)",
+            "",
+            "【安全规则】",
+            "- 绝不出具诊断结论或用药建议",
+            "- 所有建议必须引导咨询医生",
+        ],
+        output_schema=FollowUpAnalysisOutput,
+        markdown=True,
+    )
+
+
+def create_followup_review_agent() -> Agent:
+    """创建随访审核辅助 Agent — 护士审核时生成 AI 辅助报告
+
+    用于护士点击'确认审核'时，分析随访数据并给出审核建议。
+    """
+    return Agent(
+        name="小护-审核辅助",
+        model=get_agno_model(role="nurse"),
+        instructions=[
+            "你是一位专业的产科护理AI助手，帮助护士审核随访记录。",
+            "",
+            "【审核要求】",
+            "1. summary: 概括本次随访的关键信息（100-200字）",
+            "2. abnormal_flags: 列出所有异常或需关注的指标",
+            "3. action_needed: 如果存在高危情况，设为true",
+            "4. recommendation: 给出审核建议",
+            "   - '确认通过': 所有指标正常，无异常",
+            "   - '需进一步沟通': 有轻微异常但不紧急",
+            "   - '紧急上报': 存在高危指标，需立即通知医生",
+            "5. detail_analysis: 详细分析各项指标（100-200字）",
+            "",
+            "【安全规则】",
+            "- 绝不出具诊断结论或用药建议",
+            "- 复杂情况建议咨询医生",
+        ],
+        output_schema=FollowUpAiReviewOutput,
         markdown=True,
     )

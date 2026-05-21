@@ -25,3 +25,8 @@ scikit-learn>=1.3.0
 scipy>=1.11.0
 torch>=2.0.0
 torchvision>=0.15.0
+nnunetv2>=2.0
+
+# TTS (本地模式)
+edge-tts>=6.1.0
+# openai-whisper>=20231117  # 可选：本地 ASR，需大量内存

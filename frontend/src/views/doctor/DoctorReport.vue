@@ -1,65 +1,108 @@
 <template>
   <div class="doctor-report">
-    <div class="report-header">
-      <el-select
-        v-model="selectedPatient"
-        filterable
-        placeholder="选择孕妇生成报告"
-        style="flex: 1"
-        clearable
-      >
-        <el-option
-          v-for="p in pregnantList"
-          :key="p.pregnant_id"
-          :label="`${p.display_name} (孕${Math.floor((p.gestational_age_days||0)/7)}周)`"
-          :value="p.pregnant_id"
-        />
-      </el-select>
-      <el-button
-        type="primary"
-        :loading="loading"
-        :disabled="!selectedPatient"
-        @click="generateReport"
-      >
-        <el-icon><Document /></el-icon> 生成报告
-      </el-button>
-    </div>
+    <ToolActionBar
+      v-model:patient-id="selectedPatient"
+      :patients="patientList"
+      role="doctor"
+      :loading="loading"
+      action-label="生成报告"
+      action-icon-name="document"
+      patient-placeholder="选择孕妇生成报告"
+      @action="generateReport"
+    />
 
-    <div v-if="report" class="report-content">
+    <AnalysisSkeleton v-if="loading" role="doctor" :count="2" />
+
+    <div v-else-if="report" class="report-content">
       <div class="report-meta">
-        <span>{{ report.patient_name }}</span>
-        <span class="text-muted">{{ report.generated_at }}</span>
+        <span class="report-meta__name">{{ report.patient_name }}</span>
+        <span class="report-meta__time">{{ report.generated_at }}</span>
       </div>
-      <div class="report-body" v-html="renderMarkdown(report.report)" />
+
+      <AnalysisResultCard
+        v-for="(section, idx) in reportSections"
+        :key="idx"
+        :title="section.title"
+        icon="Document"
+        severity="info"
+        role="doctor"
+        :default-expanded="idx === 0"
+        :collapsible="reportSections.length > 1"
+      >
+        <div class="report-section-body" v-html="section.html" />
+      </AnalysisResultCard>
     </div>
 
-    <div v-if="!report && !loading" class="report-empty">
-      <el-icon :size="40" color="var(--text-muted)"><Document /></el-icon>
-      <p>选择孕妇后点击"生成报告"，AI将生成孕期健康报告</p>
+    <EmptyToolState
+      v-else
+      :icon="Document"
+      role="doctor"
+      message="选择孕妇后点击「生成报告」，AI 将生成孕期健康报告"
+    />
+
+    <div v-if="report && !loading" class="report-actions">
+      <button type="button" class="report-actions__btn" @click="copyReport">
+        <el-icon :size="14"><CopyDocument /></el-icon>
+        复制
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Document } from '@element-plus/icons-vue'
-import { dashboardApi, doctorAiApi } from '@/api/endpoints'
+import { ref, computed, onMounted } from 'vue'
+import { Document, CopyDocument } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
+import {
+  ToolActionBar,
+  AnalysisResultCard,
+  EmptyToolState,
+  AnalysisSkeleton,
+} from '@/components/agent-fab'
+import { dashboardApi, doctorAiApi } from '@/api/endpoints'
 import type { Pregnant } from '@/types'
+
+const props = defineProps<{
+  patients?: Pregnant[]
+}>()
 
 const selectedPatient = ref('')
 const loading = ref(false)
 const report = ref<any>(null)
-const pregnantList = ref<Pregnant[]>([])
+const localPatients = ref<Pregnant[]>([])
+
+const patientList = computed(() => props.patients?.length ? props.patients : localPatients.value)
+
+interface ReportSection {
+  title: string
+  html: string
+}
+
+const reportSections = computed((): ReportSection[] => {
+  if (!report.value?.report) return []
+  const text = report.value.report as string
+  const parts = text.split(/(?=^#{1,3}\s)/m).filter(Boolean)
+  if (parts.length <= 1) {
+    return [{ title: '报告正文', html: renderMarkdown(text) }]
+  }
+  return parts.map(part => {
+    const match = part.match(/^#{1,3}\s+(.+?)[\n\r]/)
+    const title = match ? match[1].trim() : '报告内容'
+    const body = match ? part.slice(match[0].length) : part
+    return { title, html: renderMarkdown(body.trim()) }
+  })
+})
 
 function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string
 }
 
 async function loadPatientList() {
+  if (props.patients?.length) return
   try {
     const res = await dashboardApi.pregnant()
-    pregnantList.value = res.data || []
+    localPatients.value = res.data || []
   } catch { /* ignore */ }
 }
 
@@ -70,16 +113,24 @@ async function generateReport() {
   try {
     const res = await doctorAiApi.generateReport(selectedPatient.value)
     report.value = res.data
-  } catch (error) {
-    console.error('生成报告失败:', error)
+  } catch {
+    ElMessage.error('生成报告失败，请重试')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  loadPatientList()
-})
+async function copyReport() {
+  if (!report.value?.report) return
+  try {
+    await navigator.clipboard.writeText(report.value.report)
+    ElMessage.success('报告已复制到剪贴板')
+  } catch {
+    ElMessage.error('复制失败')
+  }
+}
+
+onMounted(loadPatientList)
 </script>
 
 <style scoped>
@@ -87,62 +138,81 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-}
-
-.report-header {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  padding: 12px 16px 16px;
+  overflow: hidden;
 }
 
 .report-content {
   flex: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .report-meta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--capsule-radius);
+  background: var(--doctor-accent-bg);
   font-size: 13px;
 }
 
-.text-muted {
-  color: var(--text-muted);
+.report-meta__name {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.report-body {
+.report-meta__time {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.report-section-body {
   font-size: 13px;
   line-height: 1.6;
 }
 
-.report-body :deep(h1),
-.report-body :deep(h2),
-.report-body :deep(h3) {
-  margin: 12px 0 8px;
-  font-size: 14px;
-  font-weight: 600;
+.report-section-body :deep(p) {
+  margin: 6px 0;
 }
 
-.report-body :deep(p) {
-  margin: 8px 0;
+.report-section-body :deep(ul),
+.report-section-body :deep(ol) {
+  margin: 6px 0;
+  padding-left: 18px;
 }
 
-.report-body :deep(ul),
-.report-body :deep(ol) {
-  margin: 8px 0;
-  padding-left: 20px;
-}
-
-.report-empty {
+.report-actions {
   display: flex;
-  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+
+.report-actions__btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: var(--capsule-radius);
+  border: 1px solid var(--doctor-accent);
+  background: transparent;
+  color: var(--doctor-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.report-actions__btn:hover {
+  background: var(--doctor-accent-bg);
+}
+
+.report-actions__btn:focus-visible {
+  outline: 2px solid var(--doctor-accent);
+  outline-offset: 2px;
 }
 </style>

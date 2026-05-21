@@ -283,5 +283,66 @@ class FollowUpService:
 
         return education
 
+    async def generate_health_education_with_llm(
+        self, gest_week: int, risk_tags: list[str], answers: dict
+    ) -> list[str]:
+        """使用 LLM 生成个性化健康教育内容
+
+        根据孕妇的随访回答、孕周和风险标签，生成 3-5 条针对性的健康教育。
+        LLM 失败时回退到模板。
+        """
+        from ..config import settings
+
+        template_education = self.generate_health_education(gest_week, risk_tags)
+
+        # 构造上下文
+        answer_lines = [f"- {k}: {v}" for k, v in answers.items() if v]
+        answer_text = "\n".join(answer_lines) if answer_lines else "暂无回答数据"
+        risk_text = "、".join(risk_tags) if risk_tags else "无"
+
+        prompt = (
+            f"你是一位专业的孕期健康教育专家。请根据以下孕妇的随访回答，生成 3-5 条个性化健康教育建议。\n\n"
+            f"孕妇信息：孕{gest_week}周，风险标签：{risk_text}\n"
+            f"随访回答：\n{answer_text}\n\n"
+            f"要求：\n"
+            f"1. 每条建议针对孕妇回答中的具体问题\n"
+            f"2. 语言简洁、实用、温暖\n"
+            f"3. 绝不给出诊断结论或用药建议\n"
+            f"4. 以JSON数组格式返回，如：[\"建议1\", \"建议2\", \"建议3\"]\n"
+            f"5. 不要包含markdown代码块标记"
+        )
+
+        if settings.agno_enabled:
+            try:
+                from ..core import get_llm_client
+                from ..core.json_parser import parse_llm_json
+                client = get_llm_client()
+                messages = [
+                    {"role": "system", "content": "你是孕期健康教育专家，请以JSON数组格式返回健康教育建议。"},
+                    {"role": "user", "content": prompt},
+                ]
+                response = await client.chat(messages)
+                if response and response.strip():
+                    data = parse_llm_json(response)
+                    if isinstance(data, list) and len(data) >= 2:
+                        return [str(item) for item in data[:5]]
+            except Exception:
+                pass
+
+        # 降级：检查回答中是否有特定问题，添加针对性建议
+        personalized = list(template_education)
+
+        if answers.get("feeling"):
+            feeling = str(answers["feeling"]).lower()
+            if any(w in feeling for w in ("失眠", "睡不好", "睡眠差")):
+                personalized.append("针对睡眠问题：建议睡前温水泡脚、左侧卧位、避免睡前使用手机")
+            if any(w in feeling for w in ("腰痛", "背痛", "腰酸")):
+                personalized.append("针对腰背疼痛：避免久坐久站，可适当做孕妇瑜伽缓解")
+
+        if answers.get("stress"):
+            personalized.append("心理健康提示：适当倾诉压力，保持社交活动，必要时寻求专业心理支持")
+
+        return personalized
+
 
 followup_service = FollowUpService()

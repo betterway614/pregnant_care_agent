@@ -228,6 +228,9 @@
                   <button v-if="msg.role === 'user'" class="msg-action-btn" @click="handleEditMessage(msg)" title="编辑">
                     <el-icon :size="14"><Edit /></el-icon>
                   </button>
+                  <button v-if="msg.role === 'assistant' && msg.content && !msg.loading" class="msg-action-btn" :class="{ 'msg-action-btn--active': ttsSpeakingId === msg.id }" @click="handleToggleTTS(msg)" title="语音播报">
+                    <el-icon :size="14"><Headset /></el-icon>
+                  </button>
                 </div>
               </div>
             </div>
@@ -381,7 +384,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Delete, DeleteFilled, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
-  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera
+  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera, Headset
 } from '@element-plus/icons-vue'
 import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
@@ -391,6 +394,7 @@ import type { ChatMessage } from '@/stores/chat'
 import { renderMarkdown } from '@/utils/markdown'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useScroll } from '@vueuse/core'
+import { useTTS } from '@/composables/useTTS'
 
 /* ==================== 类型 ==================== */
 interface PregnantContext {
@@ -458,6 +462,10 @@ let recordingSeconds = 0
 // 音频播放
 const playingMsgId = ref<string | null>(null)
 let audioEl: HTMLAudioElement | null = null
+
+// TTS 播报
+const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'pregnant' })
+const ttsSpeakingId = ref<string | null>(null)
 
 // 图片上传
 const imageInputRef = ref<HTMLInputElement | null>(null)
@@ -608,6 +616,22 @@ function confirmEdit() {
 
   inputText.value = text
   nextTick(() => handleSend())
+}
+
+function handleToggleTTS(msg: ChatMessage) {
+  if (ttsSpeakingId.value === msg.id) {
+    stopTTS()
+    ttsSpeakingId.value = null
+  } else {
+    ttsSpeakingId.value = msg.id
+    speak(cleanForTTS(msg.content))
+    const checkEnd = setInterval(() => {
+      if (!isSpeaking.value) {
+        ttsSpeakingId.value = null
+        clearInterval(checkEnd)
+      }
+    }, 500)
+  }
 }
 
 /* ==================== 发送消息 ==================== */

@@ -12,7 +12,7 @@ from .config import settings
 from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
-from .routers import websocket
+from .routers import websocket, tts
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -42,6 +42,52 @@ def _ensure_fgr_columns():
         logger.warning("FGR 列迁移跳过: {}", e)
 
 
+def _ensure_followup_columns():
+    """为已有 SQLite 数据库添加 FollowUpRecord 归档新列（幂等）
+
+    参照国家基本公共卫生服务规范(2024版) + SOAP格式新增字段。
+    SQLite ALTER TABLE 限制: JSON/DATE/TIMESTAMP 列不加 DEFAULT，
+    由模型的 default=dict/list 或应用层保证默认值。
+    """
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("follow_up_records")]
+        # (column_name, type, default_value) — default 仅在支持时使用
+        new_cols = [
+            # O: 客观数据
+            ("obstetric_exam", "JSON", None),
+            ("lab_results", "JSON", None),
+            # A: 评估
+            ("classification", "VARCHAR(32)", "'normal'"),
+            # P: 计划
+            ("guidance_tags", "JSON", None),
+            ("referral", "JSON", None),
+            ("next_followup_date", "DATE", None),
+            # 审核追溯
+            ("reviewed_by", "VARCHAR(64)", None),
+            ("reviewed_at", "TIMESTAMP", None),
+            ("review_comment", "TEXT", None),
+            ("ai_snapshot", "JSON", None),
+        ]
+        added = 0
+        with engine.connect() as conn:
+            for col_name, col_type, default_val in new_cols:
+                if col_name not in columns:
+                    sql = f"ALTER TABLE follow_up_records ADD COLUMN {col_name} {col_type}"
+                    if default_val:
+                        sql += f" DEFAULT {default_val}"
+                    conn.execute(sa.text(sql))
+                    added += 1
+            conn.commit()
+        if added:
+            logger.info("FollowUpRecord 归档列迁移完成: 新增 {} 列", added)
+        else:
+            logger.info("FollowUpRecord 归档列已存在，跳过迁移")
+    except Exception as e:
+        logger.warning("FollowUpRecord 列迁移跳过: {}", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -64,6 +110,8 @@ async def lifespan(app: FastAPI):
 
     # 对已有 SQLite 数据库添加 FGR 新列
     _ensure_fgr_columns()
+    # 对已有 SQLite 数据库添加 FollowUpRecord 归档新列
+    _ensure_followup_columns()
 
     # FGR 模式：加载真实预测模型
     if settings.fgr_mode:
@@ -129,6 +177,7 @@ app.include_router(feedback.router)
 app.include_router(mental_health.router)
 app.include_router(health_trends.router)
 app.include_router(websocket.router)
+app.include_router(tts.router)
 
 
 @app.get("/")

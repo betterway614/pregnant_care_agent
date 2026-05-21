@@ -166,7 +166,7 @@
         </el-descriptions>
 
         <el-form label-position="top">
-          <el-form-item label="超声原图 (PNG/JPEG)">
+          <el-form-item label="超声图像 (NT期B超, PNG/JPEG)">
             <el-upload
               ref="imageUploadRef"
               :auto-upload="false"
@@ -180,28 +180,18 @@
               <div>拖拽或点击上传超声原图</div>
             </el-upload>
           </el-form-item>
-          <el-form-item label="分割掩膜图 (PNG, 二值图)">
-            <el-upload
-              ref="maskUploadRef"
-              :auto-upload="false"
-              :limit="1"
-              accept="image/png"
-              :on-change="(f: any) => uploadMaskFile = f.raw"
-              :on-remove="() => uploadMaskFile = null"
-              drag
-            >
-              <el-icon :size="32"><UploadFilled /></el-icon>
-              <div>拖拽或点击上传掩膜图</div>
-            </el-upload>
-          </el-form-item>
         </el-form>
+        <div v-if="uploading" class="upload-progress">
+          <el-icon class="is-loading" :size="20"><Loading /></el-icon>
+          <span>正在进行图像分割分析...</span>
+        </div>
       </div>
       <template #footer>
         <el-button @click="uploadDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
           :loading="uploading"
-          :disabled="!uploadImageFile || !uploadMaskFile"
+          :disabled="!uploadImageFile"
           @click="handleUploadSubmit"
         >
           上传并分析
@@ -332,7 +322,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { Search, Refresh, InfoFilled, TrendCharts, PictureFilled, UploadFilled } from '@element-plus/icons-vue'
+import { Search, Refresh, InfoFilled, TrendCharts, PictureFilled, UploadFilled, Loading } from '@element-plus/icons-vue'
 import { dashboardApi, fgrApi, alertApi } from '@/api/endpoints'
 import type { Pregnant, FgrAssessment, FgrTrendPoint, PatientImageInfo, Alert } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
@@ -363,7 +353,6 @@ const imagePreviewPregnant = ref<Pregnant | null>(null)
 const uploadDialogVisible = ref(false)
 const uploadPregnant = ref<Pregnant | null>(null)
 const uploadImageFile = ref<File | null>(null)
-const uploadMaskFile = ref<File | null>(null)
 const uploading = ref(false)
 
 // 分析相关状态
@@ -394,12 +383,11 @@ function openUploadDialog(row: Pregnant) {
 /** 重置上传表单 */
 function resetUploadForm() {
   uploadImageFile.value = null
-  uploadMaskFile.value = null
 }
 
 /** 提交上传并分析 */
 async function handleUploadSubmit() {
-  if (!uploadImageFile.value || !uploadMaskFile.value || !uploadPregnant.value) return
+  if (!uploadImageFile.value || !uploadPregnant.value) return
 
   uploading.value = true
   const pid = uploadPregnant.value.pregnant_id
@@ -412,7 +400,6 @@ async function handleUploadSubmit() {
     fd.append('gestational_weeks', String(weeks))
     fd.append('image_type', 'AC')
     fd.append('image', uploadImageFile.value)
-    fd.append('mask', uploadMaskFile.value)
 
     const res = await fgrApi.upload(pid, fd)
     lastResult.value = res.data
@@ -697,5 +684,6 @@ onMounted(loadData)
 .bar-chart__label { font-size: 10px; color: var(--text-muted); margin-top: 6px; white-space: nowrap; }
 
 .text-light { font-size: 12px; color: var(--text-muted); }
+.upload-progress { display: flex; align-items: center; gap: 8px; padding: 12px; color: var(--primary); font-size: 13px; }
 .empty-state p { color: var(--text-muted); font-size: 14px; font-weight: 500; }
 </style>

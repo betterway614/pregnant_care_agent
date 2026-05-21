@@ -194,6 +194,13 @@ export interface ChatResponse {
   tool_steps?: string[]  // Agent 工具调用步骤（Plan-and-Execute 可见化）
 }
 
+export interface AudioRecorderResult {
+  base64: string
+  format: string
+  duration: number
+  blob: Blob
+}
+
 export interface ConversationMessage {
   role: string
   content: string
