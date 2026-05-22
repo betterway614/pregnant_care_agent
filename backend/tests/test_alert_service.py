@@ -191,18 +191,20 @@ class TestAlertLLMEnrichment:
 
         db = MagicMock()
 
-        llm_response = '{"risk_interpretation": "血压持续升高提示子痫前期风险", "recommended_actions": ["立即测量血压", "左侧卧位休息", "通知医生"], "severity_assessment": "当前为高危状态"}'
-
-        mock_client = AsyncMock()
-        mock_client.chat = AsyncMock(return_value=llm_response)
-
-        with patch('app.services.patient_context_service.get_recent_health_data', return_value=[]), \
-             patch('app.core.llm_client.get_llm_client', return_value=mock_client):
+        with patch(
+            "app.services.alert_analysis_service.alert_analysis_service.run_nurse_analysis",
+            new=AsyncMock(return_value={
+                "summary": "血压持续升高",
+                "risk_assessment": "血压持续升高提示子痫前期风险",
+                "nursing_suggestions": "立即测量血压",
+                "analyzed_at": "2026-01-01T00:00:00",
+            }),
+        ):
             await AlertService.enrich_alert_with_llm(db, alert, pregnant)
 
             assert "llm_analysis" in alert.details
-            assert alert.details["llm_analysis"]["risk_interpretation"] == "血压持续升高提示子痫前期风险"
-            assert len(alert.details["llm_analysis"]["recommended_actions"]) == 3
+            assert alert.details["llm_analysis"]["source"] == "agno_nurse_agent"
+            assert "子痫前期" in alert.details["llm_analysis"]["risk_interpretation"]
             db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -218,10 +220,9 @@ class TestAlertLLMEnrichment:
         pregnant.risk_tags = []
         db = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.chat = AsyncMock(side_effect=Exception("LLM 连接超时"))
-
-        with patch('app.services.patient_context_service.get_recent_health_data', return_value=[]), \
-             patch('app.core.llm_client.get_llm_client', return_value=mock_client):
+        with patch(
+            "app.services.alert_analysis_service.alert_analysis_service.run_nurse_analysis",
+            new=AsyncMock(return_value=None),
+        ):
             await AlertService.enrich_alert_with_llm(db, alert, pregnant)
             assert "llm_analysis" not in alert.details

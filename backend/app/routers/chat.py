@@ -1,259 +1,49 @@
-"""对话管理 API"""
+"""对话管理 API - Agno Agent 生产路径"""
 import json
-import re
-import os
-import asyncio
 import uuid as _uuid
-from datetime import datetime
-from uuid import UUID
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-from ..schemas import ChatSendRequest, ChatResponse, ChatNLUResult
 from loguru import logger
-from ..core import get_llm_client, nlu_engine, memory_manager, rag_engine
-from ..core.agno_client import get_agno_client
-from ..core.agno_rag import agno_rag_engine
-from ..core.conversation_store import conversation_store
-from ..core.prompts import get_pregnant_system_prompt
-from ..models import HealthDataPoint, Pregnant, FollowUpRecord, ConversationMessage
-from ..database import SessionLocal, db_call
+
+from ..schemas import ChatSendRequest, ChatResponse
+from ..core import memory_manager, rag_engine
+from ..core.agno_chat_handler import handle_chat_with_agno, handle_chat_with_agno_stream
+from ..models import HealthDataPoint, Pregnant, MedicalOrder, ConversationMessage
+from ..database import SessionLocal
 from ..config import settings
+
+router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
 
 
 def _generate_session_id(pregnant_id: str) -> str:
-    """生成唯一的 session_id
-
-    格式: SESS_{pregnant_id前8位}_{日期}_{随机4位}
-    确保同一孕妇不同时间段的对话隔离
-    """
     date_str = datetime.now().strftime("%Y%m%d")
     rand_str = _uuid.uuid4().hex[:4]
     return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
 
-# 文件日志（绕开 stdout 重定向问题）
-_DEBUG_LOG = os.path.join(os.path.dirname(__file__), "../../debug_chat.log")
-
-
-def _debug_log(msg: str):
-    """写入调试日志文件"""
-    try:
-        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(f"{msg}\n")
-            f.flush()
-    except Exception:
-        pass  # 日志写入失败不影响主流程
-
-
-def _query_patient_context(pregnant_id: str) -> str:
-    """同步函数：查询孕妇上下文信息（在 db_call 线程池中执行）"""
-    from datetime import datetime, timedelta
-    from ..models import HealthDataPoint
-    from ..core.trend_engine import trend_engine
-    from ..database import SessionLocal
-    from ..services.patient_context_service import get_patient_basic
-
-    patient_context = ""
-    patient_db = SessionLocal()
-    try:
-        basic = get_patient_basic(patient_db, pregnant_id)
-        if basic:
-            patient_context = f"当前孕妇孕周：{basic['gestational_week']}周。"
-            if basic["risk_tags"]:
-                patient_context += f" 风险标签：{', '.join(basic['risk_tags'])}。"
-            if basic.get("nickname"):
-                patient_context += f" 孕妇昵称：{basic['nickname']}。"
-
-            # 注入健康趋势分析
-            try:
-                two_weeks_ago = datetime.now() - timedelta(days=14)
-                recent_records = patient_db.query(HealthDataPoint).filter(
-                    HealthDataPoint.pregnant_id == pregnant_id,
-                    HealthDataPoint.recorded_at >= two_weeks_ago,
-                ).order_by(HealthDataPoint.recorded_at).all()
-
-                if recent_records:
-                    records_data = [
-                        {"metric": r.metric_code, "value": r.value, "unit": r.unit, "recorded_at": str(r.recorded_at)}
-                        for r in recent_records
-                    ]
-                    trends = trend_engine.analyze(records_data, gest_week=basic["gest_week"])
-                    if trends:
-                        trend_summaries = [t.summary for t in trends if t.summary]
-                        if trend_summaries:
-                            patient_context += " 【近期健康趋势】" + " ".join(trend_summaries)
-            except Exception:
-                pass  # 趋势分析失败不影响主流程
-    finally:
-        patient_db.close()
-    return patient_context
-
-
-def _get_patient_context_simple(pregnant_id: str) -> str:
-    """同步函数：简单查询孕妇基本信息（在线程池中执行）"""
-    from ..database import SessionLocal
-    from ..services.patient_context_service import get_patient_basic
-
-    patient_context = ""
-    patient_db = SessionLocal()
-    try:
-        basic = get_patient_basic(patient_db, pregnant_id)
-        if basic:
-            patient_context = f"当前孕妇孕周：{basic['gestational_week']}周。"
-            if basic["risk_tags"]:
-                patient_context += f" 风险标签：{', '.join(basic['risk_tags'])}。"
-            if basic.get("nickname"):
-                patient_context += f" 孕妇昵称：{basic['nickname']}。"
-    finally:
-        patient_db.close()
-    return patient_context
-
-
-router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
-
-from ..core.llm_client import get_pregnant_llm_client
-
 
 @router.get("/ping")
 def ping():
-    """调试：检查服务器是否运行最新代码"""
-    from datetime import datetime
-    return {"pong": datetime.now().isoformat(), "version": "debug_v4"}
-
-
-@router.get("/debug-log")
-def get_debug_log():
-    """读取调试日志"""
-    try:
-        with open(_DEBUG_LOG, "r", encoding="utf-8") as f:
-            content = f.read()
-        return {"log": content}
-    except FileNotFoundError:
-        return {"log": f"(log file not found at {_DEBUG_LOG})"}
-    except Exception as e:
-        return {"log": f"(error reading log: {e})"}
-
-
-def _get_chat_llm():
-    """获取对话专用LLM客户端：mixed模式下孕妇对话用真实API"""
-    from ..config import settings
-    if settings.llm_mode == "mixed":
-        return get_pregnant_llm_client()
-    return get_llm_client()
+    return {"pong": datetime.now().isoformat(), "version": "agno_v1"}
 
 
 @router.post("/send", response_model=ChatResponse)
 async def send_message(req: ChatSendRequest):
-    """发送对话消息"""
-    import traceback
-    _dbg = f"[SEND] agno_enabled={settings.agno_enabled}, record_id={req.record_id}, pregnant_id={req.pregnant_id}"
-    _debug_log(_dbg)
-    logger.info("send_message 开始 pregnant_id={} record_id={}", req.pregnant_id[:8], req.record_id)
-    _debug_log(f"[SEND] calling agno_enabled={settings.agno_enabled}")
-    # Agno Agent 模式
-    if settings.agno_enabled:
-        from ..core.agno_chat_handler import handle_chat_with_agno
-        return await handle_chat_with_agno(req)
+    """发送对话消息（Agno Agent）"""
+    logger.info("send_message pregnant_id={}", req.pregnant_id[:8])
+    return await handle_chat_with_agno(req)
 
-    # 1. NLU解析
-    nlu_result = nlu_engine.parse(req.message)
 
-    # 1.5 扩展NLU实体提取（补充nlu_engine未覆盖的数据项：睡眠时长、运动步数）
-    _extract_extra_entities(req.message, nlu_result)
-
-    # 2. 紧急检测
-    if nlu_result.is_emergency:
-        if nlu_result.intent == "SUICIDE_RISK":
-            msg = ("⚠️ 我们非常关心您的安全。请立即拨打心理援助热线：400-161-9995，"
-                   "或前往最近医院急诊科寻求帮助。您不是一个人在面对困难。")
-        else:
-            msg = ("⚠️ 您描述的情况需要立即就医！请立刻联系您的医生或前往最近医院。"
-                   "如果情况紧急，请拨打120急救电话！")
-        return ChatResponse(content=msg, nlu_result=ChatNLUResult(
-            intent=nlu_result.intent,
-            entities=nlu_result.entities
-        ) if nlu_result else None, session_id=req.session_id)
-
-    # 3. 健康数据自动存储
-    if nlu_result.intent == "HEALTH_DATA_REPORT" and nlu_result.entities:
-        _save_health_data(req.pregnant_id, nlu_result.entities)
-        memory_entries = []
-        if "weight" in nlu_result.entities:
-            from datetime import datetime
-            today = datetime.now().strftime("%Y-%m-%d")
-            memory_manager.set(req.pregnant_id, "last_weight_date", today)
-            memory_entries.append(f"last_weight_date: {today}")
-        if "sbp" in nlu_result.entities or "dbp" in nlu_result.entities:
-            from datetime import datetime
-            today = datetime.now().strftime("%Y-%m-%d")
-            memory_manager.set(req.pregnant_id, "last_bp_date", today)
-            memory_entries.append(f"last_bp_date: {today}")
-    else:
-        memory_entries = []
-
-    # 1.2 引导式数据收集：检查是否需要主动询问缺失数据
-    follow_up_question = ""
-    if nlu_result.intent not in ("EMERGENCY", "SUICIDE_RISK"):
-        if not nlu_result.entities:
-            if memory_manager.should_ask_weight(req.pregnant_id):
-                follow_up_question = " 对了，小安看到您今天还没记录体重呢，方便现在告诉我吗？"
-            elif memory_manager.should_ask_bp(req.pregnant_id):
-                follow_up_question = " 另外，记得今天测血压了吗？可以告诉我数值哦。"
-
-    # 1.1 孕周感知上下文注入（在线程池中执行，避免阻塞事件循环）
-    patient_context = await db_call(_query_patient_context, req.pregnant_id)
-
-    # 4. 构建对话上下文
-    system_prompt_content = get_pregnant_system_prompt(patient_context)
-    system_prompt = {
-        "role": "system",
-        "content": system_prompt_content
-    }
-    user_msg = {"role": "user", "content": req.message}
-
-    # 5. 调用LLM获取回复（支持 Agno 模式切换）
-    try:
-        if settings.agno_enabled:
-            agno = get_agno_client()
-            response = await agno.chat([system_prompt, user_msg])
-        else:
-            response = await _get_chat_llm().chat([system_prompt, user_msg], max_tokens=1024)
-    except Exception as e:
-        # LLM调用失败时回退到mock
-        from ..core import MockLLMClient
-        mock = MockLLMClient()
-        response = await mock.chat([system_prompt, user_msg])
-
-    # 追加引导提问
-    if follow_up_question:
-        response = response.rstrip() + follow_up_question
-
-    # 对话原文不入库，仅返回响应
-    session_id = req.session_id or _generate_session_id(req.pregnant_id)
-
-    resp_len = len(response)
-    logger.info("send_message 完成 pregnant_id={} resp_len={}", req.pregnant_id[:8], resp_len)
-    return ChatResponse(
-        content=response,
-        nlu_result=ChatNLUResult(
-            intent=nlu_result.intent,
-            entities=nlu_result.entities
-        ) if nlu_result else None,
-        session_id=session_id,
-        memory_updated=memory_entries,
-        source="AI_CARE"
-    )
+@router.post("/send/stream")
+async def send_message_stream(req: ChatSendRequest):
+    """发送对话消息（SSE 流式）"""
+    return EventSourceResponse(handle_chat_with_agno_stream(req))
 
 
 @router.get("/conversation/{pregnant_id}")
 async def get_conversation_history(pregnant_id: str, session_id: str = ""):
-    """获取对话历史记录
-
-    当 persist_chat_messages=True 时从数据库加载，
-    否则返回空列表（对话仅在前端 localStorage 保留）。
-    如果指定 session_id 则只返回该会话的消息，否则返回该孕妇所有会话的消息。
-    """
     if not settings.persist_chat_messages:
         return {"session_id": session_id, "messages": [], "message": "对话持久化未启用"}
 
@@ -273,7 +63,12 @@ async def get_conversation_history(pregnant_id: str, session_id: str = ""):
         return {
             "session_id": session_id,
             "messages": [
-                {"role": m.role, "content": m.content, "session_id": m.session_id, "created_at": m.created_at.isoformat() if m.created_at else None}
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "session_id": m.session_id,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
                 for m in messages
             ],
         }
@@ -283,10 +78,6 @@ async def get_conversation_history(pregnant_id: str, session_id: str = ""):
 
 @router.delete("/conversation/{pregnant_id}")
 async def clear_conversation_history(pregnant_id: str, session_id: str = ""):
-    """清除对话历史
-
-    如果指定 session_id 则只清除该会话，否则清除该孕妇所有会话。
-    """
     if not settings.persist_chat_messages:
         return {"message": "对话持久化未启用，无需清除"}
 
@@ -308,263 +99,20 @@ async def clear_conversation_history(pregnant_id: str, session_id: str = ""):
         db.close()
 
 
-# ==================== SSE 流式输出 ====================
-
-import typing
-from ..core import MockLLMClient
-
-
-async def _build_chat_context(req: ChatSendRequest) -> dict:
-    """构建对话上下文，供流式/非流式端点共用"""
-    import base64 as _b64
-
-    # 多模态消息：记录日志，构建多模态消息
-    if req.message_type in ("AUDIO", "IMAGE") and req.audio_data:
-        logger.info(
-            "收到多模态消息 type={} pregnant_id={} data_len={} format={}",
-            req.message_type, req.pregnant_id[:8], len(req.audio_data), req.audio_format,
-        )
-
-    # 1. NLU解析（多模态消息跳过NLU，避免对空文本做无用解析）
-    if req.message_type in ("AUDIO", "IMAGE"):
-        from ..core.nlu_engine import NLUResult
-        nlu_result = NLUResult(intent="UNKNOWN", entities={}, is_emergency=False)
-    else:
-        nlu_result = nlu_engine.parse(req.message)
-        _extract_extra_entities(req.message, nlu_result)
-
-    # 2. 紧急检测
-    is_emergency = bool(nlu_result.is_emergency)
-    emergency_msg = ""
-    if is_emergency:
-        if nlu_result.intent == "SUICIDE_RISK":
-            emergency_msg = ("⚠️ 我们非常关心您的安全。请立即拨打心理援助热线：400-161-9995，"
-                             "或前往最近医院急诊科寻求帮助。您不是一个人在面对困难。")
-        else:
-            emergency_msg = ("⚠️ 您描述的情况需要立即就医！请立刻联系您的医生或前往最近医院。"
-                             "如果情况紧急，请拨打120急救电话！")
-
-    # 3. 健康数据存储
-    memory_entries: list[str] = []
-    if nlu_result.intent == "HEALTH_DATA_REPORT" and nlu_result.entities:
-        _save_health_data(req.pregnant_id, nlu_result.entities)
-        if "weight" in nlu_result.entities:
-            from datetime import datetime
-            today = datetime.now().strftime("%Y-%m-%d")
-            memory_manager.set(req.pregnant_id, "last_weight_date", today)
-            memory_entries.append(f"last_weight_date: {today}")
-        if "sbp" in nlu_result.entities or "dbp" in nlu_result.entities:
-            from datetime import datetime
-            today = datetime.now().strftime("%Y-%m-%d")
-            memory_manager.set(req.pregnant_id, "last_bp_date", today)
-            memory_entries.append(f"last_bp_date: {today}")
-
-    # 4. 引导式数据收集
-    follow_up_question = ""
-    if not is_emergency and not nlu_result.entities:
-        if memory_manager.should_ask_weight(req.pregnant_id):
-            follow_up_question = " 对了，小安看到您今天还没记录体重呢，方便现在告诉我吗？"
-        elif memory_manager.should_ask_bp(req.pregnant_id):
-            follow_up_question = " 另外，记得今天测血压了吗？可以告诉我数值哦。"
-
-    # 5. 孕周感知上下文（在线程池中执行，避免阻塞事件循环）
-    patient_context = await db_call(_get_patient_context_simple, req.pregnant_id)
-
-    # 6. 构建 system prompt
-    system_prompt_content = get_pregnant_system_prompt(patient_context)
-
-    # 7. 加载对话历史（异步）
-    session_id = req.session_id or _generate_session_id(req.pregnant_id)
-    history = []
-    if settings.persist_chat_messages:
-        history = await conversation_store.async_load_history(session_id, req.pregnant_id)
-
-    messages = [{"role": "system", "content": system_prompt_content}]
-    messages.extend(history)
-
-    # 构建用户消息（支持多模态音频/图片格式）
-    if req.message_type == "AUDIO" and req.audio_data:
-        content_parts = []
-        text = req.message.strip() or "请分析这段语音内容并给出回复"
-        content_parts.append({"type": "text", "text": text})
-        content_parts.append({
-            "type": "input_audio",
-            "input_audio": {
-                "data": req.audio_data,
-                "format": req.audio_format or "webm",
-            },
-        })
-        messages.append({"role": "user", "content": content_parts})
-    elif req.message_type == "IMAGE" and req.audio_data:
-        content_parts = []
-        text = req.message.strip() or "请分析这张图片并给出回复"
-        content_parts.append({"type": "text", "text": text})
-        fmt = req.audio_format or "jpeg"
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/{fmt};base64,{req.audio_data}",
-            },
-        })
-        messages.append({"role": "user", "content": content_parts})
-    else:
-        messages.append({"role": "user", "content": req.message})
-
-    return {
-        "nlu_result": nlu_result,
-        "is_emergency": is_emergency,
-        "emergency_msg": emergency_msg,
-        "memory_entries": memory_entries,
-        "follow_up_question": follow_up_question,
-        "messages": messages,
-        "pregnant_id": req.pregnant_id,
-        "session_id": session_id,
-    }
-
-
-def _chat_response_to_sse(result: ChatResponse):
-    """将非流式 ChatResponse 包装为 SSE 事件流，确保流式端点始终输出 SSE 格式"""
-    nlu = result.nlu_result
-    async def wrapper():
-        yield {"event": "chunk", "data": result.content}
-        yield {"event": "done", "data": json.dumps({
-            "session_id": result.session_id,
-            "source": result.source or "AI_CARE",
-            "nlu_result": {"intent": nlu.intent, "entities": nlu.entities} if nlu else None,
-            "memory_updated": result.memory_updated or [],
-        })}
-    return EventSourceResponse(wrapper())
-
-
-@router.post("/send/stream")
-async def send_message_stream(req: ChatSendRequest):
-    """发送对话消息（SSE 流式输出）"""
-    # Agno Agent 模式 — 流式 SSE 输出
-    if settings.agno_enabled:
-        from ..core.agno_chat_handler import handle_chat_with_agno_stream
-        return EventSourceResponse(handle_chat_with_agno_stream(req))
-
-    ctx = await _build_chat_context(req)
-    session_id = ctx["session_id"]
-    memory_entries = ctx["memory_entries"]
-
-    # 紧急情况：直接输出完整消息
-    if ctx["is_emergency"]:
-        async def emergency_gen():
-            yield {"event": "chunk", "data": ctx["emergency_msg"]}
-            yield {"event": "done", "data": json.dumps({
-                "session_id": session_id,
-                "source": "AI_CARE",
-                "nlu_result": {
-                    "intent": ctx["nlu_result"].intent,
-                    "entities": ctx["nlu_result"].entities,
-                },
-                "memory_updated": memory_entries,
-            })}
-        return EventSourceResponse(emergency_gen())
-
-    async def event_generator():
-        """SSE 事件生成器"""
-        full_response = ""
-
-        # 发送思考状态事件
-        thinking_messages = {
-            "HEALTH_DATA_REPORT": "正在分析您的健康数据...",
-            "EMOTION_EXPRESS": "正在理解您的感受...",
-            "KNOWLEDGE_QUERY": "正在查阅孕期知识库...",
-            "SCHEDULE_INQUIRY": "正在查看您的产检安排...",
-            "GREETING": "正在准备回复...",
-        }
-        thinking_msg = thinking_messages.get(
-            ctx["nlu_result"].intent if ctx["nlu_result"] else "",
-            "小安正在思考..."
-        )
-        yield {"event": "thinking", "data": thinking_msg}
-
-        # 调用LLM流式接口（支持 Agno 模式切换）
-        try:
-            if settings.agno_enabled:
-                agno = get_agno_client()
-                async for chunk in agno.chat_stream(ctx["messages"]):
-                    full_response += chunk
-                    yield {"event": "chunk", "data": chunk}
-            else:
-                async for chunk in _get_chat_llm().chat_stream(ctx["messages"], max_tokens=1024):
-                    full_response += chunk
-                    yield {"event": "chunk", "data": chunk}
-        except Exception:
-            mock = MockLLMClient()
-            async for chunk in mock.chat_stream(ctx["messages"]):
-                full_response += chunk
-                yield {"event": "chunk", "data": chunk}
-
-        # 追加引导提问
-        if ctx["follow_up_question"]:
-            full_response += ctx["follow_up_question"]
-            yield {"event": "chunk", "data": ctx["follow_up_question"]}
-
-        # 发送完成事件（含元数据）
-        yield {"event": "done", "data": json.dumps({
-            "session_id": session_id,
-            "source": "AI_CARE",
-            "nlu_result": {
-                "intent": ctx["nlu_result"].intent if ctx["nlu_result"] else "",
-                "entities": ctx["nlu_result"].entities if ctx["nlu_result"] else {},
-            },
-            "memory_updated": memory_entries,
-        })}
-
-        # 持久化对话消息
-        try:
-            user_msg = ctx["messages"][-1]  # 最后一条是用户消息
-            if not settings.persist_chat_messages:
-                return
-
-            await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "user", user_msg["content"])
-            await conversation_store.async_save_single(session_id, ctx["pregnant_id"], "assistant", full_response)
-        except Exception:
-            pass  # 持久化失败不影响主流程
-
-    return EventSourceResponse(event_generator())
-
-
-def _extract_extra_entities(message: str, nlu_result):
-    """扩展NLU实体提取：补充睡眠时长、运动步数等nlu_engine未覆盖的数据项"""
-    # 睡眠时长: 睡了X小时 / 睡了X.X小时
-    sleep_match = re.search(r"睡了?(\d+\.?\d*)\s*小时", message)
-    if sleep_match:
-        nlu_result.entities["sleep_hours"] = float(sleep_match.group(1))
-        if nlu_result.intent == "UNKNOWN":
-            nlu_result.intent = "HEALTH_DATA_REPORT"
-
-    # 运动步数: X步 / X千步
-    steps_match = re.search(r"(\d+)\s*(步|千步)", message)
-    if steps_match:
-        if steps_match.group(2) == "千步":
-            nlu_result.entities["steps"] = float(steps_match.group(1)) * 1000
-        else:
-            nlu_result.entities["steps"] = float(steps_match.group(1))
-        if nlu_result.intent == "UNKNOWN":
-            nlu_result.intent = "HEALTH_DATA_REPORT"
-
-
 @router.get("/history")
 async def get_memory(patient_id: str):
-    """获取用户记忆键值对"""
     memory = memory_manager.get_all(patient_id)
     return {"pregnant_id": patient_id, "memory": memory}
 
 
 @router.delete("/memory")
 async def clear_memory(patient_id: str):
-    """清除用户全部记忆"""
     memory_manager.clear(patient_id)
     return {"message": "记忆已清除", "pregnant_id": patient_id}
 
 
 @router.get("/context/{pregnant_id}")
 def get_pregnant_context(pregnant_id: str):
-    """获取孕妇的孕期上下文信息（孕周、风险、最近数据）"""
     db = SessionLocal()
     try:
         pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
@@ -585,7 +133,6 @@ def get_pregnant_context(pregnant_id: str):
             gd = pregnant.gestational_age_days % 7
             context["gestational_week"] = f"{gw}+{gd}周"
 
-        # 获取最近10条健康数据
         recent_data = (
             db.query(HealthDataPoint)
             .filter(HealthDataPoint.pregnant_id == pregnant_id)
@@ -602,16 +149,9 @@ def get_pregnant_context(pregnant_id: str):
             }
             for d in recent_data
         ]
-
         return context
     finally:
         db.close()
-
-
-def _save_health_data(pregnant_id: str, entities: dict):
-    """保存健康数据到数据库（调用统一入库服务）"""
-    from ..core.health_data_service import save_health_metrics, HealthDataSource
-    save_health_metrics(pregnant_id, entities, HealthDataSource.PATIENT_CHAT)
 
 
 # ==================== RAG 知识库问答 ====================
@@ -632,11 +172,9 @@ class RAGAskResponse(BaseModel):
 
 @router.post("/rag/ask", response_model=RAGAskResponse)
 async def rag_ask(req: RAGAskRequest):
-    """RAG知识库问答 - 基于产科知识库的智能回答"""
     if not settings.rag_enabled:
         raise HTTPException(400, "RAG功能未启用，请设置 RAG_ENABLED=true")
 
-    # 获取孕妇上下文
     patient_context = ""
     if req.patient_id:
         db = SessionLocal()
@@ -651,29 +189,22 @@ async def rag_ask(req: RAGAskRequest):
         finally:
             db.close()
 
-    if settings.agno_enabled:
-        result = await agno_rag_engine.ask(
-            question=req.question,
-            patient_context=patient_context,
-            top_k=req.top_k,
-        )
-    else:
-        result = await rag_engine.ask(
-            question=req.question,
-            patient_context=patient_context,
-            top_k=req.top_k,
-        )
+    result = await rag_engine.ask(
+        question=req.question,
+        patient_context=patient_context,
+        top_k=req.top_k,
+    )
     return RAGAskResponse(**result)
 
 
 @router.get("/rag/status")
 def rag_status():
-    """查询RAG知识库状态"""
     db = SessionLocal()
     try:
         from ..models.vector_models import KnowledgeChunk
-        total = db.query(KnowledgeChunk).count()
         from sqlalchemy import func, distinct
+
+        total = db.query(KnowledgeChunk).count()
         categories = db.query(
             KnowledgeChunk.doc_category, func.count(KnowledgeChunk.id)
         ).group_by(KnowledgeChunk.doc_category).all()
@@ -694,9 +225,6 @@ def rag_status():
 
 @router.get("/trends/{pregnant_id}")
 async def get_health_trends(pregnant_id: str):
-    """获取孕妇近期健康趋势"""
-    from datetime import datetime, timedelta
-    from ..models import HealthDataPoint
     from ..core.trend_engine import trend_engine
 
     db = SessionLocal()
@@ -738,16 +266,12 @@ async def get_health_trends(pregnant_id: str):
 
 class ProactiveGreeting(BaseModel):
     message: str
-    greeting_type: str  # morning, afternoon, evening, night
+    greeting_type: str
     icon: str
 
 
 @router.get("/proactive/{pregnant_id}", response_model=ProactiveGreeting)
 async def get_proactive_greeting(pregnant_id: str):
-    """基于上下文生成主动问候消息"""
-    from datetime import datetime
-    from ..models import HealthDataPoint
-
     db = SessionLocal()
     try:
         pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
@@ -757,14 +281,11 @@ async def get_proactive_greeting(pregnant_id: str):
         hour = datetime.now().hour
         gw = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
 
-        # 检查最近是否有健康数据录入
-        from datetime import timedelta
         recent_data = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == pregnant_id,
-            HealthDataPoint.recorded_at >= datetime.now() - timedelta(days=1)
+            HealthDataPoint.recorded_at >= datetime.now() - timedelta(days=1),
         ).count()
 
-        # 孕周里程碑
         milestones = {
             12: "NT检查（颈项透明层扫描）",
             16: "唐氏筛查",
@@ -783,32 +304,23 @@ async def get_proactive_greeting(pregnant_id: str):
                 milestone_msg = f"本周需要做{desc}哦，记得提前预约~"
                 break
 
-        # 时段问候
         if hour < 9:
-            greeting_type = "morning"
-            icon = "🌅"
-            if recent_data == 0:
-                msg = f"早安~今天记得记录体重和血压哦！{milestone_msg or ''}"
-            else:
-                msg = f"早安~今天已经记录了健康数据，真棒！{milestone_msg or '祝您今天心情愉快~'}"
+            greeting_type, icon = "morning", "🌅"
+            msg = (
+                f"早安~今天记得记录体重和血压哦！{milestone_msg or ''}"
+                if recent_data == 0
+                else f"早安~今天已经记录了健康数据，真棒！{milestone_msg or '祝您今天心情愉快~'}"
+            )
         elif hour < 14:
-            greeting_type = "afternoon"
-            icon = "☀️"
+            greeting_type, icon = "afternoon", "☀️"
             msg = f"下午好~午饭后散散步对宝宝有好处哦。{milestone_msg or ''}"
         elif hour < 18:
-            greeting_type = "evening"
-            icon = "🌆"
+            greeting_type, icon = "evening", "🌆"
             msg = f"傍晚好~别忘了数胎动哦，每天固定时间数一数更准确。{milestone_msg or ''}"
         else:
-            greeting_type = "night"
-            icon = "🌙"
+            greeting_type, icon = "night", "🌙"
             msg = f"晚上好~今天辛苦了，早点休息对宝宝最好。{milestone_msg or ''}"
 
-        if not msg:
-            msg = "欢迎回来！有什么需要小安帮忙的吗？"
-
-        # 检查是否有新签署的医嘱
-        from ..models import MedicalOrder
         pending_orders = db.query(MedicalOrder).filter(
             MedicalOrder.pregnant_id == pregnant_id,
             MedicalOrder.status == "signed",
@@ -816,10 +328,6 @@ async def get_proactive_greeting(pregnant_id: str):
         if pending_orders > 0:
             msg += f"\n\n📋 您有 {pending_orders} 条新医嘱待查看，请在首页查看。"
 
-        return ProactiveGreeting(
-            message=msg,
-            greeting_type=greeting_type,
-            icon=icon,
-        )
+        return ProactiveGreeting(message=msg, greeting_type=greeting_type, icon=icon)
     finally:
         db.close()

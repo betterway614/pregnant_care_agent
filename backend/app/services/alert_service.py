@@ -89,68 +89,24 @@ class AlertService:
 
     @staticmethod
     async def enrich_alert_with_llm(db: Session, alert: Alert, pregnant):
-        """异步调用 LLM 为预警生成分析摘要，存入 details.llm_analysis"""
-        try:
-            from ..core.llm_client import get_llm_client
-            from ..core.json_parser import parse_llm_json
-            from ..services.patient_context_service import get_recent_health_data
+        """使用护士 Agno Agent 为预警生成分析摘要"""
+        from .alert_analysis_service import alert_analysis_service
 
-            # 收集上下文
-            health_points = get_recent_health_data(db, alert.pregnant_id, limit=10)
-            health_text = "\n".join(
-                f"  - {h['metric']}: {h['value']}{h['unit']} ({h['recorded_at']})"
-                for h in health_points
-            ) or "  暂无健康数据"
+        nurse_result = await alert_analysis_service.run_nurse_analysis(db, alert, pregnant)
+        if not nurse_result:
+            return
 
-            gest_week = (pregnant.gestational_age_days or 0) // 7
-
-            prompt = f"""你是一位产科护理专家。请分析以下预警信息，返回 JSON 格式的分析结果。
-
-## 预警信息
-- 孕妇: {pregnant.display_name}
-- 孕周: {gest_week}周
-- 预警级别: {alert.level}
-- 触发规则: {alert.rule_id}
-- 预警消息: {alert.message}
-- 风险标签: {', '.join(pregnant.risk_tags or [])}
-
-## 近期健康数据
-{health_text}
-
-## 要求
-请返回如下 JSON（不要输出其他内容）：
-{{
-  "risk_interpretation": "风险解读：为什么会触发这个预警，结合临床背景分析",
-  "recommended_actions": ["建议措施1", "建议措施2", "建议措施3"],
-  "severity_assessment": "严重程度评估：描述当前严重程度和可能的发展趋势"
-}}"""
-
-            client = get_llm_client()
-            messages = [
-                {"role": "system", "content": "你是产科护理专家，擅长分析孕妇健康预警。请用中文回答，只返回JSON。"},
-                {"role": "user", "content": prompt},
-            ]
-            response = await client.chat(messages)
-            if not response:
-                return
-
-            data = parse_llm_json(response)
-            if not data:
-                return
-
-            # 更新 alert.details
-            details = alert.details or {}
-            details["llm_analysis"] = {
-                "risk_interpretation": data.get("risk_interpretation", ""),
-                "recommended_actions": data.get("recommended_actions", []),
-                "severity_assessment": data.get("severity_assessment", ""),
-                "analyzed_at": datetime.utcnow().isoformat(),
-            }
-            alert.details = details
-            db.commit()
-            logger.info(f"LLM分析完成: alert_id={alert.id}")
-        except Exception as e:
-            logger.warning(f"LLM预警分析失败 (alert_id={alert.id}): {e}")
+        details = alert.details or {}
+        details["llm_analysis"] = {
+            "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
+            "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
+            "severity_assessment": nurse_result.get("summary", ""),
+            "analyzed_at": nurse_result.get("analyzed_at", datetime.utcnow().isoformat()),
+            "source": "agno_nurse_agent",
+        }
+        alert.details = details
+        db.commit()
+        logger.info("Agno预警分析完成: alert_id={}", alert.id)
 
 
 alert_service = AlertService()

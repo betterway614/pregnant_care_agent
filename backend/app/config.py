@@ -3,7 +3,6 @@ import os
 from pydantic_settings import BaseSettings
 from typing import Literal, Optional
 
-# .env 文件路径相对于 config.py 所在目录（backend/），而非 CWD
 _env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 
 
@@ -13,53 +12,49 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = True
 
-    # LLM配置 - 全局默认（护士/医生端使用）
+    # LLM配置 - 全局默认（开发阶段使用云模型）
     llm_mode: Literal["cloud", "local", "mock", "mixed"] = "cloud"
-    llm_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
+    llm_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.5-35b-a3b"
     ollama_host: str = "http://localhost:11434"
     local_model: str = "qwen2.5:7b"
 
     # LLM配置 - 角色专属（优先级高于全局配置）
-    # 孕妇端：使用云模型
     llm_pregnant_mode: Literal["cloud", "local", "mock", ""] = "cloud"
-    # 护士端：使用本地模型
     llm_nurse_mode: Literal["cloud", "local", "mock", ""] = "cloud"
-    # 医生端：使用本地模型
     llm_doctor_mode: Literal["cloud", "local", "mock", ""] = "cloud"
+    # 角色专属模型 ID（空则 fallback llm_model；本地部署后切换）
+    llm_pregnant_model: str = ""
+    llm_nurse_model: str = ""
+    llm_doctor_model: str = ""
+    # 角色专属生成参数（空或负值则使用代码内默认值）
+    llm_pregnant_temperature: float = 0.7
+    llm_nurse_temperature: float = 0.3
+    llm_doctor_temperature: float = 0.3
+    llm_pregnant_max_tokens: int = 2048
+    llm_nurse_max_tokens: int = 4096
+    llm_doctor_max_tokens: int = 4096
 
     # ASR配置 - 全局默认
-    # llm = 多模态LLM直接处理音频（当前行为，零额外依赖）
-    # cloud = DashScope Paraformer ASR
-    # local = Whisper 本地推理
     asr_mode: Literal["cloud", "local", "llm"] = "llm"
-    # ASR配置 - 角色专属（优先级高于全局配置）
     asr_pregnant_mode: Literal["cloud", "local", "llm", ""] = ""
     asr_nurse_mode: Literal["cloud", "local", "llm", ""] = ""
     asr_doctor_mode: Literal["cloud", "local", "llm", ""] = ""
-    # ASR云配置 (DashScope Paraformer)
-    asr_cloud_api_key: str = ""  # 不填则复用 llm_api_key
+    asr_cloud_api_key: str = ""
     asr_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     asr_cloud_model: str = "fun-asr-2025-11-07"
-    # ASR本地配置 (Whisper)
-    asr_local_model: str = "base"  # tiny/base/small/medium/large
+    asr_local_model: str = "base"
 
     # TTS配置 - 全局默认
-    # browser = 前端 SpeechSynthesis（零后端依赖）
-    # cloud = DashScope CosyVoice
-    # local = edge-tts（微软 Edge TTS，免费高质量中文）
     tts_mode: Literal["browser", "cloud", "local"] = "browser"
-    # TTS配置 - 角色专属
     tts_pregnant_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_nurse_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_doctor_mode: Literal["browser", "cloud", "local", ""] = ""
-    # TTS云配置 (DashScope CosyVoice)
     tts_cloud_api_key: str = ""
     tts_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     tts_cloud_model: str = "cosyvoice-v1"
     tts_cloud_voice: str = "longxiaochun"
-    # TTS本地配置 (edge-tts)
     tts_local_voice: str = "zh-CN-XiaoxiaoNeural"
 
     # FGR配置
@@ -112,9 +107,8 @@ class Settings(BaseSettings):
     # Seed
     seed_data: bool = True
 
-    # Agno 配置
-    agno_enabled: bool = False
-    agno_model_id: str = "gpt-4o"
+    # Agno 配置（生产主路径，默认启用）
+    agno_enabled: bool = True
     agno_knowledge_dir: str = "data/knowledge"
     agno_knowledge_table: str = "knowledge_chunks"
     agno_memory_enabled: bool = True

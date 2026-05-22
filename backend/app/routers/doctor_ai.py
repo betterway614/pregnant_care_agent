@@ -10,7 +10,6 @@ from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssess
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
-from ..core.prompts import get_doctor_system_prompt, get_doctor_chat_system_prompt
 from ..config import settings
 
 # 医生端工具调用 → 用户友好的中文描述
@@ -162,61 +161,25 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
 async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
                                    risk_tags: list, context: dict,
                                    query: str) -> DoctorAnalyzeResponse | None:
-    """尝试通过LLM综合分析孕妇数据，失败返回None"""
-    import json as _json
+    """通过 Agno 医生 Agent 综合分析（工具驱动 + 结构化输出）"""
     from loguru import logger
 
-    prompt = _build_doctor_analyze_prompt(pregnant, gest_week, gest_day, risk_tags, context, query)
-    system_prompt = get_doctor_system_prompt()
-
     try:
-        if settings.agno_enabled:
-            from ..core.agno_medical_agents import create_doctor_agent
-            agent = create_doctor_agent()
-            response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
-            content = response.content or ""
-            try:
-                data = _json.loads(content) if isinstance(content, str) else content
-            except _json.JSONDecodeError:
-                data = parse_llm_json(content)
-                if not data:
-                    return None
-        else:
-            client = get_llm_client()
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-            # 优先使用 JSON mode 强制输出格式
-            response = None
-            try:
-                response = await client.chat(messages, response_format={"type": "json_object"})
-            except (TypeError, Exception) as e:
-                logger.debug("JSON mode 不可用，降级普通调用: {}", e)
-                response = await client.chat(messages)
+        from ..core.agno_medical_agents import get_doctor_agent
+        from ..core.agno_structured import extract_structured_content
 
-            if not response or not response.strip():
-                return None
+        risk_text = "、".join(risk_tags) if risk_tags else "无特殊风险"
+        extra = f"\n\n医生关注点：{query}" if query else ""
+        prompt = (
+            f"请为孕妇 {pregnant.display_name}（孕{gest_week}周+{gest_day}天，风险：{risk_text}）"
+            f"提供综合分析。请先调用工具获取数据，再输出结构化结果。{extra}"
+        )
 
-            data = parse_llm_json(response)
-            if not data:
-                # 重试：明确要求修复 JSON
-                logger.warning("首次JSON解析失败，尝试重试修复")
-                retry_messages = messages + [
-                    {"role": "assistant", "content": response},
-                    {"role": "user", "content": "你的回复不是合法JSON。请只返回一个纯粹的JSON对象，不要包含任何其他文本或markdown标记。"}
-                ]
-                try:
-                    retry_response = await client.chat(retry_messages, response_format={"type": "json_object"})
-                except (TypeError, Exception):
-                    retry_response = await client.chat(retry_messages)
-
-                if retry_response:
-                    data = parse_llm_json(retry_response)
-
-            if not data:
-                logger.warning("LLM分析JSON解析最终失败，将使用模板兜底")
-                return None
+        agent = get_doctor_agent()
+        response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
+        data = extract_structured_content(response.content)
+        if not data:
+            return None
 
         return DoctorAnalyzeResponse(
             pregnant_id=pregnant.pregnant_id,
@@ -523,106 +486,40 @@ async def doctor_chat_stream(req: dict):
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    # 使用 Agno Agent 处理（如果启用）
-    if settings.agno_enabled:
-        from ..core.agno_medical_agents import create_doctor_chat_agent
-        from agno.agent import RunEvent
-        agent = create_doctor_chat_agent()
+    from ..core.agno_medical_agents import get_doctor_chat_agent
+    from agno.agent import RunEvent
+    agent = get_doctor_chat_agent()
 
-        async def agno_event_generator():
-            tool_steps: list[str] = []
-            try:
-                yield {"event": "thinking", "data": "Dr.智正在思考..."}
-                async for chunk in agent.arun(
-                    input=message,
-                    stream=True,
-                    stream_events=True,
-                    user_id=pregnant_id or "anonymous",
-                ):
-                    event = chunk.event
-                    # 工具调用开始 → 发送 thinking 事件
-                    if event == RunEvent.tool_call_started and chunk.tool is not None:
-                        tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                        thinking_msg = DOCTOR_TOOL_THINKING_MAP.get(
-                            tool_name, f"正在处理（{tool_name}）..."
-                        )
-                        yield {"event": "thinking", "data": thinking_msg}
-                    # 工具调用完成 → 记录步骤
-                    elif event == RunEvent.tool_call_completed and chunk.tool is not None:
-                        tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                        step_desc = DOCTOR_TOOL_THINKING_MAP.get(tool_name, "")
-                        if step_desc and step_desc not in tool_steps:
-                            tool_steps.append(step_desc)
-                    # 流式内容输出
-                    elif event == RunEvent.run_content:
-                        if chunk.content and isinstance(chunk.content, str):
-                            yield {"event": "chunk", "data": chunk.content}
-            except Exception as e:
-                yield {"event": "error", "data": str(e)}
-            yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}
-
-        return EventSourceResponse(agno_event_generator())
-
-    # 降级到普通 LLM 处理
-    db = SessionLocal()
-    patient_summary = ""
-    try:
-        if pregnant_id:
-            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-            if pregnant:
-                gw = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
-                risk_text = "、".join(pregnant.risk_tags) if pregnant.risk_tags else "无"
-                patient_summary = f"当前查看的孕妇: {pregnant.display_name}, 孕{gw}周, 风险: {risk_text}"
-
-                from datetime import datetime, timedelta
-                recent = db.query(HealthDataPoint).filter(
-                    HealthDataPoint.pregnant_id == pregnant_id,
-                    HealthDataPoint.recorded_at >= datetime.now() - timedelta(days=7)
-                ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
-                if recent:
-                    data_lines = [f"  - {r.metric_code}: {r.value}{r.unit}" for r in recent]
-                    patient_summary += "\n近7日数据:\n" + "\n".join(data_lines)
-
-                alerts = db.query(Alert).filter(
-                    Alert.pregnant_id == pregnant_id,
-                    Alert.status == "PENDING"
-                ).all()
-                if alerts:
-                    alert_lines = [f"  - [{a.level}] {a.message}" for a in alerts]
-                    patient_summary += "\n活跃告警:\n" + "\n".join(alert_lines)
-
-                orders = db.query(MedicalOrder).filter(
-                    MedicalOrder.pregnant_id == pregnant_id
-                ).order_by(MedicalOrder.created_at.desc()).limit(3).all()
-                if orders:
-                    order_lines = [f"  - [{o.status}] {o.content[:50]}..." for o in orders]
-                    patient_summary += "\n最近医嘱:\n" + "\n".join(order_lines)
-    finally:
-        db.close()
-
-    system_prompt = get_doctor_chat_system_prompt(patient_summary)
-
-    async def fallback_event_generator():
+    async def agno_event_generator():
+        tool_steps: list[str] = []
         try:
-            client = get_llm_client()
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ]
-            async for chunk in client.chat_stream(messages, max_tokens=1024):
-                yield {"event": "chunk", "data": chunk}
-        except Exception:
-            from ..core.llm_client import MockLLMClient
-            mock = MockLLMClient()
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ]
-            async for chunk in mock.chat_stream(messages):
-                yield {"event": "chunk", "data": chunk}
-        yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI"})}
+            yield {"event": "thinking", "data": "Dr.智正在思考..."}
+            async for chunk in agent.arun(
+                input=message,
+                stream=True,
+                stream_events=True,
+                user_id=pregnant_id or "anonymous",
+            ):
+                event = chunk.event
+                if event == RunEvent.tool_call_started and chunk.tool is not None:
+                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                    thinking_msg = DOCTOR_TOOL_THINKING_MAP.get(
+                        tool_name, f"正在处理（{tool_name}）..."
+                    )
+                    yield {"event": "thinking", "data": thinking_msg}
+                elif event == RunEvent.tool_call_completed and chunk.tool is not None:
+                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                    step_desc = DOCTOR_TOOL_THINKING_MAP.get(tool_name, "")
+                    if step_desc and step_desc not in tool_steps:
+                        tool_steps.append(step_desc)
+                elif event == RunEvent.run_content:
+                    if chunk.content and isinstance(chunk.content, str):
+                        yield {"event": "chunk", "data": chunk.content}
+        except Exception as e:
+            yield {"event": "error", "data": str(e)}
+        yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}
 
-    return EventSourceResponse(fallback_event_generator())
+    return EventSourceResponse(agno_event_generator())
 
 
 # ==================== 医生端 - 问题处理 ====================
@@ -745,18 +642,10 @@ async def generate_report(pregnant_id: str):
 3. 风险评估
 4. 建议"""
 
-        if settings.agno_enabled:
-            from ..core.agno_medical_agents import create_doctor_chat_agent
-            agent = create_doctor_chat_agent()
-            response = await agent.arun(input=prompt, user_id=pregnant_id)
-            report_content = response.content or ""
-        else:
-            client = get_llm_client()
-            messages = [
-                {"role": "system", "content": "你是一位资深的产科医生，擅长撰写孕期健康报告。"},
-                {"role": "user", "content": prompt},
-            ]
-            report_content = await client.chat(messages)
+        from ..core.agno_medical_agents import get_doctor_chat_agent
+        agent = get_doctor_chat_agent()
+        response = await agent.arun(input=prompt, user_id=pregnant_id)
+        report_content = response.content or ""
 
         return {
             "pregnant_id": pregnant_id,

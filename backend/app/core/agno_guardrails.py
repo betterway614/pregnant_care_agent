@@ -105,6 +105,38 @@ class MedicalSafetyGuardrail:
         return None
 
 
+class NurseSafetyGuardrail(MedicalSafetyGuardrail):
+    """护士端输出安全 - 与患者面向规则一致"""
+
+    __name__ = "NurseSafetyGuardrail"
+
+
+class DoctorDraftGuardrail:
+    """医生端草稿输出安全 - 允许更多医学表述，禁止确定性结论"""
+
+    __name__ = "DoctorDraftGuardrail"
+
+    BLOCKED_PATTERNS = [
+        "确诊", "确定诊断",
+        "无需进一步检查",
+        "没有风险", "完全正常",
+    ]
+
+    def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
+        return self.check(response_content)
+
+    async def async_check(self, response_content: str = "", **kwargs) -> Optional[str]:
+        return self.check(response_content)
+
+    def check(self, response: str) -> Optional[str]:
+        if not response:
+            return None
+        for pattern in self.BLOCKED_PATTERNS:
+            if pattern in response:
+                return "以上分析需医生审核确认，不能替代临床决策。"
+        return None
+
+
 # ==================== 通用安全后处理 ====================
 
 # 面向患者的输出不可含诊断性结论

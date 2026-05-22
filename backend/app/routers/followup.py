@@ -191,14 +191,13 @@ async def ai_review_followup(record_id: str):
             context += f"\n\n活跃预警：\n{alert_text}"
 
         # 尝试1: Agno Agent
-        if settings.agno_enabled:
-            try:
-                from ..core.agno_medical_agents import create_followup_review_agent
-                import json
-                agent = create_followup_review_agent()
-                response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
-                content = response.content or ""
-                data = json.loads(content) if isinstance(content, str) else content
+        try:
+            from ..core.agno_medical_agents import create_followup_review_agent
+            from ..core.agno_structured import extract_structured_content
+            agent = create_followup_review_agent()
+            response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
+            data = extract_structured_content(response.content)
+            if data:
                 return FollowUpAiReviewResponse(
                     summary=data.get("summary", ""),
                     abnormal_flags=data.get("abnormal_flags", []),
@@ -206,10 +205,10 @@ async def ai_review_followup(record_id: str):
                     recommendation=data.get("recommendation", "确认通过"),
                     detail_analysis=data.get("detail_analysis", ""),
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
-        # 尝试2: 普通 LLM
+        # 尝试2: 普通 LLM（容错降级）
         try:
             from ..core import get_llm_client
             from ..core.json_parser import parse_llm_json
@@ -620,35 +619,31 @@ async def _generate_llm_summary(
         context_section += f"\n\n最近7天健康数据：\n{recent_health_text}"
 
     # 尝试1: Agno Agent 结构化输出
-    if settings.agno_enabled:
-        try:
-            from ..core.agno_medical_agents import create_followup_analysis_agent
-            agent = create_followup_analysis_agent()
-            prompt = (
-                f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
-                f"孕妇：{patient_name}，孕{gest_week}周\n"
-                f"风险标签：{risk_text}\n"
-                f"本次随访数据：\n{answer_text}"
-                f"{context_section}"
-            )
-            response = await agent.arun(input=prompt)
-            content = response.content or ""
-            import json
-            try:
-                data = json.loads(content) if isinstance(content, str) else content
-                return {
-                    "warm_summary": data.get("warm_summary", ""),
-                    "abnormal_indicators": data.get("abnormal_indicators", []),
-                    "trend_analysis": data.get("trend_analysis", ""),
-                    "personalized_advice": data.get("personalized_advice", ""),
-                    "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
-                }
-            except (json.JSONDecodeError, AttributeError):
-                pass
-        except Exception:
-            pass
+    try:
+        from ..core.agno_medical_agents import create_followup_analysis_agent
+        from ..core.agno_structured import extract_structured_content
+        agent = create_followup_analysis_agent()
+        prompt = (
+            f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
+            f"孕妇：{patient_name}，孕{gest_week}周\n"
+            f"风险标签：{risk_text}\n"
+            f"本次随访数据：\n{answer_text}"
+            f"{context_section}"
+        )
+        response = await agent.arun(input=prompt)
+        data = extract_structured_content(response.content)
+        if data:
+            return {
+                "warm_summary": data.get("warm_summary", ""),
+                "abnormal_indicators": data.get("abnormal_indicators", []),
+                "trend_analysis": data.get("trend_analysis", ""),
+                "personalized_advice": data.get("personalized_advice", ""),
+                "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
+            }
+    except Exception:
+        pass
 
-    # 尝试2: 普通 LLM
+    # 尝试2: 普通 LLM（容错降级）
     try:
         from ..core import get_llm_client
         client = get_llm_client()

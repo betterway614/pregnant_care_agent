@@ -150,6 +150,29 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
     }
 
 
+@router.post("/{alert_id}/analyze-workflow")
+async def analyze_alert_workflow(alert_id: str, db: Session = Depends(get_db)):
+    """执行 Alert→护士→医生 预分析 Workflow，结果写入 alert.details"""
+    from ..services.alert_analysis_service import alert_analysis_service
+
+    alert = db.query(Alert).filter(Alert.id == UUID(alert_id)).first()
+    if not alert:
+        raise HTTPException(404, "预警不存在")
+
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == alert.pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
+
+    result = await alert_analysis_service.run_alert_workflow(db, alert, pregnant)
+    db.refresh(alert)
+
+    return {
+        "alert_id": str(alert.id),
+        "workflow_result": result,
+        "details": alert.details,
+    }
+
+
 @router.put("/{alert_id}/review", response_model=AlertResponse)
 async def review_alert(alert_id: str, review: AlertReviewRequest,
                   db: Session = Depends(get_db)):

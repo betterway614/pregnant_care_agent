@@ -1,161 +1,128 @@
-"""Agno 模型适配器 - 封装 Agno 模型为兼容 LLMClient 接口
-
-支持按角色（pregnant/nurse/doctor）配置不同模型：
-- pregnant: 孕妇端智能体（小安），可使用云模型
-- nurse: 护士端智能体（小护），可使用本地模型
-- doctor: 医生端智能体（智医），可使用本地模型
-"""
-from typing import AsyncGenerator, Literal, Optional
+"""Agno 模型适配器 - 按角色配置云/本地模型，支持降级链"""
+import logging
+from typing import Literal
 from ..config import settings
 
-# 按角色缓存模型实例
+logger = logging.getLogger(__name__)
+
 _model_cache: dict[str, object] = {}
 
-# 角色类型定义
 AgentRole = Literal["pregnant", "nurse", "doctor"]
 
+_DEFAULT_TEMPERATURE: dict[str, float] = {
+    "pregnant": 0.7,
+    "nurse": 0.3,
+    "doctor": 0.3,
+}
+_DEFAULT_MAX_TOKENS: dict[str, int] = {
+    "pregnant": 2048,
+    "nurse": 4096,
+    "doctor": 4096,
+}
 
-def _create_model(mode: str, model_id: str = None, api_key: str = None, base_url: str = None):
-    """创建 Agno 模型实例"""
+
+def _resolve_model_id(role: AgentRole) -> str:
+    """角色专属模型 ID，空则 fallback 全局 llm_model"""
+    role_model = getattr(settings, f"llm_{role}_model", "") or ""
+    return role_model or settings.llm_model
+
+
+def _resolve_mode(role: AgentRole) -> str:
+    role_mode = getattr(settings, f"llm_{role}_mode", "") or ""
+    return role_mode or settings.llm_mode
+
+
+def _resolve_temperature(role: AgentRole) -> float:
+    val = getattr(settings, f"llm_{role}_temperature", None)
+    if isinstance(val, (int, float)) and val >= 0:
+        return float(val)
+    return _DEFAULT_TEMPERATURE.get(role, 0.7)
+
+
+def _resolve_max_tokens(role: AgentRole) -> int:
+    val = getattr(settings, f"llm_{role}_max_tokens", None)
+    if isinstance(val, int) and val > 0:
+        return val
+    return _DEFAULT_MAX_TOKENS.get(role, 2048)
+
+
+def _get_mode_chain(role: AgentRole) -> list[str]:
+    """cloud → local → mock 降级链；角色或全局 mixed 时启用完整链"""
+    explicit = getattr(settings, f"llm_{role}_mode", "") or ""
+    if explicit and explicit != "mixed":
+        return [explicit]
+    if settings.llm_mode == "mixed":
+        return ["cloud", "local", "mock"]
+    return [settings.llm_mode or "cloud"]
+
+
+def _mode_is_viable(mode: str) -> bool:
+    if mode == "cloud" and not settings.llm_api_key:
+        return False
+    return True
+
+
+def _build_model(role: AgentRole, mode: str):
     from agno.models.openai import OpenAIChat
     from agno.models.ollama import Ollama
 
+    model_id = _resolve_model_id(role)
+    temperature = _resolve_temperature(role)
+    max_tokens = _resolve_max_tokens(role)
+
     if mode == "cloud":
         return OpenAIChat(
-            id=model_id or settings.llm_model,
-            api_key=api_key or settings.llm_api_key,
-            base_url=base_url or settings.llm_base_url,
+            id=model_id,
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
             role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
         )
-    elif mode == "local":
+    if mode == "local":
+        local_id = model_id if model_id != settings.llm_model else settings.local_model
         return Ollama(
-            id=model_id or settings.local_model,
-            host=base_url or settings.ollama_host,
+            id=local_id,
+            host=settings.ollama_host,
+            options={"temperature": temperature, "num_predict": max_tokens},
         )
-    else:
-        return OpenAIChat(
-            id="mock-model",
-            api_key="mock-key",
-            base_url="http://localhost:1/v1",
-        )
+    return OpenAIChat(
+        id="mock-model",
+        api_key="mock-key",
+        base_url="http://localhost:1/v1",
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _create_model(role: AgentRole):
+    chain = _get_mode_chain(role)
+    for mode in chain:
+        if not _mode_is_viable(mode):
+            logger.debug("跳过不可用 LLM 模式 role=%s mode=%s", role, mode)
+            continue
+        try:
+            model = _build_model(role, mode)
+            if mode != chain[0]:
+                logger.info("LLM 降级生效 role=%s mode=%s", role, mode)
+            return model
+        except Exception as exc:
+            logger.warning("创建 LLM 模型失败 role=%s mode=%s: %s", role, mode, exc)
+    return _build_model(role, "mock")
 
 
 def get_agno_model(role: AgentRole = "pregnant"):
-    """根据角色和配置返回 Agno 模型实例
-
-    配置优先级：
-    1. 角色专属配置（llm_pregnant_mode / llm_nurse_mode / llm_doctor_mode）
-    2. 全局配置（llm_mode）
-
-    Args:
-        role: 智能体角色，可选 "pregnant"（孕妇端）、"nurse"（护士端）、"doctor"（医生端）
-
-    Returns:
-        Agno 模型实例
-    """
-    global _model_cache
-
-    # 检查缓存
+    """根据角色和配置返回 Agno 模型实例（缓存）"""
     if role in _model_cache:
         return _model_cache[role]
-
-    # 根据角色确定模型配置
-    if role == "pregnant":
-        # 孕妇端：优先使用 llm_pregnant_mode，否则使用 llm_mode
-        mode = settings.llm_pregnant_mode if settings.llm_pregnant_mode else settings.llm_mode
-    elif role == "nurse":
-        # 护士端：优先使用 llm_nurse_mode，否则使用 llm_mode
-        mode = settings.llm_nurse_mode if settings.llm_nurse_mode else settings.llm_mode
-    elif role == "doctor":
-        # 医生端：优先使用 llm_doctor_mode，否则使用 llm_mode
-        mode = settings.llm_doctor_mode if settings.llm_doctor_mode else settings.llm_mode
-    else:
-        mode = settings.llm_mode
-
-    # 创建并缓存模型实例
-    _model_cache[role] = _create_model(mode)
+    _model_cache[role] = _create_model(role)
     return _model_cache[role]
 
 
-class AgnoClient:
-    """兼容 LLMClient 接口的 Agno 适配器"""
-
-    def __init__(self, agent=None):
-        from agno.agent import Agent
-        self._agent = agent or Agent(
-            model=get_agno_model(),
-            markdown=True,
-        )
-
-    def _extract_messages(self, messages: list[dict]) -> tuple[str, list[str]]:
-        """从消息列表中提取用户消息和系统指令"""
-        user_msg = messages[-1]["content"] if messages else ""
-        instructions = []
-        for m in messages:
-            if m["role"] == "system":
-                instructions.append(m["content"])
-                break
-        return user_msg, instructions
-
-    def _create_agent(self, instructions: list[str] | None = None):
-        """创建新 Agent 实例（避免指令副作用）"""
-        from agno.agent import Agent
-        return Agent(
-            model=get_agno_model(),
-            instructions=instructions or self._agent.instructions,
-            markdown=True,
-        )
-
-    async def chat(self, messages: list[dict], **kwargs) -> str:
-        """异步对话接口"""
-        user_msg, instructions = self._extract_messages(messages)
-        agent = self._create_agent(instructions) if instructions else self._agent
-        response = await agent.arun(user_msg)
-        return response.content or ""
-
-    async def chat_stream(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
-        """异步流式对话接口"""
-        user_msg, instructions = self._extract_messages(messages)
-        agent = self._create_agent(instructions) if instructions else self._agent
-        async for event in agent.arun(input=user_msg, stream=True):
-            if hasattr(event, "content") and event.content:
-                yield event.content
-
-    async def chat_with_tools(self, messages: list[dict], tools: list[dict], **kwargs) -> dict:
-        """支持工具调用的对话 - 使用 Agno Agent 的工具循环"""
-        user_msg, instructions = self._extract_messages(messages)
-        agent = self._create_agent(instructions) if instructions else self._agent
-        response = await agent.arun(user_msg)
-        return {
-            "role": "assistant",
-            "content": response.content or "",
-            "tool_calls": None,
-        }
-
-
-# 全局缓存
-_agno_client_instance: Optional[AgnoClient] = None
-
-
-def get_agno_client() -> AgnoClient:
-    """获取 Agno 客户端单例"""
-    global _agno_client_instance
-    if _agno_client_instance is None:
-        _agno_client_instance = AgnoClient()
-    return _agno_client_instance
-
-
 def reset_agno_client(role: AgentRole = None):
-    """重置 Agno 客户端和模型缓存
-
-    Args:
-        role: 指定角色则只清除该角色的模型缓存，否则清除所有缓存
-    """
-    global _agno_client_instance, _model_cache
-
+    """重置模型缓存（配置变更后调用）"""
+    global _model_cache
     if role:
         _model_cache.pop(role, None)
     else:
         _model_cache.clear()
-
-    _agno_client_instance = None

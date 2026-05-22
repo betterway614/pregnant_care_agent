@@ -47,7 +47,7 @@ def create_main_agent() -> Agent:
         instructions=get_pregnant_system_prompt_instructions(),
         tools=MEDICAL_TOOLS,
         knowledge=agno_knowledge,
-        search_knowledge=True,
+        search_knowledge=False,
         # 会话持久化：Agno 原生 SqliteDb，自动保存/加载对话历史与 session state
         db=_create_pregnant_db(),
         add_history_to_context=True,
@@ -58,7 +58,7 @@ def create_main_agent() -> Agent:
         post_hooks=[MedicalSafetyGuardrail()],
         markdown=True,
         tool_call_limit=8,
-        debug_mode=True,
+        debug_mode=False,
     )
 
 

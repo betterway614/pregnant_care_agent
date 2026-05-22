@@ -40,6 +40,23 @@ def test_prenatal_workflow_steps():
             assert "报告生成" in step_names
 
 
+def test_get_alert_analysis_workflow():
+    from app.core.agno_workflow import create_alert_analysis_workflow
+
+    mock_model = _make_mock_model()
+    mock_nurse = MagicMock()
+    mock_nurse.name = "小护"
+    mock_doctor = MagicMock()
+    mock_doctor.name = "智医"
+    with patch("app.core.agno_workflow.get_agno_model", return_value=mock_model):
+        with patch("app.core.agno_workflow.get_nurse_agent", return_value=mock_nurse):
+            with patch("app.core.agno_workflow.get_doctor_agent", return_value=mock_doctor):
+                with patch("agno.agent._init.get_model", return_value=mock_model):
+                    workflow = create_alert_analysis_workflow()
+                    assert workflow.name == "预警分析流程"
+                    assert len(workflow.steps) == 2
+
+
 def test_get_prenatal_workflow_singleton():
     """验证 get_prenatal_workflow 返回单例"""
     from app.core.agno_workflow import get_prenatal_workflow

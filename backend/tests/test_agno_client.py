@@ -3,20 +3,26 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
+
+import app.core.agno_client as client_module
+from app.core.agno_client import get_agno_model, reset_agno_client
+
+
+def _clear_cache():
+    client_module._model_cache.clear()
 
 
 def test_get_agno_model_cloud():
-    """验证云端模式返回 OpenAIChat 模型"""
-    from app.core.agno_client import get_agno_model
-
-    # 清除缓存
-    import app.core.agno_client as client_module
-    client_module._model_instance = None
-
+    _clear_cache()
     with patch("app.core.agno_client.settings") as mock_settings:
         mock_settings.llm_mode = "cloud"
+        mock_settings.llm_pregnant_mode = "cloud"
+        mock_settings.llm_nurse_mode = "cloud"
+        mock_settings.llm_doctor_mode = "cloud"
+        mock_settings.llm_pregnant_model = ""
+        mock_settings.llm_nurse_model = ""
+        mock_settings.llm_doctor_model = ""
         mock_settings.llm_api_key = "test-key"
         mock_settings.llm_base_url = "https://api.test.com/v1"
         mock_settings.llm_model = "deepseek-chat"
@@ -25,85 +31,75 @@ def test_get_agno_model_cloud():
 
 
 def test_get_agno_model_local():
-    """验证本地模式返回 Ollama 模型"""
-    from app.core.agno_client import get_agno_model
-
-    import app.core.agno_client as client_module
-    client_module._model_instance = None
-
+    _clear_cache()
     with patch("app.core.agno_client.settings") as mock_settings:
         mock_settings.llm_mode = "local"
+        mock_settings.llm_pregnant_mode = "local"
+        mock_settings.llm_nurse_mode = "local"
+        mock_settings.llm_doctor_mode = "local"
+        mock_settings.llm_pregnant_model = ""
+        mock_settings.llm_nurse_model = ""
+        mock_settings.llm_doctor_model = ""
         mock_settings.ollama_host = "http://localhost:11434"
         mock_settings.local_model = "qwen2.5:7b"
-        model = get_agno_model()
+        mock_settings.llm_model = "qwen2.5:7b"
+        model = get_agno_model(role="doctor")
         assert model is not None
 
 
-def test_get_agno_model_mock():
-    """验证 mock 模式返回 DummyModel"""
-    from app.core.agno_client import get_agno_model
-
-    import app.core.agno_client as client_module
-    client_module._model_instance = None
-
+def test_get_agno_model_cached_by_role():
+    _clear_cache()
     with patch("app.core.agno_client.settings") as mock_settings:
         mock_settings.llm_mode = "mock"
+        mock_settings.llm_pregnant_mode = "mock"
+        mock_settings.llm_nurse_mode = "mock"
+        mock_settings.llm_doctor_mode = "mock"
+        mock_settings.llm_pregnant_model = ""
+        mock_settings.llm_nurse_model = ""
+        mock_settings.llm_doctor_model = ""
+        mock_settings.llm_model = "mock"
+        m1 = get_agno_model("pregnant")
+        m2 = get_agno_model("pregnant")
+        m3 = get_agno_model("nurse")
+        assert m1 is m2
+        assert m1 is not m3
+
+
+def test_reset_agno_client_clears_cache():
+    _clear_cache()
+    with patch("app.core.agno_client.settings") as mock_settings:
+        mock_settings.llm_mode = "mock"
+        mock_settings.llm_pregnant_mode = "mock"
+        mock_settings.llm_nurse_mode = "mock"
+        mock_settings.llm_doctor_mode = "mock"
+        mock_settings.llm_pregnant_model = ""
+        mock_settings.llm_nurse_model = ""
+        mock_settings.llm_doctor_model = ""
+        mock_settings.llm_model = "mock"
+        get_agno_model()
+        assert "pregnant" in client_module._model_cache
+        reset_agno_client()
+        assert client_module._model_cache == {}
+
+
+def test_cloud_without_api_key_falls_back_to_mock():
+    _clear_cache()
+    with patch("app.core.agno_client.settings") as mock_settings:
+        mock_settings.llm_mode = "cloud"
+        mock_settings.llm_pregnant_mode = ""
+        mock_settings.llm_nurse_mode = ""
+        mock_settings.llm_doctor_mode = ""
+        mock_settings.llm_pregnant_model = ""
+        mock_settings.llm_nurse_model = ""
+        mock_settings.llm_doctor_model = ""
+        mock_settings.llm_api_key = ""
+        mock_settings.llm_base_url = "https://api.test.com/v1"
+        mock_settings.llm_model = "test-model"
+        mock_settings.llm_pregnant_temperature = 0.7
+        mock_settings.llm_nurse_temperature = 0.3
+        mock_settings.llm_doctor_temperature = 0.3
+        mock_settings.llm_pregnant_max_tokens = 2048
+        mock_settings.llm_nurse_max_tokens = 4096
+        mock_settings.llm_doctor_max_tokens = 4096
         model = get_agno_model()
-        assert model is not None
-
-
-@pytest.mark.asyncio
-async def test_agno_client_chat():
-    """验证 AgnoClient.chat 返回字符串"""
-    from app.core.agno_client import AgnoClient
-
-    mock_agent = MagicMock()
-    mock_agent.arun = AsyncMock(return_value=MagicMock(content="测试回复"))
-    client = AgnoClient(agent=mock_agent)
-    result = await client.chat([{"role": "user", "content": "你好"}])
-    assert isinstance(result, str)
-    assert result == "测试回复"
-
-
-@pytest.mark.asyncio
-async def test_agno_client_chat_stream():
-    """验证 AgnoClient.chat_stream 异步生成"""
-    from app.core.agno_client import AgnoClient
-
-    mock_agent = MagicMock()
-
-    async def mock_response_stream(*args, **kwargs):
-        yield MagicMock(content="你")
-        yield MagicMock(content="好")
-
-    mock_agent.arun = mock_response_stream
-    client = AgnoClient(agent=mock_agent)
-    chunks = []
-    async for chunk in client.chat_stream([{"role": "user", "content": "你好"}]):
-        chunks.append(chunk)
-    assert chunks == ["你", "好"]
-
-
-def test_get_agno_model_singleton():
-    """验证 get_agno_model 返回单例"""
-    from app.core.agno_client import get_agno_model
-
-    import app.core.agno_client as client_module
-    client_module._model_instance = None
-
-    with patch("app.core.agno_client.settings") as mock_settings:
-        mock_settings.llm_mode = "mock"
-        model1 = get_agno_model()
-        model2 = get_agno_model()
-        assert model1 is model2
-
-
-def test_reset_agno_client():
-    """验证 reset_agno_client 重置客户端"""
-    from app.core.agno_client import get_agno_client, reset_agno_client
-
-    reset_agno_client()
-    client1 = get_agno_client()
-    reset_agno_client()
-    client2 = get_agno_client()
-    assert client1 is not client2
+        assert getattr(model, "id", None) == "mock-model"

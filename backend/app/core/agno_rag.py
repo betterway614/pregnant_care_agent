@@ -1,17 +1,10 @@
-"""Agno 兼容 RAG 检索增强生成引擎"""
+"""RAG 检索增强生成引擎（Agno 生产路径唯一实现）"""
 from typing import Optional
 from sqlalchemy import text
 
 
-class AgnoRAGEngine:
-    """Agno 兼容 RAG引擎 - 向量检索 + LLM生成
-
-    核心流程:
-    1. 将用户问题向量化
-    2. 在知识库中检索最相关的文档块
-    3. 将检索结果作为上下文注入 LLM prompt
-    4. LLM 基于知识库生成回答
-    """
+class RAGEngine:
+    """RAG引擎 - 向量检索 + LLM生成"""
 
     def __init__(self, embedding_client=None, llm_client=None):
         self._embedding = embedding_client
@@ -19,7 +12,6 @@ class AgnoRAGEngine:
 
     @property
     def embedding(self):
-        """延迟加载 embedding 客户端"""
         if self._embedding is None:
             from .embedding import get_embedding_client
             self._embedding = get_embedding_client()
@@ -27,38 +19,21 @@ class AgnoRAGEngine:
 
     @property
     def llm(self):
-        """延迟加载 LLM 客户端"""
         if self._llm is None:
             from .llm_client import get_llm_client
             self._llm = get_llm_client()
         return self._llm
 
-    # ------------------------------------------------------------------
-    # 向量检索
-    # ------------------------------------------------------------------
-
     def search(self, query: str, top_k: int = 5,
                category: Optional[str] = None) -> list[dict]:
-        """向量检索相关文档块
-
-        Args:
-            query: 用户查询文本
-            top_k: 返回的最相关文档块数量
-            category: 可选，按分类过滤（guideline / drug / education）
-
-        Returns:
-            [{doc_title, doc_category, content, similarity, chunk_index}]
-        """
         from ..database import SessionLocal
         from ..config import settings
 
         db = SessionLocal()
         try:
-            # 生成查询向量
             query_vec = self.embedding.embed([query])[0]
             vector_str = "[" + ",".join(str(v) for v in query_vec) + "]"
 
-            # pgvector 余弦相似度检索（<=> 为余弦距离算子）
             if settings.db_type == "postgres":
                 sql = text("""
                     SELECT id, doc_title, doc_category, content, chunk_index,
@@ -84,9 +59,7 @@ class AgnoRAGEngine:
                     }
                     for r in rows
                 ]
-            else:
-                # SQLite fallback - 关键词匹配检索
-                return self._keyword_search(db, query, top_k, category)
+            return self._keyword_search(db, query, top_k, category)
         except Exception as e:
             print(f"Warning: vector search failed: {e}")
             return []
@@ -95,7 +68,6 @@ class AgnoRAGEngine:
 
     def _keyword_search(self, db, query: str, top_k: int,
                         category: Optional[str]) -> list[dict]:
-        """SQLite 关键词回退检索（无向量数据库时使用）"""
         from ..models.vector_models import KnowledgeChunk
 
         keywords = query.split()
@@ -103,7 +75,6 @@ class AgnoRAGEngine:
         if category:
             q = q.filter(KnowledgeChunk.doc_category == category)
 
-        # 按关键词命中率排序
         chunks = q.all()
         scored = []
         for chunk in chunks:
@@ -125,23 +96,8 @@ class AgnoRAGEngine:
             for score, chunk in top
         ]
 
-    # ------------------------------------------------------------------
-    # RAG 问答
-    # ------------------------------------------------------------------
-
     async def ask(self, question: str, patient_context: str = "",
                   top_k: int = 5) -> dict:
-        """RAG问答 - 检索 + 生成
-
-        Args:
-            question: 用户问题
-            patient_context: 孕妇上下文（如孕周、既往史等）
-            top_k: 检索块数
-
-        Returns:
-            {answer, sources: [{title, category}], chunks: [{content, similarity}], rag_used}
-        """
-        # 1. 向量检索
         chunks = self.search(question, top_k=top_k)
 
         if not chunks:
@@ -152,7 +108,6 @@ class AgnoRAGEngine:
                 "rag_used": False,
             }
 
-        # 2. 构建增强 prompt
         knowledge = "\n\n".join([
             f"【参考来源: {c['doc_title']}】(相关度: {c['similarity']})\n{c['content']}"
             for c in chunks
@@ -175,7 +130,6 @@ class AgnoRAGEngine:
 
         user_msg = {"role": "user", "content": question}
 
-        # 3. LLM 生成
         try:
             answer = await self.llm.chat(
                 [system_prompt, user_msg], max_tokens=1024
@@ -184,7 +138,6 @@ class AgnoRAGEngine:
             print(f"Warning: LLM call failed, using fallback answer: {e}")
             answer = self._fallback_answer(chunks)
 
-        # 4. 整理返回
         sources = list(dict.fromkeys(
             (c["doc_title"], c["doc_category"]) for c in chunks
         ))
@@ -200,7 +153,6 @@ class AgnoRAGEngine:
         }
 
     def _fallback_answer(self, chunks: list[dict]) -> str:
-        """LLM 不可用时的兜底回答"""
         top = chunks[0] if chunks else None
         if top:
             return (
@@ -211,5 +163,6 @@ class AgnoRAGEngine:
         return "建议您咨询产检医生获取更准确的指导。"
 
 
-# 全局单例
-agno_rag_engine = AgnoRAGEngine()
+rag_engine = RAGEngine()
+agno_rag_engine = rag_engine
+AgnoRAGEngine = RAGEngine

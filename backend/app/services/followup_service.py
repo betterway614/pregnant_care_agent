@@ -312,22 +312,21 @@ class FollowUpService:
             f"5. 不要包含markdown代码块标记"
         )
 
-        if settings.agno_enabled:
-            try:
-                from ..core import get_llm_client
-                from ..core.json_parser import parse_llm_json
-                client = get_llm_client()
-                messages = [
-                    {"role": "system", "content": "你是孕期健康教育专家，请以JSON数组格式返回健康教育建议。"},
-                    {"role": "user", "content": prompt},
-                ]
-                response = await client.chat(messages)
-                if response and response.strip():
-                    data = parse_llm_json(response)
-                    if isinstance(data, list) and len(data) >= 2:
-                        return [str(item) for item in data[:5]]
-            except Exception:
-                pass
+        try:
+            from ..core import get_llm_client
+            from ..core.json_parser import parse_llm_json
+            client = get_llm_client()
+            messages = [
+                {"role": "system", "content": "你是孕期健康教育专家，请以JSON数组格式返回健康教育建议。"},
+                {"role": "user", "content": prompt},
+            ]
+            response = await client.chat(messages)
+            if response and response.strip():
+                data = parse_llm_json(response)
+                if isinstance(data, list) and len(data) >= 2:
+                    return [str(item) for item in data[:5]]
+        except Exception:
+            pass
 
         # 降级：检查回答中是否有特定问题，添加针对性建议
         personalized = list(template_education)

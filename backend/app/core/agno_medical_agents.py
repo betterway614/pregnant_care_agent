@@ -14,16 +14,25 @@
 """
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import BaseModel, Field
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
-from .agno_knowledge import agno_knowledge
+from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_tools import (
     NURSE_TOOLS,
     DOCTOR_TOOLS,
-    agno_query_patient_data,
-    agno_analyze_patient_comprehensive,
+)
+from .prompts import (
+    get_nurse_system_prompt_instructions,
+    get_nurse_chat_system_prompt_instructions,
+    get_doctor_system_prompt_instructions,
+    get_doctor_chat_system_prompt_instructions,
+    get_followup_generate_instructions,
+    get_followup_analysis_instructions,
+    get_followup_review_instructions,
 )
 
 import os
@@ -110,95 +119,38 @@ class ChatOutput(BaseModel):
 
 
 def create_nurse_agent() -> Agent:
-    """创建护士 AI Agent — 自动工具路由 + Token 优化 + 上下文持久化
-
-    Agno 原生能力：
-    - 工具路由：根据用户意图自动选择 agno_query_patient_data / agno_create_followup_record 等
-    - tool_call_limit=5：单次对话最多调用5次工具，防止 token 爆炸
-    - max_tool_calls_from_history=3：只保留最近3次工具调用历史
-    - session_state + SqliteDb：工具间上下文持久化（如查询结果传递给上报工具）
-
-    安全设计：使用独立的 nurse_db，与孕妇端/医生端数据隔离
-    """
+    """创建护士 AI Agent — 工具路由 + 结构化输出"""
     return Agent(
         name="小护",
         model=get_agno_model(role="nurse"),
-        instructions=[
-            "你是'小护'，一位专业、高效的产科护理AI助手。",
-            "",
-            "【工作方式】",
-            "根据用户意图，自动选择合适的工具完成任务：",
-            "- 查询数据 → agno_query_patient_data",
-            "- 创建随访 → agno_create_followup_record",
-            "- 上报问题 → agno_report_issue_to_doctor",
-            "- 分析趋势 → agno_analyze_health_trends",
-            "- 评估规则 → agno_evaluate_vital_rules",
-            "- 搜索知识 → agno_search_knowledge",
-            "",
-            "【工具联动】",
-            "- 如果用户说'查看XX情况，有异常就上报'，先查询数据，再根据结果决定是否上报",
-            "- 上报时可以不指定 pregnant_id，系统会自动使用上次查询的孕妇",
-            "",
-            "【重要规则】",
-            "- 绝不出具诊断结论，复杂情况建议咨询医生",
-            "- 回答要简洁、专业、可操作",
-        ],
+        instructions=get_nurse_system_prompt_instructions(),
         tools=NURSE_TOOLS,
         output_schema=NurseAnalysisOutput,
-        session_state={},  # 初始化 session_state 用于工具间上下文共享
-        db=_create_nurse_db(),  # 持久化 session_state（护士端独立数据库）
-        knowledge=agno_knowledge,
-        search_knowledge=True,
+        session_state={},
+        db=_create_nurse_db(),
+        search_knowledge=False,
         add_datetime_to_context=True,
         markdown=True,
+        post_hooks=[NurseSafetyGuardrail()],
         tool_call_limit=5,
         max_tool_calls_from_history=3,
     )
 
 
 def create_doctor_agent() -> Agent:
-    """创建医生 AI Agent — 自动工具路由 + Token 优化 + 上下文持久化
-
-    Agno 原生能力：
-    - 工具路由：根据用户意图自动选择 agno_analyze_patient_comprehensive / agno_generate_medical_order 等
-    - tool_call_limit=5：单次对话最多调用5次工具，防止 token 爆炸
-    - max_tool_calls_from_history=3：只保留最近3次工具调用历史
-    - session_state + SqliteDb：工具间上下文持久化（如分析结果传递给医嘱生成工具）
-
-    安全设计：使用独立的 doctor_db，与孕妇端/护士端数据隔离
-    """
+    """创建医生 AI Agent — 工具路由 + 结构化输出"""
     return Agent(
         name="智医",
         model=get_agno_model(role="doctor"),
-        instructions=[
-            "你是'Dr.智'，一位资深的产科AI临床助手。",
-            "",
-            "【工作方式】",
-            "根据用户意图，自动选择合适的工具完成任务：",
-            "- 分析患者 → agno_analyze_patient_comprehensive",
-            "- 生成医嘱 → agno_generate_medical_order",
-            "- 处理问题 → agno_handle_issue",
-            "- 查询指南 → agno_query_clinical_guideline",
-            "- 分析趋势 → agno_analyze_health_trends",
-            "- 评估规则 → agno_evaluate_vital_rules",
-            "- 搜索知识 → agno_search_knowledge",
-            "",
-            "【工具联动】",
-            "- 如果用户说'分析XX情况，然后生成医嘱'，先分析数据，再根据结果生成医嘱",
-            "- 生成医嘱时可以不指定 pregnant_id，系统会自动使用上次分析的孕妇",
-            "",
-            "【重要规则】",
-            "- 所有医学建议需标注证据来源",
-            "- 提供分析参考，最终决策由医生做出",
-        ],
+        instructions=get_doctor_system_prompt_instructions(),
         tools=DOCTOR_TOOLS,
         output_schema=DoctorAnalysisOutput,
-        session_state={},  # 初始化 session_state 用于工具间上下文共享
-        db=_create_doctor_db(),  # 持久化 session_state（医生端独立数据库）
-        knowledge=agno_knowledge,
-        search_knowledge=True,
+        session_state={},
+        db=_create_doctor_db(),
+        search_knowledge=False,
         add_datetime_to_context=True,
         markdown=True,
+        post_hooks=[DoctorDraftGuardrail()],
         tool_call_limit=5,
         max_tool_calls_from_history=3,
     )
@@ -213,24 +165,14 @@ def create_nurse_chat_agent() -> Agent:
     return Agent(
         name="小护-对话",
         model=get_agno_model(role="nurse"),
-        instructions=[
-            "你是'小护'，一位专业、高效的产科护理AI助手。",
-            "根据用户意图使用工具获取数据，然后给出专业建议。",
-            "",
-            "【工具联动】",
-            "- 如果用户说'查看XX情况，有异常就上报'，先查询数据，再根据结果决定是否上报",
-            "- 上报时可以不指定 pregnant_id，系统会自动使用上次查询的孕妇",
-            "",
-            "绝不出具诊断结论，复杂情况建议咨询医生。",
-            "回答要简洁、专业、可操作。",
-        ],
+        instructions=get_nurse_chat_system_prompt_instructions(),
         tools=NURSE_TOOLS,
         session_state={},
-        db=_create_nurse_db(),  # 持久化 session_state（护士端独立数据库）
-        knowledge=agno_knowledge,
-        search_knowledge=True,
+        db=_create_nurse_db(),
+        search_knowledge=False,
         add_datetime_to_context=True,
         markdown=True,
+        post_hooks=[NurseSafetyGuardrail()],
         tool_call_limit=3,
         max_tool_calls_from_history=2,
     )
@@ -245,24 +187,14 @@ def create_doctor_chat_agent() -> Agent:
     return Agent(
         name="智医-对话",
         model=get_agno_model(role="doctor"),
-        instructions=[
-            "你是'Dr.智'，一位资深的产科AI临床助手。",
-            "根据用户意图使用工具获取数据，然后给出专业分析。",
-            "",
-            "【工具联动】",
-            "- 如果用户说'分析XX情况，然后生成医嘱'，先分析数据，再根据结果生成医嘱",
-            "- 生成医嘱时可以不指定 pregnant_id，系统会自动使用上次分析的孕妇",
-            "",
-            "所有医学建议需标注证据来源。",
-            "回答要专业、严谨、有循证依据。",
-        ],
+        instructions=get_doctor_chat_system_prompt_instructions(),
         tools=DOCTOR_TOOLS,
         session_state={},
-        db=_create_doctor_db(),  # 持久化 session_state（医生端独立数据库）
-        knowledge=agno_knowledge,
-        search_knowledge=True,
+        db=_create_doctor_db(),
+        search_knowledge=False,
         add_datetime_to_context=True,
         markdown=True,
+        post_hooks=[DoctorDraftGuardrail()],
         tool_call_limit=3,
         max_tool_calls_from_history=2,
     )
@@ -273,10 +205,7 @@ def create_followup_generate_agent() -> Agent:
     return Agent(
         name="小安-随访生成",
         model=get_agno_model(role="pregnant"),
-        instructions=[
-            "你是一位经验丰富的产科随访护士，擅长与孕妇进行有效的电话/微信随访沟通。",
-            "请严格按结构化格式返回结果。",
-        ],
+        instructions=get_followup_generate_instructions(),
         output_schema=FollowUpGenerateOutput,
         markdown=True,
     )
@@ -291,24 +220,7 @@ def create_followup_analysis_agent() -> Agent:
     return Agent(
         name="小安-随访分析",
         model=get_agno_model(role="pregnant"),
-        instructions=[
-            "你是一位专业的孕期健康分析助手，负责在孕妇完成随访后生成分析报告。",
-            "",
-            "【分析要求】",
-            "1. warm_summary: 用温暖语气回顾本次随访亮点，30-50字",
-            "2. abnormal_indicators: 对比历史数据和正常范围，列出所有异常指标",
-            "   - 血压: 正常<140/90mmHg，偏高135-140/85-90",
-            "   - 空腹血糖: 正常≤5.3mmol/L",
-            "   - 体重: 孕中晚期每周增长0.3-0.5kg为正常",
-            "   - 胎动: 每小时≥3次为正常",
-            "3. trend_analysis: 对比近几次随访数据的变化趋势",
-            "4. personalized_advice: 根据孕妇的回答给出具体可执行的建议",
-            "5. nurse_action_suggestion: 给出审核建议(确认通过/需进一步沟通/紧急上报)",
-            "",
-            "【安全规则】",
-            "- 绝不出具诊断结论或用药建议",
-            "- 所有建议必须引导咨询医生",
-        ],
+        instructions=get_followup_analysis_instructions(),
         output_schema=FollowUpAnalysisOutput,
         markdown=True,
     )
@@ -322,23 +234,28 @@ def create_followup_review_agent() -> Agent:
     return Agent(
         name="小护-审核辅助",
         model=get_agno_model(role="nurse"),
-        instructions=[
-            "你是一位专业的产科护理AI助手，帮助护士审核随访记录。",
-            "",
-            "【审核要求】",
-            "1. summary: 概括本次随访的关键信息（100-200字）",
-            "2. abnormal_flags: 列出所有异常或需关注的指标",
-            "3. action_needed: 如果存在高危情况，设为true",
-            "4. recommendation: 给出审核建议",
-            "   - '确认通过': 所有指标正常，无异常",
-            "   - '需进一步沟通': 有轻微异常但不紧急",
-            "   - '紧急上报': 存在高危指标，需立即通知医生",
-            "5. detail_analysis: 详细分析各项指标（100-200字）",
-            "",
-            "【安全规则】",
-            "- 绝不出具诊断结论或用药建议",
-            "- 复杂情况建议咨询医生",
-        ],
+        instructions=get_followup_review_instructions(),
         output_schema=FollowUpAiReviewOutput,
         markdown=True,
+        post_hooks=[NurseSafetyGuardrail()],
     )
+
+
+@lru_cache(maxsize=1)
+def get_nurse_agent() -> Agent:
+    return create_nurse_agent()
+
+
+@lru_cache(maxsize=1)
+def get_doctor_agent() -> Agent:
+    return create_doctor_agent()
+
+
+@lru_cache(maxsize=1)
+def get_nurse_chat_agent() -> Agent:
+    return create_nurse_chat_agent()
+
+
+@lru_cache(maxsize=1)
+def get_doctor_chat_agent() -> Agent:
+    return create_doctor_chat_agent()

@@ -99,6 +99,21 @@ def test_get_main_agent_has_memory_when_enabled():
             assert len(agent.tools) == 10
 
 
+def test_get_nurse_agent_singleton():
+    from app.core.agno_medical_agents import get_nurse_agent
+    from app.core.agno_guardrails import NurseSafetyGuardrail
+
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            get_nurse_agent.cache_clear()
+            a1 = get_nurse_agent()
+            a2 = get_nurse_agent()
+            assert a1 is a2
+            post_hook_names = [h.__name__ for h in a1.post_hooks]
+            assert "NurseSafetyGuardrail" in post_hook_names
+
+
 def test_followup_agent_not_cached():
     """验证随访生成 Agent 每次创建新实例"""
     from app.core.agno_medical_agents import create_followup_generate_agent

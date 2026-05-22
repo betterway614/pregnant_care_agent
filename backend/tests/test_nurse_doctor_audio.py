@@ -22,7 +22,7 @@ class TestNurseChatStreamAudioInput:
         client = TestClient(app)
 
         with patch("app.routers.nurse_ai.settings") as mock_settings:
-            mock_settings.agno_enabled = False
+            mock_settings.persist_chat_messages = False
             resp = client.post("/api/v1/nurse/chat/stream", json={"message": ""})
             assert resp.status_code == 400
 
@@ -36,30 +36,23 @@ class TestNurseChatStreamAudioInput:
         app.include_router(router)
         client = TestClient(app)
 
-        with patch("app.routers.nurse_ai.settings") as mock_settings:
-            mock_settings.agno_enabled = False
-            mock_settings.llm_mode = "cloud"
-            mock_settings.llm_api_key = "test-key"
-            mock_settings.llm_base_url = "https://api.test.com/v1"
-            mock_settings.llm_model = "test-model"
-            mock_settings.persist_chat_messages = False
+        mock_agent = MagicMock()
 
-            with patch("app.config.get_asr_mode", return_value="llm"), \
-                 patch("app.routers.nurse_ai._transcribe_audio_with_llm", new_callable=AsyncMock, return_value="测试转录文本"), \
-                 patch("app.routers.nurse_ai.get_llm_client") as mock_get_client:
-                mock_client = AsyncMock()
-                mock_client.chat.return_value = "护士回复"
-                mock_client.chat_stream = AsyncMock(return_value=iter(["护士回复"]))
-                mock_get_client.return_value = mock_client
+        async def mock_stream(*args, **kwargs):
+            yield MagicMock(event="RunContent", content="护士回复", tool=None)
 
-                resp = client.post("/api/v1/nurse/chat/stream", json={
-                    "message": "",
-                    "message_type": "AUDIO",
-                    "audio_data": "dGVzdA==",
-                    "audio_format": "webm",
-                })
-                # 应该不是 400（因为有音频数据）
-                assert resp.status_code != 400
+        mock_agent.arun = mock_stream
+
+        with patch("app.config.get_asr_mode", return_value="llm"), \
+             patch("app.routers.nurse_ai._transcribe_audio_with_llm", new_callable=AsyncMock, return_value="测试转录文本"), \
+             patch("app.core.agno_medical_agents.get_nurse_chat_agent", return_value=mock_agent):
+            resp = client.post("/api/v1/nurse/chat/stream", json={
+                "message": "",
+                "message_type": "AUDIO",
+                "audio_data": "dGVzdA==",
+                "audio_format": "webm",
+            })
+            assert resp.status_code != 400
 
 
 class TestDoctorChatStreamAudioInput:
@@ -75,8 +68,7 @@ class TestDoctorChatStreamAudioInput:
         app.include_router(router)
         client = TestClient(app)
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.agno_enabled = False
+        with patch("app.config.settings"):
             resp = client.post("/api/v1/doctor/chat/stream", json={"message": ""})
             assert resp.status_code == 400
 
