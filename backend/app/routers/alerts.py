@@ -40,7 +40,9 @@ def get_alerts(status: Optional[str] = None,
     """获取预警列表"""
     query = db.query(Alert)
     if status:
-        query = query.filter(Alert.status == status)
+        # 支持逗号分隔的多状态查询（如 "pending,escalated"），大小写不敏感
+        status_list = [s.strip().upper() for s in status.split(",")]
+        query = query.filter(Alert.status.in_(status_list))
     if level:
         query = query.filter(Alert.level == level)
     if pregnant_id:
@@ -181,6 +183,8 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
     if not alert:
         raise HTTPException(404, "预警不存在")
 
+    original_level = alert.level
+
     if review.action == "confirm":
         alert.status = "CONFIRMED"
     elif review.action == "dismiss":
@@ -197,15 +201,16 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
 
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == alert.pregnant_id).first()
 
-    # escalate 时广播升级预警给医生端
+    # escalate 时广播预警给医生端
     if review.action == "escalate" and pregnant:
         try:
+            prefix = "[已升级]" if alert.level == "RED" and original_level != "RED" else "[紧急通知]"
             alert_data = {
                 "id": str(alert.id),
                 "pregnant_id": alert.pregnant_id,
                 "patient_name": pregnant.display_name,
                 "level": alert.level,
-                "message": f"[已升级] {alert.message}",
+                "message": f"{prefix} {alert.message}",
                 "trigger_source": alert.trigger_source,
                 "status": alert.status,
                 "created_at": alert.created_at.isoformat() if alert.created_at else None,

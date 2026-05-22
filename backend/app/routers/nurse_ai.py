@@ -444,54 +444,8 @@ from sse_starlette.sse import EventSourceResponse
 
 
 async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: str) -> str:
-    """使用多模态 LLM 转录音频为文本（预处理步骤）。
-
-    构建与 chat.py 相同的 multimodal message，调用 LLM 获取转录文本，
-    然后返回纯文本供 Agno agent 使用。
-    """
-    from ..core.agno_client import get_agno_model
-    from openai import AsyncOpenAI
-
-    model_info = get_agno_model(role)
-    # 构建多模态消息
-    messages = [
-        {"role": "system", "content": "你是一个语音识别助手。请将用户的语音内容准确转录为文字，只输出转录文本，不要添加任何解释或补充。"},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "请将这段语音转录为文字"},
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": audio_data,
-                        "format": audio_format or "webm",
-                    },
-                },
-            ],
-        },
-    ]
-
-    try:
-        if hasattr(model_info, 'id') and not hasattr(model_info, 'host'):
-            # 云端 OpenAI 兼容模型
-            client = AsyncOpenAI(
-                api_key=settings.llm_api_key,
-                base_url=settings.llm_base_url,
-            )
-            resp = await client.chat.completions.create(
-                model=settings.llm_model,
-                messages=messages,
-                max_tokens=500,
-            )
-            text = resp.choices[0].message.content or ""
-            return text.strip() or "（语音识别为空）"
-        else:
-            # 本地模型暂不支持多模态，降级提示
-            return "（本地模型不支持语音识别，请切换到云模式或使用文字输入）"
-    except Exception as e:
-        from loguru import logger
-        logger.error("[ASR] LLM 转录失败: {}", e)
-        return "（语音识别失败，请重试或使用文字输入）"
+    """已移除：LLM 不适合做 ASR，请使用 cloud 或 local 模式的专用 ASR 服务。"""
+    return "（语音识别服务不可用，请使用文字输入）"
 
 
 @router.post("/chat/stream")
@@ -503,21 +457,15 @@ async def nurse_chat_stream(req: dict):
     audio_data = req.get("audio_data")
     audio_format = req.get("audio_format", "webm")
 
-    # ASR 预处理：音频输入转文本
+    # ASR 预处理：音频输入转文本（使用专用 ASR 服务）
     if message_type == "AUDIO" and audio_data:
-        from ..config import get_asr_mode
         from ..services.asr_service import asr_service
 
-        asr_mode = get_asr_mode("nurse")
-        if asr_mode in ("cloud", "local"):
-            transcribed = await asr_service.transcribe(audio_data, audio_format, "nurse")
-            if transcribed:
-                message = transcribed
-            else:
-                message = "（语音识别失败，请重试或使用文字输入）"
-        elif asr_mode == "llm":
-            # 使用多模态 LLM 转录音频为文本（预处理步骤）
-            message = await _transcribe_audio_with_llm(audio_data, audio_format, "nurse")
+        transcribed = await asr_service.transcribe(audio_data, audio_format, "nurse")
+        if transcribed:
+            message = transcribed
+        else:
+            message = "（语音识别失败，请重试或使用文字输入）"
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
@@ -552,7 +500,10 @@ async def nurse_chat_stream(req: dict):
                     if chunk.content and isinstance(chunk.content, str):
                         yield {"event": "chunk", "data": chunk.content}
         except Exception as e:
+            from loguru import logger
+            logger.error("Nurse AI Agent run error: {}", e)
             yield {"event": "error", "data": str(e)}
+            yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。如果问题持续存在，请检查网络连接或联系管理员。"}
         yield {"event": "done", "data": json.dumps({"source": "NURSE_AI", "tool_steps": tool_steps})}
 
     return EventSourceResponse(agno_event_generator())

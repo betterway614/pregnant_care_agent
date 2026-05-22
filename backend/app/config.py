@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     llm_mode: Literal["cloud", "local", "mock", "mixed"] = "cloud"
     llm_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    llm_model: str = "qwen3.5-35b-a3b"
+    llm_model: str = "qwen3-vl-235b-a22b-thinking"
     ollama_host: str = "http://localhost:11434"
     local_model: str = "qwen2.5:7b"
 
@@ -36,14 +36,14 @@ class Settings(BaseSettings):
     llm_nurse_max_tokens: int = 4096
     llm_doctor_max_tokens: int = 4096
 
-    # ASR配置 - 全局默认
-    asr_mode: Literal["cloud", "local", "llm"] = "llm"
-    asr_pregnant_mode: Literal["cloud", "local", "llm", ""] = ""
-    asr_nurse_mode: Literal["cloud", "local", "llm", ""] = ""
-    asr_doctor_mode: Literal["cloud", "local", "llm", ""] = ""
+    # ASR配置 - 全局默认（cloud 使用 DashScope Paraformer 专用 ASR 服务，local 使用 Whisper）
+    asr_mode: Literal["cloud", "local"] = "cloud"
+    asr_pregnant_mode: Literal["cloud", "local", ""] = ""
+    asr_nurse_mode: Literal["cloud", "local", ""] = ""
+    asr_doctor_mode: Literal["cloud", "local", ""] = ""
     asr_cloud_api_key: str = ""
     asr_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
-    asr_cloud_model: str = "fun-asr-2025-11-07"
+    asr_cloud_model: str = "fun-asr-mtl"
     asr_local_model: str = "base"
 
     # TTS配置 - 全局默认
@@ -122,7 +122,7 @@ settings = Settings()
 
 
 def get_asr_mode(role: str) -> str:
-    """解析ASR模式：角色专属 > 全局 > 默认'llm'"""
+    """解析ASR模式：角色专属 > 全局 > 默认'cloud'"""
     role_mode = getattr(settings, f"asr_{role}_mode", "")
     return role_mode if role_mode else settings.asr_mode
 

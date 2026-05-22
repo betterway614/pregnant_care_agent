@@ -18,6 +18,7 @@ from ..models import FollowUpRecord, Pregnant
 from ..database import SessionLocal
 from ..schemas import (
     FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
+    FollowUpSignatureRequest,
     FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_IN_PROGRESS,
     FOLLOWUP_STATUS_COMPLETED,
 )
@@ -90,12 +91,13 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
                    db: Session = Depends(get_db)):
     """确认审核随访记录
 
-    写入审核追溯信息：审核人、审核时间、审核意见、AI快照。
+    写入审核追溯信息 + 生成归档文档快照。
     """
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
 
+    # 审核追溯
     record.status = confirm.status
     record.reviewed_by = confirm.reviewer_id
     record.reviewed_at = datetime.utcnow()
@@ -103,13 +105,50 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
         record.review_comment = confirm.review_comment
     if confirm.ai_snapshot:
         record.ai_snapshot = confirm.ai_snapshot
+
+    # 生成归档文档快照 + 纯文本
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    patient_name = (pregnant.display_name if pregnant else "未知")
+    gest_week = record.gestational_week or "?"
+    follow_up_date = record.follow_up_date.strftime("%Y-%m-%d") if record.follow_up_date else "?"
+
+    record_dict = {
+        "status": record.status,
+        "classification": record.classification or "normal",
+        "chief_complaint": record.chief_complaint,
+        "self_reported_data": record.self_reported_data or {},
+        "obstetric_exam": record.obstetric_exam or {},
+        "lab_results": record.lab_results or {},
+        "summary": record.summary,
+        "health_education": record.health_education or [],
+        "guidance_tags": record.guidance_tags or [],
+        "referral": record.referral,
+        "next_followup_date": str(record.next_followup_date) if record.next_followup_date else "",
+        "reviewed_by": record.reviewed_by,
+        "reviewed_at": str(record.reviewed_at) if record.reviewed_at else "",
+        "review_comment": record.review_comment,
+        "ai_snapshot": record.ai_snapshot or {},
+    }
+
+    try:
+        snapshot, text = followup_service.generate_record_document(
+            patient_name=patient_name,
+            gest_week=gest_week,
+            follow_up_date=follow_up_date,
+            record=record_dict,
+        )
+        record.record_snapshot = snapshot
+        record.record_text = text
+    except Exception as e:
+        from loguru import logger
+        logger.warning("归档文档生成失败: {}", e)
+
     db.commit()
     db.refresh(record)
 
-    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
     return FollowUpRecordResponse(
         **{c.name: getattr(record, c.name) for c in record.__table__.columns},
-        patient_name=pregnant.display_name if pregnant else "未知"
+        patient_name=patient_name,
     )
 
 
@@ -274,6 +313,53 @@ async def update_record(record_id: str, data: dict, db: Session = Depends(get_db
             setattr(record, key, value)
     db.commit()
     return {"message": "更新成功"}
+
+
+@router.get("/records/{record_id}/document")
+def get_record_document(record_id: str):
+    """获取随访记录的归档文档
+
+    返回：record_snapshot（结构化快照）+ record_text（纯文本）+ signature_data（签名）
+    """
+    from ..schemas import FollowUpRecordResponse
+    db = SessionLocal()
+    try:
+        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+        if not record:
+            raise HTTPException(404, "记录不存在")
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+        return {
+            "record_id": str(record.id),
+            "patient_name": pregnant.display_name if pregnant else "未知",
+            "snapshot": record.record_snapshot or {},
+            "text": record.record_text or "",
+            "signature": record.signature_data or {},
+            "has_document": bool(record.record_snapshot),
+        }
+    finally:
+        db.close()
+
+
+@router.post("/records/{record_id}/sign")
+def sign_record(record_id: str, req: FollowUpSignatureRequest):
+    """提交手写签名
+
+    将签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
+    """
+    db = SessionLocal()
+    try:
+        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+        if not record:
+            raise HTTPException(404, "记录不存在")
+        record.signature_data = {
+            "image": req.signature_image,
+            "signer": req.signer_name,
+            "signed_at": datetime.utcnow().isoformat(),
+        }
+        db.commit()
+        return {"message": "签名已保存", "signed_at": record.signature_data["signed_at"]}
+    finally:
+        db.close()
 
 
 # ==================== 孕妇端随访对话 ====================

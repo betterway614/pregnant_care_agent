@@ -112,14 +112,17 @@ class NurseSafetyGuardrail(MedicalSafetyGuardrail):
 
 
 class DoctorDraftGuardrail:
-    """医生端草稿输出安全 - 允许更多医学表述，禁止确定性结论"""
+    """医生端草稿输出安全 - 允许医疗建议/诊疗指导，禁止确定性诊断结论"""
 
     __name__ = "DoctorDraftGuardrail"
 
     BLOCKED_PATTERNS = [
-        "确诊", "确定诊断",
-        "无需进一步检查",
+        "确诊", "确定诊断", "明确诊断",
+        "无需进一步检查", "无需进一步评估",
         "没有风险", "完全正常",
+        "诊断为", "诊断是",
+        "可以排除", "排除诊断",
+        "治疗方案为", "治疗方案确定",
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -133,7 +136,7 @@ class DoctorDraftGuardrail:
             return None
         for pattern in self.BLOCKED_PATTERNS:
             if pattern in response:
-                return "以上分析需医生审核确认，不能替代临床决策。"
+                return "以上分析为AI辅助生成，不构成确定性诊断结论，需医生审核确认。"
         return None
 
 
@@ -147,11 +150,22 @@ PATIENT_SAFETY_PATTERNS = [
     "治疗方案如下", "请按以下方案",
 ]
 
-# 医生工作台草稿允许更多医学内容，但仍禁止确定性诊断
+# 医生工作台草稿允许医疗建议/诊疗指导，但仍禁止确定性诊断
 DOCTOR_SAFETY_PATTERNS = [
-    "确诊", "确定诊断",
-    "无需进一步检查",
+    "确诊", "确定诊断", "明确诊断",
+    "无需进一步检查", "无需进一步评估",
     "没有风险", "完全正常",
+    "诊断为", "诊断是",
+    "可以排除", "排除诊断",
+    "治疗方案为", "治疗方案确定",
+]
+
+# 医嘱内容过滤：禁止诊断性结论，只允许医疗建议/诊疗指导
+ORDER_SAFETY_PATTERNS = [
+    "确诊", "确定诊断", "明确诊断",
+    "诊断为", "诊断是",
+    "用药方案已确定",
+    "治疗方案为", "治疗方案确定",
 ]
 
 
@@ -187,4 +201,15 @@ def apply_doctor_draft_safety(text: str) -> str:
     result = check_output_safety(text, DOCTOR_SAFETY_PATTERNS)
     if result:
         return text + f"\n\n⚠️ {result}。以上分析需医生审核确认。"
+    return text
+
+
+def apply_order_draft_safety(text: str) -> str:
+    """医嘱内容安全检查，违规时追加提醒
+
+    医嘱只能给出医疗建议/诊疗指导，不能包含确定性诊断结论。
+    """
+    result = check_output_safety(text, ORDER_SAFETY_PATTERNS)
+    if result:
+        return text + f"\n\n⚠️ {result}。医嘱应为医疗建议和诊疗指导，需医生审核修改后签署。"
     return text

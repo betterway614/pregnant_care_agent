@@ -69,6 +69,10 @@ def _ensure_followup_columns():
             ("reviewed_at", "TIMESTAMP", None),
             ("review_comment", "TEXT", None),
             ("ai_snapshot", "JSON", None),
+            # 归档文档
+            ("record_snapshot", "JSON", None),
+            ("record_text", "TEXT", None),
+            ("signature_data", "JSON", None),
         ]
         added = 0
         with engine.connect() as conn:
@@ -86,6 +90,38 @@ def _ensure_followup_columns():
             logger.info("FollowUpRecord 归档列已存在，跳过迁移")
     except Exception as e:
         logger.warning("FollowUpRecord 列迁移跳过: {}", e)
+
+
+def _ensure_order_columns():
+    """为已有 SQLite 数据库添加 MedicalOrder 签署增强新列（幂等）
+
+    新增手写签名、归档文档、医生修改追踪等字段。
+    """
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("medical_orders")]
+        new_cols = [
+            ("signature_data", "JSON", None),
+            ("order_snapshot", "JSON", None),
+            ("order_text", "TEXT", None),
+            ("modified_by_doctor", "BOOLEAN", "0"),
+            ("doctor_notes", "TEXT", None),
+        ]
+        added = 0
+        with engine.connect() as conn:
+            for col_name, col_type, default_val in new_cols:
+                if col_name not in columns:
+                    sql = f"ALTER TABLE medical_orders ADD COLUMN {col_name} {col_type}"
+                    if default_val:
+                        sql += f" DEFAULT {default_val}"
+                    conn.execute(sa.text(sql))
+                    added += 1
+            conn.commit()
+        if added:
+            logger.info("MedicalOrder 签署增强列迁移完成: 新增 {} 列", added)
+    except Exception as e:
+        logger.warning("MedicalOrder 列迁移跳过: {}", e)
 
 
 @asynccontextmanager
@@ -112,6 +148,8 @@ async def lifespan(app: FastAPI):
     _ensure_fgr_columns()
     # 对已有 SQLite 数据库添加 FollowUpRecord 归档新列
     _ensure_followup_columns()
+    # 对已有 SQLite 数据库添加 MedicalOrder 签署增强新列
+    _ensure_order_columns()
 
     # FGR 模式：加载真实预测模型
     if settings.fgr_mode:
@@ -149,6 +187,10 @@ app = FastAPI(
     description="AI-Care 孕期智能管理平台 API",
     lifespan=lifespan,
 )
+
+# 请求超时中间件（300s，跳过流式端点）
+from .core.timeout_middleware import TimeoutMiddleware
+app.add_middleware(TimeoutMiddleware, timeout=300)
 
 # CORS 配置
 app.add_middleware(

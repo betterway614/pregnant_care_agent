@@ -98,9 +98,22 @@ export interface FollowUpRecord {
   follow_up_date?: string
   self_reported_data: Record<string, any>
   chief_complaint?: string
+  obstetric_exam: Record<string, any>
+  lab_results: Record<string, any>
+  classification: string
   health_education: string[]
+  guidance_tags: Array<{ tag: string; content: string }>
+  referral: Record<string, any> | null
+  next_followup_date?: string
   status: string
   summary?: string
+  reviewed_by?: string
+  reviewed_at?: string
+  review_comment?: string
+  ai_snapshot: Record<string, any>
+  record_snapshot: Record<string, any>
+  record_text: string | null
+  signature_data: Record<string, any>
   created_at?: string
   patient_name?: string
 }
@@ -160,7 +173,24 @@ export interface MedicalOrder {
   source: string
   status: string
   created_at?: string
+  signed_at?: string
   patient_name?: string
+  created_by?: string
+  signature_data?: { image?: string; signer?: string; signed_at?: string }
+  order_snapshot?: Record<string, any>
+  order_text?: string
+  modified_by_doctor?: boolean
+  doctor_notes?: string
+}
+
+// 医嘱文档
+export interface OrderDocument {
+  order_id: string
+  patient_name: string
+  snapshot: Record<string, any>
+  text: string
+  signature: { image?: string; signer?: string; signed_at?: string }
+  has_document: boolean
 }
 
 // 统计
@@ -245,7 +275,16 @@ export interface FollowUpHistoryRecord {
   summary: string | null
   chief_complaint: string | null
   self_reported_data: Record<string, any>
+  obstetric_exam: Record<string, any>
+  lab_results: Record<string, any>
+  classification: string
   health_education: string[]
+  guidance_tags: Array<{ tag: string; content: string }>
+  referral: Record<string, any> | null
+  next_followup_date: string | null
+  reviewed_by?: string
+  reviewed_at?: string
+  review_comment?: string
 }
 
 export interface FollowUpHistoryResponse {

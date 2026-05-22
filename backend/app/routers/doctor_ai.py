@@ -61,12 +61,8 @@ async def doctor_analyze(pregnant_id: str, req: DoctorAnalyzeRequest = None):
         result.risk_summary = apply_doctor_draft_safety(result.risk_summary or "")
         result.suggested_orders = apply_doctor_draft_safety(result.suggested_orders or "")
 
-        # 分析完成后自动生成医嘱草稿
-        if result.suggested_orders:
-            tool_generate_medical_order(
-                db, pregnant_id, result.suggested_orders,
-                order_type="standard"
-            )
+        # 分析完成后不再自动创建医嘱草稿（去重：统一由 POST /orders/generate 负责）
+        # suggested_orders 仅作为分析结果中的文本建议展示
         return result
     finally:
         db.close()
@@ -176,7 +172,10 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
         )
 
         agent = get_doctor_agent()
-        response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
+        response = await asyncio.wait_for(
+            agent.arun(input=prompt, user_id=pregnant.pregnant_id),
+            timeout=120,
+        )
         data = extract_structured_content(response.content)
         if not data:
             return None
@@ -415,47 +414,8 @@ def tool_record_clinical_note(db, pregnant_id: str, content: str) -> dict:
 
 
 async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: str) -> str:
-    """使用多模态 LLM 转录音频为文本（预处理步骤）。"""
-    from ..core.agno_client import get_agno_model
-    from openai import AsyncOpenAI
-
-    model_info = get_agno_model(role)
-    messages = [
-        {"role": "system", "content": "你是一个语音识别助手。请将用户的语音内容准确转录为文字，只输出转录文本，不要添加任何解释或补充。"},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "请将这段语音转录为文字"},
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": audio_data,
-                        "format": audio_format or "webm",
-                    },
-                },
-            ],
-        },
-    ]
-
-    try:
-        if hasattr(model_info, 'id') and not hasattr(model_info, 'host'):
-            client = AsyncOpenAI(
-                api_key=settings.llm_api_key,
-                base_url=settings.llm_base_url,
-            )
-            resp = await client.chat.completions.create(
-                model=settings.llm_model,
-                messages=messages,
-                max_tokens=500,
-            )
-            text = resp.choices[0].message.content or ""
-            return text.strip() or "（语音识别为空）"
-        else:
-            return "（本地模型不支持语音识别，请切换到云模式或使用文字输入）"
-    except Exception as e:
-        from loguru import logger
-        logger.error("[ASR] LLM 转录失败: {}", e)
-        return "（语音识别失败，请重试或使用文字输入）"
+    """已移除：LLM 不适合做 ASR，请使用 cloud 或 local 模式的专用 ASR 服务。"""
+    return "（语音识别服务不可用，请使用文字输入）"
 
 
 @router.post("/chat/stream")
@@ -467,21 +427,15 @@ async def doctor_chat_stream(req: dict):
     audio_data = req.get("audio_data")
     audio_format = req.get("audio_format", "webm")
 
-    # ASR 预处理：音频输入转文本
+    # ASR 预处理：音频输入转文本（使用专用 ASR 服务）
     if message_type == "AUDIO" and audio_data:
-        from ..config import get_asr_mode
         from ..services.asr_service import asr_service
 
-        asr_mode = get_asr_mode("doctor")
-        if asr_mode in ("cloud", "local"):
-            transcribed = await asr_service.transcribe(audio_data, audio_format, "doctor")
-            if transcribed:
-                message = transcribed
-            else:
-                message = "（语音识别失败，请重试或使用文字输入）"
-        elif asr_mode == "llm":
-            # 使用多模态 LLM 转录音频为文本（预处理步骤）
-            message = await _transcribe_audio_with_llm(audio_data, audio_format, "doctor")
+        transcribed = await asr_service.transcribe(audio_data, audio_format, "doctor")
+        if transcribed:
+            message = transcribed
+        else:
+            message = "（语音识别失败，请重试或使用文字输入）"
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)

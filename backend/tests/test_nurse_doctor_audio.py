@@ -43,8 +43,10 @@ class TestNurseChatStreamAudioInput:
 
         mock_agent.arun = mock_stream
 
-        with patch("app.config.get_asr_mode", return_value="llm"), \
-             patch("app.routers.nurse_ai._transcribe_audio_with_llm", new_callable=AsyncMock, return_value="测试转录文本"), \
+        mock_asr = MagicMock()
+        mock_asr.transcribe = AsyncMock(return_value="测试转录文本")
+
+        with patch.dict("sys.modules", {"app.services.asr_service": MagicMock(asr_service=mock_asr)}), \
              patch("app.core.agno_medical_agents.get_nurse_chat_agent", return_value=mock_agent):
             resp = client.post("/api/v1/nurse/chat/stream", json={
                 "message": "",
@@ -93,35 +95,13 @@ class TestDoctorChatStreamAudioInput:
         assert "/api/v1/doctor/chat/stream" in routes
 
 
-class TestTranscribeAudioWithLLM:
-    """LLM 音频转录辅助函数测试"""
+class TestTranscribeAudioWithLLMDeprecated:
+    """_transcribe_audio_with_llm 已废弃，保留兼容性存根测试"""
 
     @pytest.mark.asyncio
-    async def test_transcribe_returns_string(self):
-        """_transcribe_audio_with_llm 始终返回字符串（不抛异常）"""
+    async def test_transcribe_returns_deprecated_message(self):
+        """废弃函数返回不可用提示"""
         from app.routers.nurse_ai import _transcribe_audio_with_llm
 
-        assert callable(_transcribe_audio_with_llm)
-
-        # 无论什么情况，函数都应返回字符串（成功转录或降级提示）
-        with patch("app.routers.nurse_ai.settings") as mock_settings:
-            mock_settings.llm_api_key = "test-key"
-            mock_settings.llm_base_url = "https://api.test.com/v1"
-            mock_settings.llm_model = "test-model"
-
-            result = await _transcribe_audio_with_llm("dGVzdA==", "webm", "nurse")
-            assert isinstance(result, str)
-            assert len(result) > 0
-
-    @pytest.mark.asyncio
-    async def test_transcribe_local_model_returns_fallback(self):
-        """本地模型不支持多模态时返回降级提示"""
-        from app.routers.nurse_ai import _transcribe_audio_with_llm
-
-        mock_model = MagicMock(spec=[])  # 无 id 和 host 属性
-        mock_model.host = "http://localhost:11434"
-
-        with patch("app.core.agno_client.get_agno_model", return_value=mock_model), \
-             patch("app.routers.nurse_ai.settings"):
-            result = await _transcribe_audio_with_llm("dGVzdA==", "webm", "doctor")
-            assert "本地模型" in result or "不支持" in result
+        result = await _transcribe_audio_with_llm("dGVzdA==", "webm", "nurse")
+        assert "不可用" in result or "文字输入" in result

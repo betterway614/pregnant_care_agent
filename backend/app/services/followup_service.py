@@ -15,6 +15,27 @@
 import re
 from typing import Optional
 
+# 字段标签映射（用于归档文档生成）
+FIELD_LABELS = {
+    "weight": "体重", "bp": "血压", "fetal_movement": "胎动", "diet": "饮食",
+    "mood": "情绪", "sleep": "睡眠", "stress": "压力", "medication": "用药",
+    "nausea": "孕吐", "feeling": "感受", "blood_sugar_fasting": "空腹血糖",
+    "blood_sugar_postprandial": "餐后血糖", "blood_sugar_2h": "餐后血糖",
+    "sleep_quality": "睡眠质量", "exercise": "运动", "edema": "水肿",
+    "support": "社会支持", "coping": "应对方式",
+}
+
+EXAM_LABELS = {
+    "fundal_height_cm": "宫高(cm)", "abdominal_circumference_cm": "腹围(cm)",
+    "fetal_position": "胎位", "fetal_heart_rate_bpm": "胎心率(bpm)",
+    "blood_pressure": "血压(mmHg)",
+}
+
+LAB_LABELS = {
+    "hemoglobin_g_L": "血红蛋白(g/L)", "urine_protein": "尿蛋白",
+    "blood_sugar_fasting": "空腹血糖(mmol/L)", "blood_sugar_2h": "餐后血糖(mmol/L)",
+}
+
 
 # 随访模板
 FOLLOWUP_TEMPLATES = {
@@ -342,6 +363,135 @@ class FollowUpService:
             personalized.append("心理健康提示：适当倾诉压力，保持社交活动，必要时寻求专业心理支持")
 
         return personalized
+
+
+    def generate_record_document(
+        self, patient_name: str, gest_week: str, follow_up_date: str,
+        record: dict,
+    ) -> tuple[dict, str]:
+        """确认时生成归档文档：结构化快照 + 格式化纯文本
+
+        Args:
+            patient_name: 孕妇展示名称
+            gest_week: 孕周字符串
+            follow_up_date: 随访日期
+            record: FollowUpRecord 各字段的字典
+
+        Returns:
+            (record_snapshot, record_text)
+            - record_snapshot: 全量字段冻结快照 (JSON dict)
+            record_text: 格式化纯文本 (用于检索/打印/导出)
+        """
+        from datetime import datetime as _dt
+
+        classification = record.get("classification", "normal")
+        cls_label = {"normal": "正常", "abnormal": "异常", "critical": "高危"}.get(classification, classification)
+        status = record.get("status", "confirmed")
+        status_label = {
+            "draft": "草稿", "in_progress": "进行中",
+            "completed": "已完成", "confirmed": "已确认", "archived": "已归档",
+        }.get(status, status)
+
+        # ---- 结构化快照 ----
+        snapshot = {
+            "patient_name": patient_name,
+            "gestational_week": gest_week,
+            "follow_up_date": follow_up_date,
+            "status": status,
+            "classification": classification,
+            "chief_complaint": record.get("chief_complaint"),
+            "self_reported_data": record.get("self_reported_data", {}),
+            "obstetric_exam": record.get("obstetric_exam", {}),
+            "lab_results": record.get("lab_results", {}),
+            "summary": record.get("summary"),
+            "health_education": record.get("health_education", []),
+            "guidance_tags": record.get("guidance_tags", []),
+            "referral": record.get("referral"),
+            "next_followup_date": str(record.get("next_followup_date", "")),
+            "reviewed_by": record.get("reviewed_by"),
+            "reviewed_at": str(record.get("reviewed_at", "")),
+            "review_comment": record.get("review_comment"),
+            "ai_snapshot": record.get("ai_snapshot", {}),
+            "generated_at": _dt.utcnow().isoformat(),
+        }
+
+        # ---- 格式化纯文本 ----
+        lines = []
+        lines.append("=" * 50)
+        lines.append("随访记录单".center(40))
+        lines.append("=" * 50)
+        lines.append(f"孕妇：{patient_name}  孕周：{gest_week}  日期：{follow_up_date}")
+        lines.append(f"状态：{status_label}  分类：{cls_label}")
+        lines.append("")
+
+        # S
+        lines.append("S 主观数据")
+        srd = record.get("self_reported_data", {})
+        if srd:
+            items = [f"  {FIELD_LABELS.get(k, k)}：{v}" for k, v in srd.items()]
+            for i in range(0, len(items), 2):
+                lines.append("    ".join(items[i:i+2]))
+        cc = record.get("chief_complaint")
+        if cc:
+            lines.append(f"  主诉：{cc}")
+        lines.append("")
+
+        # O
+        lines.append("O 客观检查")
+        oe = record.get("obstetric_exam", {})
+        if oe:
+            lines.append("  产科检查")
+            items = [f"    {EXAM_LABELS.get(k, k)}：{v}" for k, v in oe.items()]
+            for i in range(0, len(items), 2):
+                lines.append("    ".join(items[i:i+2]))
+        lr = record.get("lab_results", {})
+        if lr:
+            lines.append("  化验结果")
+            items = [f"    {LAB_LABELS.get(k, k)}：{v}" for k, v in lr.items()]
+            for i in range(0, len(items), 2):
+                lines.append("    ".join(items[i:i+2]))
+        lines.append("")
+
+        # A
+        lines.append("A 评估")
+        summary = record.get("summary", "暂无评估")
+        lines.append(f"  {summary}")
+        lines.append("")
+
+        # P
+        lines.append("P 计划")
+        gt = record.get("guidance_tags", [])
+        if gt:
+            for g in gt:
+                lines.append(f"  [{g.get('tag', '')}] {g.get('content', '')}")
+        nfd = record.get("next_followup_date")
+        if nfd:
+            lines.append(f"  下次随访日期：{nfd}")
+        ref = record.get("referral")
+        if ref and ref.get("has_referral"):
+            lines.append(f"  转诊：{ref.get('reason', '')} → {ref.get('institution', '')} {ref.get('department', '')}")
+        lines.append("")
+
+        # 审核信息
+        rb = record.get("reviewed_by")
+        if rb:
+            lines.append("审核信息")
+            lines.append(f"  审核人：{rb}")
+            ra = record.get("reviewed_at")
+            if ra:
+                lines.append(f"  审核时间：{ra}")
+            rc = record.get("review_comment")
+            if rc:
+                lines.append(f"  审核意见：{rc}")
+            lines.append("")
+
+        # 签名栏（日期预填，签名区域由前端渲染）
+        lines.append("-" * 50)
+        lines.append(f"随访护士签名：__________________  日期：{follow_up_date}")
+        lines.append("=" * 50)
+
+        record_text = "\n".join(lines)
+        return snapshot, record_text
 
 
 followup_service = FollowUpService()

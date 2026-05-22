@@ -4,6 +4,7 @@ from typing import Optional, Any
 from uuid import UUID
 from enum import Enum
 from pydantic import BaseModel, Field
+from pydantic import field_validator
 
 
 class HealthDataSource(str, Enum):
@@ -196,10 +197,31 @@ class FollowUpRecordResponse(BaseModel):
     reviewed_at: Optional[datetime] = None
     review_comment: Optional[str] = None
     ai_snapshot: dict = {}
+    record_snapshot: dict = {}
+    record_text: Optional[str] = None
+    signature_data: dict = {}
     created_at: Optional[datetime] = None
     patient_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+    @field_validator(
+        "self_reported_data", "obstetric_exam", "lab_results",
+        "ai_snapshot", "record_snapshot", "signature_data",
+        mode="before",
+    )
+    @classmethod
+    def _none_to_dict(cls, v: Any) -> Any:
+        if v is None:
+            return {}
+        return v
+
+    @field_validator("health_education", "guidance_tags", mode="before")
+    @classmethod
+    def _none_to_list(cls, v: Any) -> Any:
+        if v is None:
+            return []
+        return v
 
 
 class FollowUpConfirm(BaseModel):
@@ -207,6 +229,12 @@ class FollowUpConfirm(BaseModel):
     reviewer_id: Optional[str] = None        # 审核护士ID
     review_comment: Optional[str] = None      # 审核意见
     ai_snapshot: Optional[dict] = None        # 审核时 AI 分析报告快照
+
+
+class FollowUpSignatureRequest(BaseModel):
+    """签名提交请求"""
+    signature_image: str = Field(description="手写签名的 base64 PNG 图片数据")
+    signer_name: str = Field(description="签名者姓名")
 
 
 class FollowUpTrigger(BaseModel):
@@ -300,9 +328,17 @@ class OrderResponse(BaseModel):
 
 class OrderSignRequest(BaseModel):
     doctor_id: str
+    signature_image: Optional[str] = None  # base64 PNG 手写签名
+    signer_name: Optional[str] = None  # 签名者姓名
 
 
-# === Dashboard ===
+class OrderDocumentResponse(BaseModel):
+    order_id: str
+    patient_name: str
+    snapshot: dict = {}
+    text: str = ""
+    signature: dict = {}
+    has_document: bool = False
 class DashboardStats(BaseModel):
     total_pregnant: int = 0
     pending_alerts: int = 0
@@ -470,6 +506,16 @@ class FollowUpHistoryRecord(BaseModel):
     guidance_tags: list = []
     referral: Optional[dict] = None
     next_followup_date: str | None = None
+
+    @field_validator("self_reported_data", "obstetric_exam", "lab_results", mode="before")
+    @classmethod
+    def _none_to_dict(cls, v: Any) -> Any:
+        return v if v is not None else {}
+
+    @field_validator("health_education", "guidance_tags", mode="before")
+    @classmethod
+    def _none_to_list(cls, v: Any) -> Any:
+        return v if v is not None else []
 
 
 class FollowUpHistoryResponse(BaseModel):

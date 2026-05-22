@@ -76,15 +76,21 @@
                   孕妇详情
                 </el-button>
                 <template v-if="isAlertPending(row.status)">
-                  <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'confirm')">
-                    确认
-                  </el-button>
-                  <el-button type="danger" size="small" @click.stop="handleReview(row, 'escalate')">
-                    升级
-                  </el-button>
-                  <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="handleReview(row, 'dismiss')">
-                    驳回
-                  </el-button>
+                  <el-tooltip content="确认收到，不通知医生" placement="top">
+                    <el-button type="success" size="small" @click.stop="handleReview(row, 'confirm')">
+                      确认
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip :content="row.level === 'RED' ? '通知医生紧急处理' : '升级为高危并通知医生'" placement="top">
+                    <el-button :type="row.level === 'RED' ? 'danger' : 'warning'" size="small" @click.stop="handleReview(row, 'escalate')">
+                      {{ row.level === 'RED' ? '通知医生' : '升级给医生' }}
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip content="驳回此预警" placement="top">
+                    <el-button type="info" size="small" @click.stop="handleReview(row, 'dismiss')">
+                      驳回
+                    </el-button>
+                  </el-tooltip>
                 </template>
                 <el-tag v-else size="small" effect="plain" :type="statusTagType(row.status)">
                   {{ statusLabel(row.status) }}
@@ -305,16 +311,28 @@ async function fetchAlerts() {
 
 /** 处理预警（确认/驳回/升级），action 与后端 AlertReviewRequest 一致 */
 async function handleReview(alert: Alert, action: 'confirm' | 'dismiss' | 'escalate') {
-  const actionMap: Record<string, string> = { confirm: '确认', dismiss: '驳回', escalate: '升级' }
-  const actionText = actionMap[action] || action
-  const msgType = action === 'escalate' ? 'warning' : action === 'confirm' ? 'primary' : 'warning'
+  const isAlreadyRed = alert.level === 'RED'
+  const actionMap: Record<string, { text: string; desc: string; type: string }> = {
+    confirm: { text: '确认', desc: '确认收到此预警（不会通知医生）', type: 'success' },
+    dismiss: { text: '驳回', desc: '驳回此预警，标记为无效', type: 'warning' },
+    escalate: {
+      text: isAlreadyRed ? '通知医生' : '升级给医生',
+      desc: isAlreadyRed
+        ? '将此红色高危预警通过实时通知推送给医生'
+        : '升级为红色高危预警并通过实时通知推送给医生',
+      type: isAlreadyRed ? 'danger' : 'warning',
+    },
+  }
+  const { text, desc, type } = actionMap[action]
   try {
     await ElMessageBox.confirm(
       action === 'escalate'
-        ? `确定升级该预警？升级后级别将变为红色高危并通知医生。`
-        : `确定${actionText}该预警？`,
-      `${actionText}预警`,
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: msgType }
+        ? isAlreadyRed
+          ? `确定通知医生处理此红色高危预警？\n\n操作后：\n- 预警状态变为"已升级"\n- 将通过实时通知推送给医生端`
+          : `确定升级该预警？\n\n升级后：\n- 预警级别将变为红色高危\n- 将通过实时通知推送给医生端`
+        : `确定${text}该预警？\n\n${desc}`,
+      `${text}预警`,
+      { confirmButtonText: '确定', cancelButtonText: '取消', type }
     )
   } catch {
     return
@@ -322,12 +340,12 @@ async function handleReview(alert: Alert, action: 'confirm' | 'dismiss' | 'escal
 
   try {
     await alertApi.review(alert.id, action)
-    ElMessage.success(`${actionText}成功`)
+    ElMessage.success(`${text}成功`)
     await fetchAlerts()
   } catch (err: any) {
-    const msg = err.response?.data?.detail || err.message || `${actionText}失败`
+    const msg = err.response?.data?.detail || err.message || `${text}失败`
     ElMessage.error(msg)
-    console.error(`${actionText}预警失败:`, err)
+    console.error(`${text}预警失败:`, err)
   }
 }
 

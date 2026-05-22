@@ -386,3 +386,237 @@ class TestPersonalizedHealthEducation:
 
         htn = followup_service.generate_health_education(28, ["高血压"])
         assert any("血压" in item for item in htn)
+
+
+# ==================== 改进8: 归档文档生成 ====================
+
+class TestRecordDocument:
+    """测试归档文档生成（record_snapshot + record_text）"""
+
+    def test_generate_record_document_basic(self):
+        from app.services.followup_service import followup_service
+
+        record = {
+            "status": "confirmed",
+            "classification": "normal",
+            "chief_complaint": "无",
+            "self_reported_data": {"weight": "65.6", "fetal_movement": "8"},
+            "obstetric_exam": {"fundal_height_cm": 25.0, "fetal_heart_rate_bpm": 140},
+            "lab_results": {"hemoglobin_g_L": 120.0, "urine_protein": "阴性"},
+            "summary": "孕28周随访，各项指标正常",
+            "guidance_tags": [{"tag": "营养", "content": "均衡饮食"}],
+            "next_followup_date": "2026-06-15",
+            "reviewed_by": "nurse_WANG",
+            "reviewed_at": "2026-05-20",
+            "review_comment": "确认通过",
+            "ai_snapshot": {},
+        }
+
+        snapshot, text = followup_service.generate_record_document(
+            patient_name="小明", gest_week="28+3",
+            follow_up_date="2026-05-20", record=record,
+        )
+
+        # 快照检查
+        assert snapshot["patient_name"] == "小明"
+        assert snapshot["gestational_week"] == "28+3"
+        assert snapshot["classification"] == "normal"
+        assert "weight" in snapshot["self_reported_data"]
+
+        # 纯文本检查
+        assert "小明" in text
+        assert "28+3" in text
+        assert "S 主观数据" in text
+        assert "O 客观检查" in text
+        assert "A 评估" in text
+        assert "P 计划" in text
+        assert "审核信息" in text
+        assert "随访护士签名" in text
+        assert "[营养] 均衡饮食" in text
+        assert "宫高" in text
+
+    def test_generate_record_document_abnormal(self):
+        from app.services.followup_service import followup_service
+
+        record = {
+            "status": "confirmed",
+            "classification": "critical",
+            "self_reported_data": {"bp": "155/100"},
+            "obstetric_exam": {"blood_pressure": "155/100"},
+            "lab_results": {},
+            "summary": "血压异常",
+            "guidance_tags": [{"tag": "生活", "content": "低盐饮食"}],
+            "reviewed_by": "nurse_ZHANG",
+            "review_comment": "已复核，建议转诊",
+            "referral": {"has_referral": True, "reason": "血压持续偏高", "institution": "妇幼保健院", "department": "高危门诊"},
+        }
+
+        snapshot, text = followup_service.generate_record_document(
+            patient_name="小红", gest_week="32+0",
+            follow_up_date="2026-05-20", record=record,
+        )
+
+        assert snapshot["classification"] == "critical"
+        assert "高危" in text
+        assert "转诊" in text
+        assert "妇幼保健院" in text
+        assert "已复核" in text
+
+    def test_generate_record_document_empty(self):
+        from app.services.followup_service import followup_service
+
+        record = {"status": "draft", "classification": "normal", "self_reported_data": {}, "obstetric_exam": {}}
+        snapshot, text = followup_service.generate_record_document("测试", "20+0", "2026-01-01", record)
+
+        assert "S 主观数据" in text
+        assert "O 客观检查" in text
+        assert "随访护士签名" in text
+
+    def test_record_text_has_signature_line(self):
+        """验证归档文本包含签名栏"""
+        from app.services.followup_service import followup_service
+
+        _, text = followup_service.generate_record_document(
+            "测试", "20+0", "2026-01-01",
+            {"status": "confirmed", "self_reported_data": {}, "obstetric_exam": {}, "lab_results": {}},
+        )
+        assert "随访护士签名：__________________" in text
+        # 不应包含孕妇签名
+        assert "孕妇签名" not in text
+
+
+# ==================== 改进8: Pydantic None转换器 ====================
+
+class TestSchemaNoneConversions:
+    """测试 Pydantic Schema 的 None→默认值 转换器"""
+
+    def test_none_dict_fields_convert_to_empty_dict(self):
+        from app.schemas import FollowUpRecordResponse
+        r = FollowUpRecordResponse(
+            id="00000000-0000-0000-0000-000000000001",
+            pregnant_id="P001",
+            self_reported_data=None,
+            obstetric_exam=None,
+            lab_results=None,
+            ai_snapshot=None,
+            record_snapshot=None,
+            signature_data=None,
+        )
+        assert r.self_reported_data == {}
+        assert r.obstetric_exam == {}
+        assert r.lab_results == {}
+        assert r.ai_snapshot == {}
+        assert r.record_snapshot == {}
+        assert r.signature_data == {}
+
+    def test_none_list_fields_convert_to_empty_list(self):
+        from app.schemas import FollowUpRecordResponse
+        r = FollowUpRecordResponse(
+            id="00000000-0000-0000-0000-000000000001",
+            pregnant_id="P001",
+            health_education=None,
+            guidance_tags=None,
+        )
+        assert r.health_education == []
+        assert r.guidance_tags == []
+
+    def test_valid_values_pass_through(self):
+        from app.schemas import FollowUpRecordResponse
+        r = FollowUpRecordResponse(
+            id="00000000-0000-0000-0000-000000000001",
+            pregnant_id="P001",
+            self_reported_data={"weight": "65"},
+            health_education=["指导1"],
+            guidance_tags=[{"tag": "营养", "content": "test"}],
+        )
+        assert r.self_reported_data == {"weight": "65"}
+        assert r.health_education == ["指导1"]
+        assert len(r.guidance_tags) == 1
+
+    def test_history_record_none_conversions(self):
+        from app.schemas import FollowUpHistoryRecord
+        r = FollowUpHistoryRecord(
+            id="test",
+            self_reported_data=None,
+            obstetric_exam=None,
+            lab_results=None,
+            health_education=None,
+            guidance_tags=None,
+        )
+        assert r.self_reported_data == {}
+        assert r.obstetric_exam == {}
+        assert r.health_education == []
+        assert r.guidance_tags == []
+
+
+# ==================== 改进8: 归档接口集成测试 ====================
+
+class TestArchiveEndpoints:
+    """测试归档相关 API 端点"""
+
+    def test_sign_record_schema(self):
+        """验证签名请求 Schema"""
+        from app.schemas import FollowUpSignatureRequest
+        req = FollowUpSignatureRequest(
+            signature_image="data:image/png;base64,iVBOR...",
+            signer_name="护士A",
+        )
+        assert req.signature_image.startswith("data:image")
+        assert req.signer_name == "护士A"
+
+    def test_followup_confirm_schema(self):
+        """验证审核请求 Schema 支持归档参数"""
+        from app.schemas import FollowUpConfirm
+        c = FollowUpConfirm(
+            status="confirmed",
+            reviewer_id="nurse_001",
+            review_comment="确认通过",
+            ai_snapshot={"warm_summary": "正常"},
+        )
+        assert c.reviewer_id == "nurse_001"
+        assert c.review_comment == "确认通过"
+        assert c.ai_snapshot["warm_summary"] == "正常"
+
+    def test_followup_record_response_has_archive_fields(self):
+        """验证响应 Schema 包含所有归档字段"""
+        from app.schemas import FollowUpRecordResponse
+        fields = set(FollowUpRecordResponse.model_fields.keys())
+        assert "record_snapshot" in fields
+        assert "record_text" in fields
+        assert "signature_data" in fields
+        assert "obstetric_exam" in fields
+        assert "lab_results" in fields
+        assert "classification" in fields
+        assert "guidance_tags" in fields
+        assert "reviewed_by" in fields
+
+    def test_document_endpoint_returns_correct_structure(self):
+        """验证 /document 端点返回正确结构（mock）"""
+        from app.routers.followup import get_record_document
+        from unittest.mock import MagicMock, patch
+        from uuid import uuid4
+
+        mock_record = MagicMock()
+        mock_record.id = uuid4()
+        mock_record.pregnant_id = "P001"
+        mock_record.record_snapshot = {"patient_name": "小明", "classification": "normal"}
+        mock_record.record_text = "随访记录单\n孕妇：小明"
+        mock_record.signature_data = {"image": "base64...", "signer": "护士"}
+
+        mock_pregnant = MagicMock()
+        mock_pregnant.display_name = "小明"
+
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.first.side_effect = [mock_record, mock_pregnant]
+
+        with patch("app.routers.followup.SessionLocal", return_value=mock_db):
+            result = get_record_document(str(mock_record.id))
+
+        assert result["patient_name"] == "小明"
+        assert result["has_document"] is True
+        assert "snapshot" in result
+        assert "text" in result
+        assert "signature" in result

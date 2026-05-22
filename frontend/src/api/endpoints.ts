@@ -2,7 +2,7 @@
 import client from './client'
 import type {
   Pregnant, FollowUpRecord, Alert, ScheduleNode,
-  FgrAssessment, FgrTrendPoint, PatientImageInfo, MedicalOrder,
+  FgrAssessment, FgrTrendPoint, PatientImageInfo, MedicalOrder, OrderDocument,
   DashboardStats, ChatRequest, ChatResponse,
   HomeResponse, RecommendResponse,
   HealthTrendResponse, FollowUpHistoryResponse,
@@ -12,6 +12,8 @@ import type {
 // 对话
 export const chatApi = {
   send: (data: ChatRequest) => client.post<ChatResponse>('/chat/send', data),
+  asr: (data: { audio_data: string; audio_format: string }) =>
+    client.post<{ text: string; success: boolean }>('/chat/asr', data),
   getMemory: (pregnantId: string) => client.get('/chat/history', { params: { pregnant_id: pregnantId } }),
   clearMemory: (pregnantId: string) => client.delete('/chat/memory', { params: { pregnant_id: pregnantId } }),
   getContext: (pregnantId: string) => client.get(`/chat/context/${pregnantId}`),
@@ -57,6 +59,10 @@ export const followUpApi = {
     client.post('/followup/respond', { record_id: recordId, answers, total_count: totalCount || 0 }),
   aiReview: (recordId: string) =>
     client.get<any>(`/followup/records/${recordId}/ai-review`),
+  getDocument: (recordId: string) =>
+    client.get<{ record_id: string; patient_name: string; snapshot: any; text: string; signature: any; has_document: boolean }>(`/followup/records/${recordId}/document`),
+  sign: (recordId: string, signature_image: string, signer_name: string) =>
+    client.post<{ message: string; signed_at: string }>(`/followup/records/${recordId}/sign`, { signature_image, signer_name }),
 }
 
 // 预警
@@ -95,8 +101,8 @@ export const orderApi = {
     client.post<MedicalOrder>('/orders/generate', data),
   list: (params?: { status?: string; pregnant_id?: string }) =>
     client.get<MedicalOrder[]>('/orders', { params }),
-  sign: (orderId: string, doctorId: string) =>
-    client.put(`/orders/${orderId}/sign`, { doctor_id: doctorId }),
+  sign: (orderId: string, data: { doctor_id: string; signature_image?: string; signer_name?: string }) =>
+    client.put(`/orders/${orderId}/sign`, data),
   update: (orderId: string, data: any) =>
     client.put(`/orders/${orderId}`, data),
   templates: () => client.get('/orders/templates'),
@@ -104,6 +110,8 @@ export const orderApi = {
     client.get(`/orders/pregnant/${pregnantId}`),
   acknowledge: (orderId: string) =>
     client.put(`/orders/${orderId}/acknowledge`),
+  getDocument: (orderId: string) =>
+    client.get<OrderDocument>(`/orders/${orderId}/document`),
 }
 
 // 统计
@@ -192,14 +200,14 @@ async function nurseChatStream(
 // 医生AI
 export const doctorAiApi = {
   analyze: (pregnantId: string, query: string = '') =>
-    client.post<any>(`/doctor/analyze/${pregnantId}`, { pregnant_id: pregnantId, query }),
+    client.post<any>(`/doctor/analyze/${pregnantId}`, { pregnant_id: pregnantId, query }, { timeout: 180000 }),
   chatStream: (
     data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
     callbacks: SSEStreamCallbacks,
     signal?: AbortSignal,
   ) => doctorChatStream(data, callbacks, signal),
   generateReport: (pregnantId: string) =>
-    client.post<any>(`/doctor/report/${pregnantId}`),
+    client.post<any>(`/doctor/report/${pregnantId}`, null, { timeout: 120000 }),
 }
 
 // 医护协作
@@ -302,6 +310,7 @@ async function _sseFetch(
     onmessage(msg) {
       if (msg.event === 'thinking') callbacks.onThinking?.(msg.data)
       else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
+      else if (msg.event === 'error') callbacks.onError?.(new Error(msg.data))
       else if (msg.event === 'done') {
         try { callbacks.onDone?.(JSON.parse(msg.data)) } catch { callbacks.onDone?.({}) }
       }

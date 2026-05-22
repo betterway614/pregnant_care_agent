@@ -42,6 +42,29 @@ async def send_message_stream(req: ChatSendRequest):
     return EventSourceResponse(handle_chat_with_agno_stream(req))
 
 
+class ASRRequest(BaseModel):
+    audio_data: str
+    audio_format: str = "webm"
+
+
+class ASRResponse(BaseModel):
+    text: str
+    success: bool
+
+
+@router.post("/asr", response_model=ASRResponse)
+async def transcribe_audio(req: ASRRequest):
+    """语音转文字（独立 ASR 接口，用于前端语音气泡长按转文本）
+
+    支持 cloud/local 两种模式，调用专用 ASR 服务转录。
+    """
+    from ..core.agno_chat_handler import _transcribe_audio_pregnant
+
+    text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
+    success = not text.startswith("（")
+    return ASRResponse(text=text, success=success)
+
+
 @router.get("/conversation/{pregnant_id}")
 async def get_conversation_history(pregnant_id: str, session_id: str = ""):
     if not settings.persist_chat_messages:

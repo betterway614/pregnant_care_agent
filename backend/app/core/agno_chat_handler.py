@@ -23,7 +23,7 @@ from loguru import logger
 from ..schemas import ChatSendRequest, ChatResponse
 from ..database import db_call
 from ..core.conversation_store import conversation_store
-from ..config import settings
+from ..config import settings, get_asr_mode
 
 
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
@@ -52,42 +52,59 @@ def _generate_session_id(pregnant_id: str) -> str:
     return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
 
 
-def _build_multimodal_input(req: ChatSendRequest) -> Union[str, List[Dict[str, Any]]]:
-    """构建多模态消息 input（支持文本和音频）
+async def _transcribe_audio_pregnant(audio_data: str, audio_format: str) -> str:
+    """小安对话 ASR 预处理：调用专用 ASR 服务（cloud/local）转录音频为文本。
 
-    当 message_type == "AUDIO" 时，构建包含音频的 content array，
-    兼容 OpenAI 兼容的多模态模型（Qwen3.6-35B 等）。
+    音频不会嵌入主对话请求，避免浪费 token。
 
     Returns:
-        纯文本时返回字符串；音频消息时返回 content array
+        转录文本（失败时返回错误提示文本，不会返回 None）
     """
-    if req.message_type in ("AUDIO", "IMAGE") and req.audio_data:
-        content_parts: List[Dict[str, Any]] = []
+    from ..services.asr_service import asr_service
 
-        text = req.message.strip() or ("请分析这段语音内容并给出回复" if req.message_type == "AUDIO" else "请分析这张图片并给出回复")
+    mode = get_asr_mode("pregnant")
+    logger.info("[ASR-pregnant] mode={}", mode)
+
+    transcribed = await asr_service.transcribe(audio_data, audio_format, "pregnant")
+    if transcribed:
+        logger.info("[ASR-pregnant] 转录成功: {}字", len(transcribed))
+        return transcribed
+
+    logger.warning("[ASR-pregnant] ASR 转录失败")
+    return "（语音识别失败，请重试或使用文字输入）"
+
+
+def _build_multimodal_input(req: ChatSendRequest, transcribed_text: str | None = None) -> Union[str, List[Dict[str, Any]]]:
+    """构建多模态消息 input
+
+    - AUDIO：始终使用 ASR 转录后的纯文本（音频不会嵌入主对话请求）
+    - IMAGE：构建包含图片的 content array（图片 token 远小于音频）
+    - TEXT：纯文本
+
+    Returns:
+        纯文本时返回字符串；图片消息时返回 content array
+    """
+    if req.message_type == "AUDIO" and req.audio_data:
+        # 音频始终使用转录文本，避免原始音频字节浪费 token
+        return transcribed_text or "（语音识别失败，请重试或使用文字输入）"
+
+    if req.message_type == "IMAGE" and req.audio_data:
+        content_parts: List[Dict[str, Any]] = []
+        text = req.message.strip() or "请分析这张图片并给出回复"
         content_parts.append({"type": "text", "text": text})
 
-        if req.message_type == "AUDIO":
-            content_parts.append({
-                "type": "input_audio",
-                "input_audio": {
-                    "data": req.audio_data,
-                    "format": req.audio_format or "webm",
-                },
-            })
-        else:
-            # IMAGE: 使用 image_url 格式（OpenAI 兼容多模态模型）
-            fmt = req.audio_format or "jpeg"
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/{fmt};base64,{req.audio_data}",
-                },
-            })
+        # IMAGE: 使用 image_url 格式（OpenAI 兼容多模态模型）
+        fmt = req.audio_format or "jpeg"
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/{fmt};base64,{req.audio_data}",
+            },
+        })
 
         logger.info(
-            "构建多模态消息 type={} pregnant_id={} data_len={} format={}",
-            req.message_type, req.pregnant_id[:8], len(req.audio_data), req.audio_format,
+            "构建多模态消息 IMAGE pregnant_id={} data_len={}",
+            req.pregnant_id[:8], len(req.audio_data),
         )
         return content_parts
 
@@ -102,13 +119,19 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     → should_ask_weight → get_patient_context → analyze_health_trends → ...
 
     支持多模态音频输入（message_type=AUDIO 时使用多模态消息格式）
+    当 asr_pregnant_mode 为 cloud/local 时，先 ASR 转写再传纯文本
     """
     from .agno_agent import get_main_agent
 
     agent = get_main_agent()
     session_id = req.session_id or _generate_session_id(req.pregnant_id)
 
-    agent_input = _build_multimodal_input(req)
+    # ASR 预处理：音频输入转文本
+    transcribed_text = None
+    if req.message_type == "AUDIO" and req.audio_data:
+        transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
+
+    agent_input = _build_multimodal_input(req, transcribed_text)
 
     response = await agent.arun(
         input=agent_input,
@@ -144,14 +167,20 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     - 捕获 RunEvent.tool_call_started/completed，产出 thinking 事件
     - 工具调用过程对用户透明可见（展示 Agent 的"思考"过程）
     - 完成后持久化对话消息
+    - 音频消息 ASR 预处理：cloud/local 模式先转写再传纯文本
     """
     from .agno_agent import get_main_agent
 
     agent = get_main_agent()
     session_id = req.session_id or _generate_session_id(req.pregnant_id)
 
-    # 构建多模态输入
-    agent_input = _build_multimodal_input(req)
+    # ASR 预处理：音频输入转文本
+    transcribed_text = None
+    if req.message_type == "AUDIO" and req.audio_data:
+        transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
+
+    # 构建多模态输入（有 ASR 文本时使用纯文本，否则使用多模态内容数组）
+    agent_input = _build_multimodal_input(req, transcribed_text)
 
     # 初始思考状态
     yield {"event": "thinking", "data": "小安正在思考..."}
@@ -195,7 +224,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         logger.error("Agno stream error: {}", traceback.format_exc())
         yield {"event": "chunk", "data": "\n\n抱歉，我遇到了问题，请稍后再试。"}
 
-    # 发送完成事件（含工具调用步骤信息）
+    # 发送完成事件（含工具调用步骤信息 + ASR 转录文本）
     yield {
         "event": "done",
         "data": json.dumps({
@@ -204,6 +233,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             "nlu_result": None,
             "memory_updated": [],
             "tool_steps": tool_steps,
+            "transcribed_text": transcribed_text,
         }),
     }
 

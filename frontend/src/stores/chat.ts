@@ -19,6 +19,9 @@ export interface ChatMessage {
   audioUrl?: string       // blob URL，用于播放录音
   audioDuration?: number  // 录音时长（秒）
   messageType?: 'text' | 'audio'
+  // ASR 转录文本
+  transcribedText?: string  // 语音转文字结果
+  transcribing?: boolean    // 正在转录中
 }
 
 const MAX_MESSAGES = 200

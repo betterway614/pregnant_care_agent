@@ -1,4 +1,4 @@
-"""ASR (语音识别) 服务 - 支持 cloud/local/llm 三种模式"""
+"""ASR (语音识别) 服务 - 支持 cloud/local 两种模式"""
 import asyncio
 import base64
 import json
@@ -25,13 +25,10 @@ class ASRService:
         """将 base64 音频转为文本。role 用于查询角色专属配置。
 
         Returns:
-            转录文本，llm 模式返回 None（调用方应使用多模态 LLM 路径）
+            转录文本，失败时返回 None
         """
         mode = get_asr_mode(role)
         logger.info("[ASR] role={}, mode={}", role, mode)
-
-        if mode == "llm":
-            return None
 
         if mode == "cloud":
             return await self._transcribe_cloud(audio_base64, audio_format)
@@ -39,7 +36,7 @@ class ASRService:
         if mode == "local":
             return await self._transcribe_local(audio_base64, audio_format)
 
-        logger.warning("[ASR] 未知模式 '{}', 降级为 llm", mode)
+        logger.warning("[ASR] 未知模式 '{}'", mode)
         return None
 
     # ---- cloud: DashScope Paraformer ----

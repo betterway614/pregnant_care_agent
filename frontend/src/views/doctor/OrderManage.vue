@@ -146,37 +146,6 @@
       </template>
     </el-dialog>
 
-    <!-- 签署确认对话框 -->
-    <el-dialog
-      v-model="signDialogVisible"
-      title="签署确认"
-      width="400px"
-      destroy-on-close
-    >
-      <div class="dialog-body">
-        <el-alert
-          type="warning"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 16px"
-        >
-          请确认已审核医嘱内容，签署后将生效执行。
-        </el-alert>
-        <div v-if="signOrder" class="sign-preview">
-          <p class="sign-preview__patient">
-            <strong>孕妇：</strong>{{ signOrder.patient_name }}
-          </p>
-          <p class="sign-preview__content">{{ truncateContent(signOrder.content, 80) }}</p>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="signDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="doSignOrder">
-          确认签署
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 编辑医嘱对话框 -->
     <el-dialog
       v-model="editDialogVisible"
@@ -228,11 +197,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, Refresh, Document } from '@element-plus/icons-vue'
 import { orderApi } from '@/api/endpoints'
 import type { MedicalOrder } from '@/types'
 import { useAppStore } from '@/stores/app'
 
+const router = useRouter()
 const appStore = useAppStore()
 
 const loading = ref(false)
@@ -368,27 +339,9 @@ async function doEditOrder() {
   }
 }
 
-/** 签署确认弹窗 */
+/** 签署确认弹窗 — 跳转到医嘱签名页 */
 function confirmSignOrder(order: MedicalOrder) {
-  signOrder.value = order
-  signDialogVisible.value = true
-}
-
-/** 执行签署 */
-async function doSignOrder() {
-  if (!signOrder.value) return
-  submitting.value = true
-  try {
-    const doctorId = appStore.currentRole === 'doctor' ? 'doctor_001' : 'current-doctor'
-    await orderApi.sign(signOrder.value.id, doctorId)
-    signDialogVisible.value = false
-    signOrder.value = null
-    await loadOrders()
-  } catch (err) {
-    console.error('签署医嘱失败:', err)
-  } finally {
-    submitting.value = false
-  }
+  router.push({ name: 'OrderSign', params: { orderId: order.id } })
 }
 
 onMounted(loadOrders)

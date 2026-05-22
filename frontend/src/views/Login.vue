@@ -110,13 +110,18 @@ async function handleLogin() {
 
     ElMessage.success(`欢迎，${data.nickname || data.display_name}！`)
 
-    // 跳转
-    const routes: Record<string, string> = {
-      nurse: '/nurse/dashboard',
-      doctor: '/doctor/dashboard',
-      pregnant: '/pregnant/home',
+    // 跳转：优先回跳到被拦截的原路径
+    const redirect = router.currentRoute.value.query.redirect as string
+    if (redirect) {
+      router.push(redirect)
+    } else {
+      const routes: Record<string, string> = {
+        nurse: '/nurse/dashboard',
+        doctor: '/doctor/dashboard',
+        pregnant: '/pregnant/home',
+      }
+      router.push(routes[data.role] || '/login')
     }
-    router.push(routes[data.role] || '/login')
   } catch (err: any) {
     const msg = err.response?.data?.detail || '网络错误，请检查后端是否启动'
     ElMessage.error(msg)

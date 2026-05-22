@@ -22,14 +22,16 @@
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-grid-row">
       <el-col :xs="12" :sm="12" :md="6" v-for="card in statCards" :key="card.label">
-        <StatCard
-          :icon="card.icon"
-          :value="card.value"
-          :label="card.label"
-          :color="card.color"
-          :bg-color="card.bgColor"
-          :sub-label="card.subLabel"
-        />
+        <div class="stat-card-wrapper" @click="card.route && $router.push(card.route)">
+          <StatCard
+            :icon="card.icon"
+            :value="card.value"
+            :label="card.label"
+            :color="card.color"
+            :bg-color="card.bgColor"
+            :sub-label="card.subLabel"
+          />
+        </div>
       </el-col>
     </el-row>
 
@@ -76,12 +78,12 @@
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">最近随访</span>
-            <el-button type="primary" class="brand-gradient-btn" size="small" @click="$router.push('/nurse/followups')">
+            <el-button type="primary" class="brand-gradient-btn" size="small" @click="$router.push('/nurse/followup')">
               查看全部
             </el-button>
           </div>
           <div class="content-card__body" v-loading="loading">
-            <div v-for="fu in recentFollowUps" :key="fu.id" class="followup-item">
+            <div v-for="fu in recentFollowUps" :key="fu.id" class="followup-item clickable" @click="$router.push('/nurse/followup')">
               <div class="followup-item__header">
                 <span class="followup-item__name">{{ fu.patient_name || fu.pregnant_id }}</span>
                 <el-tag
@@ -173,6 +175,7 @@ const statCards = computed(() => [
     color: 'var(--primary)',
     bgColor: 'var(--primary-bg)',
     subLabel: '当前管理',
+    route: null,
   },
   {
     icon: 'WarningFilled',
@@ -181,6 +184,7 @@ const statCards = computed(() => [
     color: 'var(--warning)',
     bgColor: '#FFF3E0',
     subLabel: '需及时处理',
+    route: '/nurse/alerts',
   },
   {
     icon: 'Calendar',
@@ -189,6 +193,7 @@ const statCards = computed(() => [
     color: 'var(--info)',
     bgColor: '#E3F2FD',
     subLabel: '计划中',
+    route: '/nurse/followup',
   },
   {
     icon: 'DocumentChecked',
@@ -197,6 +202,7 @@ const statCards = computed(() => [
     color: 'var(--accent)',
     bgColor: '#E0F2F1',
     subLabel: '待确认归档',
+    route: '/nurse/followup',
   },
 ])
 
@@ -258,6 +264,10 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
+.stat-card-wrapper {
+  cursor: pointer;
+}
+
 .stat-grid-row {
   margin-bottom: 28px;
 }
@@ -271,6 +281,10 @@ onUnmounted(() => {
 
 .followup-item:last-child {
   border-bottom: none;
+}
+
+.followup-item.clickable {
+  cursor: pointer;
 }
 
 .followup-item:hover {

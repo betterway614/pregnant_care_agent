@@ -1,39 +1,15 @@
 <template>
   <div class="patient-profile">
     <div class="page-container profile-container">
-      <!-- ===== 未登录状态 ===== -->
+      <!-- 未登录状态：路由守卫已拦截，此处保留防御性提示 -->
       <template v-if="!isLoggedIn">
         <div class="profile-header">
-          <h1 class="page-title">登录账号</h1>
-          <p class="page-subtitle">请输入您的医院ID卡号和密码</p>
-        </div>
-
-        <div class="soft-card login-card">
-          <el-form
-            ref="loginFormRef"
-            :model="loginForm"
-            :rules="loginRules"
-            label-position="top"
-            @submit.prevent="handleInlineLogin"
-          >
-            <el-form-item label="医院ID卡号" prop="hospital_id">
-              <el-input v-model="loginForm.hospital_id" placeholder="孕妇卡号(H开头) / nurse / doctor" size="large">
-                <template #prefix><el-icon><User /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-form-item label="密码" prop="password">
-              <el-input v-model="loginForm.password" type="password" placeholder="Demo密码: 123456" size="large" show-password @keyup.enter="handleInlineLogin">
-                <template #prefix><el-icon><Lock /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-button type="primary" size="large" :loading="loginLoading" class="login-btn interactive-card" @click="handleInlineLogin">
-              {{ loginLoading ? '登录中...' : '登 录' }}
-            </el-button>
-          </el-form>
+          <h1 class="page-title">请先登录</h1>
+          <p class="page-subtitle">正在跳转到登录页面...</p>
         </div>
       </template>
 
-      <!-- ===== 已登录状态 ===== -->
+      <!-- 已登录状态 -->
       <template v-else>
         <!-- 加载状态 -->
         <div v-if="loading" class="page-loading">
@@ -133,46 +109,17 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Loading, Edit, User, Check, Lock } from '@element-plus/icons-vue'
+import { Loading, Edit, User, Check } from '@element-plus/icons-vue'
 import { pregnantApi } from '@/api/endpoints'
 import { useAppStore } from '@/stores/app'
 import type { Pregnant } from '@/types'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
 
 /* ============ 认证状态 ============ */
 const appStore = useAppStore()
 const isLoggedIn = computed(() => appStore.isLoggedIn)
 const pregnantId = computed(() => appStore.currentPregnantId || localStorage.getItem('currentPregnantId') || '')
-
-/* ============ 登录表单 ============ */
-const loginFormRef = ref<FormInstance>()
-const loginLoading = ref(false)
-const loginForm = reactive({ hospital_id: '', password: '' })
-const loginRules: FormRules = {
-  hospital_id: [{ required: true, message: '请输入医院ID卡号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-}
-
-async function handleInlineLogin() {
-  if (!loginFormRef.value) return
-  const valid = await loginFormRef.value.validate().catch(() => false)
-  if (!valid) return
-  loginLoading.value = true
-  try {
-    const res = await axios.post('/api/v1/auth/login', {
-      hospital_id: loginForm.hospital_id.trim(),
-      password: loginForm.password.trim(),
-    })
-    if (!res.data.success) { ElMessage.error(res.data.message); return }
-    appStore.login(res.data.role, res.data.pregnant_id)
-    ElMessage.success(`欢迎，${res.data.nickname || res.data.display_name}！`)
-    loadProfile()
-  } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '网络错误')
-  } finally { loginLoading.value = false }
-}
 
 function handleLogout() {
   appStore.logout()
@@ -445,7 +392,7 @@ onMounted(() => {
 .save-section {
   padding-top: 16px;
 }
-.save-btn, .login-btn {
+.save-btn {
   width: 100%;
   height: 52px;
   border-radius: 16px;
@@ -454,7 +401,7 @@ onMounted(() => {
   background-color: var(--c-rose);
   border-color: var(--c-rose);
 }
-.save-btn:hover, .login-btn:hover {
+.save-btn:hover {
   background-color: #f43f5e; /* rose-500 */
   border-color: #f43f5e;
 }

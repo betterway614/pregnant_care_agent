@@ -34,37 +34,65 @@
 
     <!-- AI 推荐面板 -->
     <el-collapse v-model="recommendPanelOpen" class="recommend-collapse">
-      <el-collapse-item title="🤖 AI 随访推荐" name="recommend">
+      <el-collapse-item name="recommend">
+        <template #title>
+          <div class="recommend-header">
+            <span>AI 随访推荐</span>
+            <el-tag v-if="recommendations.length" size="small" type="info" style="margin-left: 8px">{{ recommendations.length }} 条</el-tag>
+          </div>
+        </template>
         <div v-if="recommendLoading" class="recommend-loading">
           <el-skeleton :rows="3" animated />
         </div>
         <div v-else-if="!recommendations.length" class="recommend-empty">
           暂无推荐，所有孕妇随访状态良好
         </div>
-        <div v-else class="recommend-list">
-          <div v-for="(rec, i) in recommendations" :key="i" class="recommend-item">
-            <div class="recommend-item__left">
-              <div class="recommend-item__name">
-                {{ rec.patient_name }}
-                <span class="recommend-item__week">孕{{ rec.gestational_week }}周</span>
+        <div v-else>
+          <!-- 批量操作栏 -->
+          <div class="recommend-batch-bar">
+            <el-checkbox
+              v-model="selectAllRecommendations"
+              :indeterminate="isIndeterminate"
+              @change="handleSelectAll"
+            >
+              全选
+            </el-checkbox>
+            <el-button
+              type="primary"
+              size="small"
+              :disabled="selectedRecommendations.length === 0"
+              :loading="batchTriggering"
+              @click="doBatchTrigger"
+            >
+              批量触发 ({{ selectedRecommendations.length }})
+            </el-button>
+          </div>
+          <div class="recommend-list">
+            <div v-for="(rec, i) in recommendations" :key="i" class="recommend-item">
+              <el-checkbox v-model="rec._selected" class="recommend-item__checkbox" />
+              <div class="recommend-item__left">
+                <div class="recommend-item__name">
+                  {{ rec.patient_name }}
+                  <span class="recommend-item__week">孕{{ rec.gestational_week }}周</span>
+                </div>
+                <div class="recommend-item__reason">{{ rec.reason }}</div>
               </div>
-              <div class="recommend-item__reason">{{ rec.reason }}</div>
-            </div>
-            <div class="recommend-item__right">
-              <el-tag
-                :type="rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'success'"
-                size="small"
-              >
-                {{ rec.priority === 'high' ? '紧急' : rec.priority === 'medium' ? '重要' : '常规' }}
-              </el-tag>
-              <el-button
-                type="primary"
-                size="small"
-                :loading="rec._triggering"
-                @click="doQuickTrigger(rec)"
-              >
-                一键触发
-              </el-button>
+              <div class="recommend-item__right">
+                <el-tag
+                  :type="rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'success'"
+                  size="small"
+                >
+                  {{ rec.priority === 'high' ? '紧急' : rec.priority === 'medium' ? '重要' : '常规' }}
+                </el-tag>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="rec._triggering"
+                  @click="doQuickTrigger(rec)"
+                >
+                  一键触发
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -90,9 +118,19 @@
               {{ row.gestational_week || '--' }}
             </template>
           </el-table-column>
-          <el-table-column prop="chief_complaint" label="主诉" min-width="160" show-overflow-tooltip>
+          <el-table-column prop="chief_complaint" label="主诉" min-width="140" show-overflow-tooltip>
             <template #default="{ row }">
               {{ row.chief_complaint || '无' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="分类" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag
+                :type="row.classification === 'critical' ? 'danger' : row.classification === 'abnormal' ? 'warning' : 'success'"
+                size="small"
+              >
+                {{ row.classification === 'critical' ? '高危' : row.classification === 'abnormal' ? '异常' : '正常' }}
+              </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="90" align="center">
@@ -102,7 +140,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right" align="left" header-align="left">
+          <el-table-column label="操作" width="280" fixed="right" align="left" header-align="left">
             <template #default="{ row }">
               <div class="table-row-actions">
                 <el-button type="primary" class="brand-gradient-btn" size="small" @click.stop="goPregnantDetail(row)">
@@ -113,7 +151,7 @@
                   type="primary"
                   class="brand-gradient-btn"
                   size="small"
-                  @click.stop="confirmRecord(row)"
+                  @click.stop="openReviewDrawer(row)"
                 >
                   确认审核
                 </el-button>
@@ -122,9 +160,17 @@
                   type="primary"
                   class="brand-gradient-btn"
                   size="small"
-                  @click.stop="confirmRecord(row)"
+                  @click.stop="openReviewDrawer(row)"
                 >
-                  确认归档
+                  编辑归档
+                </el-button>
+                <el-button
+                  v-else
+                  type="info"
+                  size="small"
+                  @click.stop="openReviewDrawer(row)"
+                >
+                  查看详情
                 </el-button>
               </div>
             </template>
@@ -186,84 +232,199 @@
       </template>
     </el-dialog>
 
-    <!-- AI 审核辅助抽屉 -->
+    <!-- 随访审核/编辑抽屉 -->
     <el-drawer
       v-model="showReviewDrawer"
-      title="随访审核"
-      size="480px"
+      :title="drawerTitle"
+      size="620px"
       destroy-on-close
     >
       <template v-if="reviewRecord">
-        <!-- 基本信息 -->
-        <div class="review-section">
-          <h4 class="review-section__title">基本信息</h4>
-          <div class="review-info-grid">
-            <div class="review-info-item">
-              <span class="review-info-label">孕妇</span>
-              <span class="review-info-value">{{ reviewRecord.patient_name }}</span>
+        <!-- 记录头：患者信息 + 分类标签 + 状态 -->
+        <div class="record-header">
+          <div class="record-header__row">
+            <div class="record-header__name">{{ reviewRecord.patient_name }}</div>
+            <el-tag
+              :type="reviewRecord.classification === 'critical' ? 'danger' : reviewRecord.classification === 'abnormal' ? 'warning' : 'success'"
+              size="small"
+            >
+              {{ reviewRecord.classification === 'critical' ? '高危' : reviewRecord.classification === 'abnormal' ? '异常' : '正常' }}
+            </el-tag>
+            <el-tag :type="statusType(reviewRecord.status)" size="small">
+              {{ statusLabel(reviewRecord.status) }}
+            </el-tag>
+          </div>
+          <div class="record-header__meta">
+            孕{{ reviewRecord.gestational_week || '--' }}周 &nbsp;|&nbsp;
+            {{ formatDate(reviewRecord.follow_up_date) }} &nbsp;|&nbsp;
+            {{ reviewRecord.chief_complaint || '无主诉' }}
+          </div>
+        </div>
+
+        <!-- S: 主观数据 -->
+        <div class="record-section">
+          <div class="record-section__head">
+            <span class="record-badge record-badge--s">S</span>
+            <span class="record-section__title">主观数据</span>
+          </div>
+          <div class="record-section__body">
+            <template v-if="Object.keys(reviewRecord.self_reported_data || {}).length">
+              <div v-for="(val, key) in reviewRecord.self_reported_data" :key="key" class="record-kv">
+                <span class="record-kv__key">{{ fieldLabel(String(key)) }}</span>
+                <span class="record-kv__val">{{ val }}</span>
+              </div>
+            </template>
+            <span v-else class="record-muted">暂无自报数据</span>
+          </div>
+        </div>
+
+        <!-- O: 客观检查 -->
+        <div class="record-section">
+          <div class="record-section__head">
+            <span class="record-badge record-badge--o">O</span>
+            <span class="record-section__title">客观检查</span>
+          </div>
+          <div class="record-section__body">
+            <!-- 产科检查 -->
+            <div v-if="hasExam(reviewRecord.obstetric_exam)" class="record-exam-row">
+              <div v-for="(val, key) in reviewRecord.obstetric_exam" :key="key" class="record-exam-cell">
+                <div class="record-exam-cell__label">{{ examLabel(String(key)) }}</div>
+                <div class="record-exam-cell__value" :class="examHighlightClass(String(key), val)">{{ val }}</div>
+              </div>
             </div>
-            <div class="review-info-item">
-              <span class="review-info-label">孕周</span>
-              <span class="review-info-value">{{ reviewRecord.gestational_week || '--' }}</span>
+            <!-- 化验结果 -->
+            <div v-if="hasExam(reviewRecord.lab_results)" class="record-exam-row" style="margin-top: 6px;">
+              <div v-for="(val, key) in reviewRecord.lab_results" :key="key" class="record-exam-cell">
+                <div class="record-exam-cell__label">{{ labLabel(String(key)) }}</div>
+                <div class="record-exam-cell__value" :class="labHighlightClass(String(key), val)">{{ val }}</div>
+              </div>
             </div>
-            <div class="review-info-item">
-              <span class="review-info-label">日期</span>
-              <span class="review-info-value">{{ formatDate(reviewRecord.follow_up_date) }}</span>
-            </div>
-            <div class="review-info-item">
-              <span class="review-info-label">主诉</span>
-              <span class="review-info-value">{{ reviewRecord.chief_complaint || '无' }}</span>
+            <span v-if="!hasExam(reviewRecord.obstetric_exam) && !hasExam(reviewRecord.lab_results)" class="record-muted">暂无检查数据</span>
+          </div>
+        </div>
+
+        <!-- A: 评估 -->
+        <div class="record-section">
+          <div class="record-section__head">
+            <span class="record-badge record-badge--a">A</span>
+            <span class="record-section__title">评估</span>
+          </div>
+          <div class="record-section__body">
+            <p class="record-summary">{{ reviewRecord.summary || '暂无评估' }}</p>
+            <!-- AI 快照分析（已完成的记录显示历史快照） -->
+            <div v-if="reviewRecord.ai_snapshot && Object.keys(reviewRecord.ai_snapshot).length" class="record-ai-snapshot">
+              <div class="record-ai-snapshot__title">AI 分析快照</div>
+              <div v-if="reviewRecord.ai_snapshot.warm_summary" class="record-ai-snapshot__text">
+                {{ reviewRecord.ai_snapshot.warm_summary }}
+              </div>
+              <div v-if="reviewRecord.ai_snapshot.abnormal_indicators?.length" class="record-ai-snapshot__abnormal">
+                <el-tag
+                  v-for="(item, i) in reviewRecord.ai_snapshot.abnormal_indicators"
+                  :key="i"
+                  type="danger"
+                  size="small"
+                  style="margin-right: 4px; margin-bottom: 4px;"
+                >{{ item }}</el-tag>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 随访答案 -->
-        <div class="review-section" v-if="reviewRecord.self_reported_data && Object.keys(reviewRecord.self_reported_data).length">
-          <h4 class="review-section__title">随访回答</h4>
-          <div class="review-answer-list">
-            <div v-for="(value, key) in reviewRecord.self_reported_data" :key="key" class="review-answer-item">
-              <span class="review-answer-key">{{ key }}</span>
-              <span class="review-answer-value">{{ value }}</span>
+        <!-- P: 计划 -->
+        <div class="record-section">
+          <div class="record-section__head">
+            <span class="record-badge record-badge--p">P</span>
+            <span class="record-section__title">计划</span>
+          </div>
+          <div class="record-section__body">
+            <!-- 指导标签 -->
+            <div v-if="reviewRecord.guidance_tags?.length" class="record-guidance-list">
+              <div v-for="(g, i) in reviewRecord.guidance_tags" :key="i" class="record-guidance-item">
+                <el-tag size="small" effect="plain">{{ g.tag }}</el-tag>
+                <span>{{ g.content }}</span>
+              </div>
+            </div>
+            <!-- 下次随访 -->
+            <div v-if="reviewRecord.next_followup_date" class="record-next-date">
+              下次随访日期：{{ reviewRecord.next_followup_date }}
+            </div>
+            <!-- 转诊 -->
+            <div v-if="reviewRecord.referral?.has_referral" class="record-referral">
+              转诊：{{ reviewRecord.referral.reason }} → {{ reviewRecord.referral.institution }} {{ reviewRecord.referral.department }}
+            </div>
+            <span v-if="!reviewRecord.guidance_tags?.length && !reviewRecord.referral && !reviewRecord.next_followup_date" class="record-muted">暂无计划</span>
+          </div>
+        </div>
+
+        <!-- 审核追溯（已审核的记录显示） -->
+        <div v-if="reviewRecord.reviewed_by" class="record-section record-section--audit">
+          <div class="record-section__head">
+            <span class="record-section__title">审核信息</span>
+          </div>
+          <div class="record-section__body record-audit-info">
+            <span>审核人：{{ reviewRecord.reviewed_by }}</span>
+            <span v-if="reviewRecord.reviewed_at">时间：{{ formatDate(reviewRecord.reviewed_at) }}</span>
+            <span v-if="reviewRecord.review_comment">意见：{{ reviewRecord.review_comment }}</span>
+            <div v-if="reviewRecord.signature_data?.image" class="record-signature">
+              <span>护士签名：</span>
+              <img :src="reviewRecord.signature_data.image" class="record-signature__img" />
+              <span v-if="reviewRecord.signature_data.signed_at" class="record-signature__time">
+                {{ formatDate(reviewRecord.signature_data.signed_at) }}
+              </span>
             </div>
           </div>
         </div>
 
-        <!-- AI 审核辅助 -->
-        <div class="review-section">
-          <h4 class="review-section__title">🤖 AI 审核辅助</h4>
-          <div v-if="aiReviewLoading" class="review-loading">
-            <el-icon class="is-loading"><Loading /></el-icon>
-            <span>AI 正在分析随访数据...</span>
+        <!-- AI 审核辅助（待审核时加载） -->
+        <div class="record-section" v-if="isReviewable">
+          <div class="record-section__head">
+            <span class="record-section__title">AI 审核辅助</span>
           </div>
-          <template v-else-if="aiReviewResult">
-            <el-alert
-              :title="aiReviewResult.recommendation"
-              :description="aiReviewResult.summary"
-              :type="aiReviewResult.action_needed ? 'error' : 'success'"
-              show-icon
-              :closable="false"
-              class="mb-3"
-            />
-            <div v-if="aiReviewResult.abnormal_flags?.length" class="review-abnormal">
-              <p class="review-abnormal__title">异常指标：</p>
-              <el-tag
-                v-for="(flag, i) in aiReviewResult.abnormal_flags"
-                :key="i"
-                type="danger"
-                size="small"
-                class="review-abnormal__tag"
-              >{{ flag }}</el-tag>
+          <div class="record-section__body">
+            <div v-if="aiReviewLoading" class="review-loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span>AI 正在分析随访数据...</span>
             </div>
-            <div v-if="aiReviewResult.detail_analysis" class="review-detail">
-              <p class="review-detail__title">详细分析：</p>
-              <p class="review-detail__body">{{ aiReviewResult.detail_analysis }}</p>
-            </div>
-          </template>
-          <div v-else class="review-empty">暂无 AI 分析结果</div>
+            <template v-else-if="aiReviewResult">
+              <el-alert
+                :title="aiReviewResult.recommendation"
+                :description="aiReviewResult.summary"
+                :type="aiReviewResult.action_needed ? 'error' : 'success'"
+                show-icon
+                :closable="false"
+                style="margin-bottom: 8px"
+              />
+              <div v-if="aiReviewResult.abnormal_flags?.length">
+                <el-tag
+                  v-for="(flag, i) in aiReviewResult.abnormal_flags"
+                  :key="i"
+                  type="danger"
+                  size="small"
+                  style="margin-right: 4px; margin-bottom: 4px;"
+                >{{ flag }}</el-tag>
+              </div>
+              <p v-if="aiReviewResult.detail_analysis" class="record-summary" style="margin-top: 8px;">
+                {{ aiReviewResult.detail_analysis }}
+              </p>
+            </template>
+            <span v-else class="record-muted">暂无 AI 分析结果</span>
+          </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="review-actions">
+        <!-- draft 状态：确认归档 -->
+        <div class="record-actions" v-if="reviewRecord.status === 'draft'">
+          <el-button
+            type="primary"
+            :loading="confirmLoading"
+            @click="doConfirmFromDrawer('confirmed')"
+            style="flex: 1"
+          >
+            确认归档
+          </el-button>
+        </div>
+
+        <!-- in_progress / completed 状态：审核通过 + 上报医生 -->
+        <div class="record-actions" v-else-if="isReviewable">
           <el-button
             type="primary"
             :loading="confirmLoading"
@@ -281,6 +442,16 @@
             上报医生
           </el-button>
         </div>
+
+        <!-- confirmed / archived 状态：打印 / 导出PDF -->
+        <div class="record-actions" v-else-if="isArchived">
+          <el-button type="primary" @click="goPrintPage" style="flex: 1">
+            预览打印版
+          </el-button>
+          <el-button type="success" @click="goPrintPage" style="flex: 1">
+            导出 PDF
+          </el-button>
+        </div>
       </template>
     </el-drawer>
   </div>
@@ -291,7 +462,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, Refresh, Document, Loading } from '@element-plus/icons-vue'
 import { followUpApi, dashboardApi, nurseAiApi, collaborationApi } from '@/api/endpoints'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FollowUpRecord, Pregnant } from '@/types'
 
 /** 轮询间隔（毫秒） */
@@ -339,10 +510,59 @@ const aiReviewLoading = ref(false)
 const aiReviewResult = ref<any>(null)
 const confirmLoading = ref(false)
 
+/** 编辑功能 */
+const editMode = ref(false)
+const saveEditLoading = ref(false)
+const editForm = ref({ chief_complaint: '', summary: '' })
+const editFormAnswers = ref<Array<{ key: string; value: string }>>([])
+
+const drawerTitle = computed(() => {
+  if (!reviewRecord.value) return '随访详情'
+  const s = reviewRecord.value.status
+  if (s === 'draft') return '随访编辑 → 确认归档'
+  if (s === 'in_progress' || s === 'completed') return '随访审核'
+  return '随访记录详情'
+})
+
+const isEditable = computed(() => {
+  const s = reviewRecord.value?.status
+  return s === 'draft' || s === 'in_progress'
+})
+
+const isReviewable = computed(() => {
+  const s = reviewRecord.value?.status
+  return s === 'completed' || s === 'in_progress'
+})
+
+const isArchived = computed(() => {
+  const s = reviewRecord.value?.status
+  return s === 'confirmed' || s === 'archived'
+})
+
+function goPrintPage() {
+  if (!reviewRecord.value) return
+  router.push({ name: 'FollowUpPrint', params: { id: reviewRecord.value.id } })
+}
+
 /** AI 推荐面板 */
 const recommendPanelOpen = ref<string[]>(['recommend'])
 const recommendLoading = ref(false)
 const recommendations = ref<any[]>([])
+const batchTriggering = ref(false)
+const selectAllRecommendations = ref(false)
+
+const selectedRecommendations = computed(() =>
+  recommendations.value.filter((r: any) => r._selected)
+)
+
+const isIndeterminate = computed(() => {
+  const sel = selectedRecommendations.value.length
+  return sel > 0 && sel < recommendations.value.length
+})
+
+function handleSelectAll(val: boolean) {
+  recommendations.value.forEach((r: any) => { r._selected = val })
+}
 
 /** 打开对话框时加载孕妇列表 */
 watch(showTriggerDialog, (val) => {
@@ -395,6 +615,58 @@ function formatDate(d?: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+/** 字段标签映射 */
+function fieldLabel(key: string): string {
+  const map: Record<string, string> = {
+    weight: '体重', bp: '血压', fetal_movement: '胎动', diet: '饮食',
+    mood: '情绪', sleep: '睡眠', stress: '压力', medication: '用药',
+    nausea: '孕吐', feeling: '感受', blood_sugar_fasting: '空腹血糖',
+    blood_sugar_2h: '餐后血糖', sleep_quality: '睡眠质量',
+  }
+  return map[key] || key
+}
+
+function hasExam(obj: Record<string, any> | undefined): boolean {
+  return !!obj && Object.keys(obj).length > 0
+}
+
+function examLabel(key: string): string {
+  const map: Record<string, string> = {
+    fundal_height_cm: '宫高', abdominal_circumference_cm: '腹围',
+    fetal_position: '胎位', fetal_heart_rate_bpm: '胎心率',
+    blood_pressure: '血压',
+  }
+  return map[key] || key
+}
+
+function examHighlightClass(key: string, val: any): string {
+  if (key === 'fetal_heart_rate_bpm') {
+    const v = Number(val)
+    if (v < 110 || v > 170) return 'value-abnormal'
+  }
+  if (key === 'blood_pressure' && typeof val === 'string' && val.includes('/')) {
+    const [s, d] = val.split('/').map(Number)
+    if (s >= 140 || d >= 90) return 'value-abnormal'
+  }
+  return ''
+}
+
+function labLabel(key: string): string {
+  const map: Record<string, string> = {
+    hemoglobin_g_L: '血红蛋白', urine_protein: '尿蛋白',
+    blood_sugar_fasting: '空腹血糖', blood_sugar_2h: '餐后血糖',
+  }
+  return map[key] || key
+}
+
+function labHighlightClass(key: string, val: any): string {
+  if (key === 'hemoglobin_g_L' && Number(val) < 100) return 'value-abnormal'
+  if (key === 'urine_protein' && val !== '阴性') return 'value-abnormal'
+  if (key === 'blood_sugar_fasting' && Number(val) > 5.3) return 'value-abnormal'
+  if (key === 'blood_sugar_2h' && Number(val) > 6.7) return 'value-abnormal'
+  return ''
+}
+
 /** 加载随访记录 */
 async function fetchRecords() {
   loading.value = true
@@ -434,12 +706,21 @@ function goPregnantDetail(row: FollowUpRecord) {
   }
 }
 
-/** 确认审核 / 打开AI审核抽屉 */
-async function confirmRecord(row: FollowUpRecord) {
+/** 打开审核/编辑抽屉 */
+async function openReviewDrawer(row: FollowUpRecord) {
+  reviewRecord.value = row
+  showReviewDrawer.value = true
+  editMode.value = false
+  editForm.value = {
+    chief_complaint: row.chief_complaint || '',
+    summary: row.summary || '',
+  }
+  // 将 self_reported_data 转为可编辑数组
+  const data = row.self_reported_data || {}
+  editFormAnswers.value = Object.entries(data).map(([key, value]) => ({ key, value: String(value) }))
+
+  // 已完成/进行中的记录加载 AI 审核
   if (row.status === 'completed' || row.status === 'in_progress') {
-    // 打开 AI 审核抽屉
-    reviewRecord.value = row
-    showReviewDrawer.value = true
     aiReviewResult.value = null
     aiReviewLoading.value = true
     try {
@@ -452,15 +733,38 @@ async function confirmRecord(row: FollowUpRecord) {
       aiReviewLoading.value = false
     }
   } else {
-    // 草稿状态直接归档
-    try {
-      await followUpApi.confirm(row.id, 'confirmed')
-      ElMessage.success('归档成功')
-      await fetchRecords()
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || '归档失败'
-      ElMessage.error(msg)
-    }
+    aiReviewResult.value = null
+  }
+}
+
+/** 保存编辑 */
+async function saveEdit() {
+  if (!reviewRecord.value) return
+  saveEditLoading.value = true
+  try {
+    // 将编辑的答案数组转回对象
+    const selfReportedData: Record<string, string> = {}
+    editFormAnswers.value.forEach(e => {
+      if (e.key.trim()) selfReportedData[e.key.trim()] = e.value
+    })
+
+    await followUpApi.update(reviewRecord.value.id, {
+      chief_complaint: editForm.value.chief_complaint,
+      summary: editForm.value.summary,
+      self_reported_data: selfReportedData,
+    })
+
+    ElMessage.success('保存成功')
+    editMode.value = false
+    await fetchRecords()
+    // 刷新抽屉中的记录
+    const updated = records.value.find(r => r.id === reviewRecord.value?.id)
+    if (updated) reviewRecord.value = updated
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || err.message || '保存失败'
+    ElMessage.error(msg)
+  } finally {
+    saveEditLoading.value = false
   }
 }
 
@@ -532,7 +836,7 @@ async function fetchRecommendations() {
   recommendLoading.value = true
   try {
     const res = await nurseAiApi.getFollowupRecommendations()
-    recommendations.value = (res.data?.recommendations || []).map((r: any) => ({ ...r, _triggering: false }))
+    recommendations.value = (res.data?.recommendations || []).map((r: any) => ({ ...r, _triggering: false, _selected: false }))
   } catch (err) {
     console.error('加载AI推荐失败:', err)
     recommendations.value = []
@@ -555,6 +859,43 @@ async function doQuickTrigger(rec: any) {
   } finally {
     rec._triggering = false
   }
+}
+
+/** 批量触发选中的推荐随访 */
+async function doBatchTrigger() {
+  const selected = selectedRecommendations.value
+  if (!selected.length) return
+
+  await ElMessageBox.confirm(
+    `确定批量触发 ${selected.length} 条随访推荐？`,
+    '批量触发确认',
+    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+  )
+
+  batchTriggering.value = true
+  let successCount = 0
+  let failCount = 0
+
+  for (const rec of selected) {
+    try {
+      await followUpApi.trigger(rec.pregnant_id, rec.template_id)
+      successCount++
+    } catch {
+      failCount++
+    }
+  }
+
+  batchTriggering.value = false
+  selectAllRecommendations.value = false
+
+  if (successCount > 0) {
+    ElMessage.success(`成功触发 ${successCount} 条随访${failCount > 0 ? `，${failCount} 条失败` : ''}`)
+  } else {
+    ElMessage.error('批量触发失败')
+  }
+
+  await fetchRecords()
+  await fetchRecommendations()
 }
 
 onMounted(() => {
@@ -596,6 +937,19 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 10px;
 }
+.recommend-header {
+  display: flex;
+  align-items: center;
+}
+.recommend-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  margin-bottom: 10px;
+  background: var(--bg-page);
+  border-radius: 8px;
+}
 .recommend-item {
   display: flex;
   align-items: center;
@@ -605,6 +959,9 @@ onUnmounted(() => {
   background: var(--bg-page);
   border-radius: 10px;
   border: 1px solid var(--border);
+}
+.recommend-item__checkbox {
+  flex-shrink: 0;
 }
 .recommend-item__left {
   flex: 1;
@@ -656,108 +1013,227 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* ===== AI 审核抽屉 ===== */
-.mb-3 {
-  margin-bottom: 12px;
+/* ===== 随访记录单样式 ===== */
+.mb-3 { margin-bottom: 12px; }
+
+.record-header {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f0f9ff, #fff);
+  border: 1px solid #d4e6f9;
+  border-radius: 10px;
+  margin-bottom: 16px;
 }
-.review-section {
-  margin-bottom: 20px;
-}
-.review-section__title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 12px;
-}
-.review-info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.review-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.review-info-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.review-info-value {
-  font-size: 13px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-.review-answer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.review-answer-item {
-  display: flex;
-  gap: 12px;
-  padding: 8px 12px;
-  background: var(--bg-page);
-  border-radius: 8px;
-}
-.review-answer-key {
-  font-size: 12px;
-  color: var(--text-muted);
-  min-width: 80px;
-  flex-shrink: 0;
-}
-.review-answer-value {
-  font-size: 13px;
-  color: var(--text-primary);
-}
-.review-loading {
+.record-header__row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 16px;
-  color: var(--text-muted);
+}
+.record-header__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.record-header__meta {
+  margin-top: 4px;
   font-size: 13px;
-}
-.review-abnormal {
-  margin-bottom: 12px;
-}
-.review-abnormal__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-color-danger);
-  margin: 0 0 8px;
-}
-.review-abnormal__tag {
-  margin: 0 8px 8px 0;
-}
-.review-detail {
-  background: var(--bg-page);
-  border-radius: 8px;
-  padding: 12px;
-}
-.review-detail__title {
-  font-size: 13px;
-  font-weight: 600;
   color: var(--text-secondary);
-  margin: 0 0 6px;
 }
-.review-detail__body {
+
+/* SOAP 各节 */
+.record-section {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.record-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border);
+}
+.record-section__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.record-section__body {
+  padding: 12px 14px;
+}
+.record-muted {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* S/O/A/P badge */
+.record-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.record-badge--s { background: #409EFF; }
+.record-badge--o { background: #67C23A; }
+.record-badge--a { background: #E6A23C; }
+.record-badge--p { background: #909399; }
+
+/* S: 主观数据 key-value */
+.record-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.record-kv:last-child { border-bottom: none; }
+.record-kv__key {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 64px;
+  flex-shrink: 0;
+}
+.record-kv__val {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* O: 客观检查网格 */
+.record-exam-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.record-exam-cell {
+  text-align: center;
+  padding: 8px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+.record-exam-cell__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.record-exam-cell__value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.value-abnormal { color: #F56C6C; }
+
+/* A: 评估 */
+.record-summary {
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-primary);
   margin: 0;
 }
-.review-empty {
-  text-align: center;
-  padding: 24px;
+.record-ai-snapshot {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 8px;
+}
+.record-ai-snapshot__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #E6A23C;
+  margin-bottom: 6px;
+}
+.record-ai-snapshot__text {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+/* P: 指导标签 */
+.record-guidance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.record-guidance-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.record-guidance-item span {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
+}
+.record-next-date {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.record-referral {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fef0f0;
+  border: 1px solid #fde2e2;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #F56C6C;
+}
+
+/* 审核信息 */
+.record-section--audit {
+  background: #f5f7fa;
+  border-color: #e4e7ed;
+}
+.record-audit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.record-signature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.record-signature__img {
+  max-width: 140px;
+  max-height: 45px;
+  border-bottom: 1px solid #333;
+}
+.record-signature__time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* AI 加载+操作按钮 */
+.review-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
   color: var(--text-muted);
   font-size: 13px;
 }
-.review-actions {
+.record-actions {
   display: flex;
   gap: 12px;
   padding-top: 16px;
+  margin-top: 12px;
   border-top: 1px solid var(--border);
-  margin-top: auto;
 }
 </style>

@@ -142,3 +142,62 @@ def test_apply_doctor_draft_safety():
     # 但应拦截确定性结论
     blocked = apply_doctor_draft_safety("确诊为妊娠期糖尿病")
     assert "需医生审核" in blocked
+
+
+# ==================== 新增: 医嘱安全后处理 ====================
+
+
+def test_apply_order_draft_safety_safe_text():
+    """验证安全的医嘱文本不被修改"""
+    from app.core.agno_guardrails import apply_order_draft_safety
+
+    safe = apply_order_draft_safety("建议每2周复查血压，低盐饮食，每日监测血压。")
+    assert safe == "建议每2周复查血压，低盐饮食，每日监测血压。"
+
+
+def test_apply_order_draft_safety_blocks_diagnosis():
+    """验证医嘱过滤确诊表述"""
+    from app.core.agno_guardrails import apply_order_draft_safety
+
+    blocked = apply_order_draft_safety("确诊为妊娠期高血压，需收治入院。")
+    assert "需医生审核修改后签署" in blocked
+
+
+def test_apply_order_draft_safety_blocks_definite_treatment():
+    """验证医嘱过滤确定性治疗方案"""
+    from app.core.agno_guardrails import apply_order_draft_safety
+
+    blocked = apply_order_draft_safety("治疗方案为口服拉贝洛尔100mg bid。")
+    assert "需医生审核修改后签署" in blocked
+
+
+def test_apply_order_draft_safety_allows_suggestion():
+    """验证医嘱允许建议性措辞"""
+    from app.core.agno_guardrails import apply_order_draft_safety
+
+    # 使用"建议"、"可考虑"等措辞应该通过
+    safe = apply_order_draft_safety("建议低盐饮食，可考虑口服拉贝洛尔控制血压，具体用药需医生评估。")
+    assert safe == "建议低盐饮食，可考虑口服拉贝洛尔控制血压，具体用药需医生评估。"
+
+
+def test_apply_order_draft_safety_empty_text():
+    """验证空文本不报错"""
+    from app.core.agno_guardrails import apply_order_draft_safety
+
+    assert apply_order_draft_safety("") == ""
+    assert apply_order_draft_safety(None) is None
+
+
+def test_doctor_draft_guardrail_enhanced_patterns():
+    """验证DoctorDraftGuardrail增强后的拦截模式"""
+    from app.core.agno_guardrails import DoctorDraftGuardrail
+
+    guardrail = DoctorDraftGuardrail()
+
+    # 新增拦截模式
+    assert guardrail.check("明确诊断为妊娠期糖尿病") is not None
+    assert guardrail.check("无需进一步检查即可确认") is not None  # "无需进一步检查"
+    assert guardrail.check("可以排除子痫前期") is not None
+
+    # 安全内容
+    assert guardrail.check("建议进一步评估血压情况") is None

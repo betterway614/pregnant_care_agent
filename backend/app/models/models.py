@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, date
 from sqlalchemy import (
-    Column, String, Integer, Float, DateTime, Date,
+    Column, String, Integer, Float, DateTime, Date, Boolean,
     Text, ForeignKey, JSON, TypeDecorator, Index
 )
 from ..database import Base
@@ -118,6 +118,10 @@ class FollowUpRecord(Base):
     reviewed_at = Column(DateTime, nullable=True, comment="审核时间")
     review_comment = Column(Text, nullable=True, comment="审核意见")
     ai_snapshot = Column(JSON, default=dict, comment="审核时AI分析报告快照（不可变）")
+    # 归档文档
+    record_snapshot = Column(JSON, default=dict, comment="确认时冻结的全量字段快照（不可变）")
+    record_text = Column(Text, nullable=True, comment="格式化纯文本记录（用于检索、导出、打印）")
+    signature_data = Column(JSON, default=dict, comment="签名数据：{image: base64, signer, signed_at}")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -153,7 +157,7 @@ class Alert(Base):
     level = Column(String(16), default="YELLOW", comment="RED/ORANGE/YELLOW")
     message = Column(Text, nullable=False)
     details = Column(JSON, default=dict, comment="触发详情")
-    status = Column(String(16), default="PENDING", comment="PENDING/CONFIRMED/DISMISSED")
+    status = Column(String(16), default="PENDING", comment="PENDING/ESCALATED/CONFIRMED/DISMISSED")
     reviewed_by = Column(String(64), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -188,6 +192,12 @@ class MedicalOrder(Base):
     signed_at = Column(DateTime, nullable=True)
     acknowledged_at = Column(DateTime, nullable=True, comment="孕妇确认阅读时间")
     created_at = Column(DateTime, default=datetime.utcnow)
+    # 医嘱签署增强字段
+    signature_data = Column(JSON, default=dict, comment="手写签名 {image, signer_name, signed_at}")
+    order_snapshot = Column(JSON, default=dict, comment="签署时订单快照")
+    order_text = Column(Text, nullable=True, comment="纯文本文档（打印/导出）")
+    modified_by_doctor = Column(Boolean, default=False, comment="医生是否已修改内容")
+    doctor_notes = Column(Text, nullable=True, comment="医生修改备注")
 
 
 class Feedback(Base):

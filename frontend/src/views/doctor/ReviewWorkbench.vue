@@ -168,7 +168,7 @@
               :icon="WarningFilled"
               :loading="submitting"
               @click="confirmHighRisk"
-              :disabled="selectedAlert.status !== 'pending'"
+              :disabled="!isStatusActionable(selectedAlert.status)"
             >
               确认高危
             </el-button>
@@ -177,7 +177,7 @@
               :icon="Edit"
               :loading="submitting"
               @click="showDowngradeDialog"
-              :disabled="selectedAlert.status !== 'pending'"
+              :disabled="!isStatusActionable(selectedAlert.status)"
             >
               降级
             </el-button>
@@ -185,7 +185,7 @@
               plain
               :icon="FolderAdd"
               @click="handleSupplement"
-              :disabled="selectedAlert.status !== 'pending'"
+              :disabled="!isStatusActionable(selectedAlert.status)"
             >
               补充资料
             </el-button>
@@ -220,7 +220,8 @@
                 <div
                   v-for="record in pregnantFollowUps.slice(0, 5)"
                   :key="record.id"
-                  class="followup-item"
+                  class="followup-item followup-item--clickable"
+                  @click="openFollowupDetail(record)"
                 >
                   <div class="followup-item__header">
                     <span class="followup-item__date">{{ formatTime(record.follow_up_date) }}</span>
@@ -313,9 +314,30 @@
               <!-- 建议医嘱 -->
               <section v-if="aiAnalysisResult.suggested_orders" class="detail-section">
                 <h4 class="detail-section__title">建议医嘱</h4>
+                <el-alert
+                  type="error"
+                  :closable="false"
+                  show-icon
+                  style="margin-bottom: 12px"
+                >
+                  <template #title>
+                    <span style="font-weight: 700; color: #d32f2f">
+                      以下为AI生成的医疗建议，不能替代医生专业判断，必须经医生审核修改并签署后方可执行
+                    </span>
+                  </template>
+                </el-alert>
                 <div class="suggested-orders">
                   {{ aiAnalysisResult.suggested_orders }}
                 </div>
+                <el-button
+                  type="primary"
+                  :icon="DocumentAdd"
+                  :loading="orderGenerating"
+                  @click="generateOrderFromAnalysis"
+                  style="margin-top: 12px; width: 100%"
+                >
+                  生成正式医嘱
+                </el-button>
               </section>
 
               <!-- 循证参考 -->
@@ -466,6 +488,128 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 随访详情模态框 -->
+    <el-dialog
+      v-model="followupDetailVisible"
+      :title="'随访记录详情 - ' + (followupDetail?.patient_name || '')"
+      width="780px"
+      destroy-on-close
+      top="5vh"
+    >
+      <template v-if="followupDetail">
+        <el-tabs v-model="followupTab">
+          <el-tab-pane label="随访详情" name="detail">
+            <div class="followup-soap" v-if="followupDoc?.snapshot">
+              <!-- 基本信息 -->
+              <div class="soap-info-bar">
+                <span>孕周：{{ followupDoc.snapshot.gestational_week }}</span>
+                <span>日期：{{ followupDoc.snapshot.follow_up_date }}</span>
+                <el-tag :type="classificationTag(followupDoc.snapshot.classification)" size="small">
+                  {{ classificationLabel(followupDoc.snapshot.classification) }}
+                </el-tag>
+              </div>
+
+              <!-- S 主观数据 -->
+              <div class="soap-section">
+                <h5 class="soap-section__title soap-s">S 主观数据</h5>
+                <div v-if="followupDoc.snapshot.self_reported_data" class="soap-grid">
+                  <div v-for="(v, k) in followupDoc.snapshot.self_reported_data" :key="k" class="soap-item">
+                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__value">{{ v }}</span>
+                  </div>
+                </div>
+                <p v-if="followupDoc.snapshot.chief_complaint" class="soap-complaint">
+                  主诉：{{ followupDoc.snapshot.chief_complaint }}
+                </p>
+              </div>
+
+              <!-- O 客观检查 -->
+              <div class="soap-section" v-if="followupDoc.snapshot.obstetric_exam || followupDoc.snapshot.lab_results">
+                <h5 class="soap-section__title soap-o">O 客观检查</h5>
+                <div v-if="followupDoc.snapshot.obstetric_exam" class="soap-grid">
+                  <div v-for="(v, k) in followupDoc.snapshot.obstetric_exam" :key="k" class="soap-item">
+                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__value">{{ v }}</span>
+                  </div>
+                </div>
+                <div v-if="followupDoc.snapshot.lab_results" class="soap-grid">
+                  <div v-for="(v, k) in followupDoc.snapshot.lab_results" :key="k" class="soap-item">
+                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__value">{{ v }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- A 评估 -->
+              <div class="soap-section" v-if="followupDoc.snapshot.summary">
+                <h5 class="soap-section__title soap-a">A 评估</h5>
+                <p class="soap-text">{{ followupDoc.snapshot.summary }}</p>
+              </div>
+
+              <!-- P 计划 -->
+              <div class="soap-section" v-if="followupDoc.snapshot.guidance_tags?.length">
+                <h5 class="soap-section__title soap-p">P 计划</h5>
+                <div v-for="(g, idx) in followupDoc.snapshot.guidance_tags" :key="idx" class="soap-guidance">
+                  <el-tag size="small" effect="plain">{{ g.tag }}</el-tag>
+                  <span>{{ g.content }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              <p>暂无详细随访数据</p>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="护士签名" name="signature">
+            <div class="signature-tab">
+              <template v-if="followupDoc?.signature?.image">
+                <div class="signature-tab__img-wrap">
+                  <img :src="followupDoc.signature.image" class="signature-tab__img" />
+                </div>
+                <div class="signature-tab__info">
+                  <p>签名人：{{ followupDoc.signature.signer || '护士' }}</p>
+                  <p>签名时间：{{ followupDoc.signature.signed_at || '未知' }}</p>
+                </div>
+              </template>
+              <div v-else class="empty-state">
+                <el-icon :size="36" color="var(--text-light)"><Edit /></el-icon>
+                <p>该随访记录暂无护士签名</p>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="历史数据" name="trends">
+            <div class="trends-tab" v-loading="trendsLoading">
+              <!-- 基础信息卡片 -->
+              <div class="patient-info-card" v-if="selectedAlert">
+                <div class="patient-info-card__item">
+                  <span class="patient-info-card__label">孕妇</span>
+                  <span class="patient-info-card__value">{{ selectedAlert.patient_name }}</span>
+                </div>
+                <div class="patient-info-card__item">
+                  <span class="patient-info-card__label">孕周</span>
+                  <span class="patient-info-card__value">{{ calcGestationalWeek(selectedAlert.gestational_age_days) }}周</span>
+                </div>
+                <div class="patient-info-card__item">
+                  <span class="patient-info-card__label">风险等级</span>
+                  <RiskBadge :level="mapRiskLevel(selectedAlert.level)" />
+                </div>
+              </div>
+              <!-- 健康趋势图表 -->
+              <HealthTrendChart
+                v-if="trendsData?.series?.length"
+                :series="trendsData.series"
+                :height="300"
+              />
+              <div v-else class="empty-state">
+                <p>暂无健康趋势数据</p>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -475,12 +619,13 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Refresh, WarningFilled, Edit, FolderAdd,
   Select, ChatDotSquare, User, CircleCheck,
-  MagicStick, Guide, FirstAidKit,
+  MagicStick, Guide, FirstAidKit, DocumentAdd,
 } from '@element-plus/icons-vue'
-import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
+import { alertApi, orderApi, followUpApi, doctorAiApi, pregnantApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
 import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
+import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import { ElNotification } from 'element-plus'
 
 const route = useRoute()
@@ -522,6 +667,14 @@ const supplementForm = ref({
   reference_links: '',
   additional_data: '',
 })
+
+// 随访详情模态框
+const followupDetailVisible = ref(false)
+const followupDetail = ref<FollowUpRecord | null>(null)
+const followupDoc = ref<any>(null)
+const followupTab = ref('detail')
+const trendsLoading = ref(false)
+const trendsData = ref<any>(null)
 
 /** 风险级别映射 */
 function mapRiskLevel(level: string): string {
@@ -567,24 +720,31 @@ function getTriggerSourceText(source: string): string {
 function getAlertStatusTag(status: string): 'danger' | 'warning' | 'success' | 'info' {
   const map: Record<string, 'danger' | 'warning' | 'success' | 'info'> = {
     pending: 'danger',
+    escalated: 'danger',
     confirmed: 'warning',
     downgraded: 'warning',
     resolved: 'success',
     dismissed: 'info',
   }
-  return map[status] || 'info'
+  return map[status.toLowerCase()] || 'info'
 }
 
 /** 预警状态文本 */
 function getAlertStatusText(status: string): string {
   const map: Record<string, string> = {
     pending: '待审核',
+    escalated: '已升级(紧急)',
     confirmed: '已确认',
     downgraded: '已降级',
     resolved: '已解决',
     dismissed: '已忽略',
   }
-  return map[status] || status
+  return map[status.toLowerCase()] || status
+}
+
+/** 判断预警状态是否可操作 */
+function isStatusActionable(status: string): boolean {
+  return ['pending', 'escalated'].includes(status.toLowerCase())
 }
 
 /** 是否有详情数据 */
@@ -660,7 +820,7 @@ async function selectAlert(alert: Alert) {
 async function loadAlerts() {
   loading.value = true
   try {
-    const res = await alertApi.list({ status: 'pending' })
+    const res = await alertApi.list({ status: 'pending,escalated' })
     alertList.value = res.data || []
   } catch (err) {
     console.error('加载预警列表失败:', err)
@@ -675,8 +835,6 @@ async function confirmHighRisk() {
   submitting.value = true
   try {
     await alertApi.review(selectedAlert.value.id, 'confirm')
-    // 触发医嘱建议对话框
-    await generateOrderSuggestion()
     // 从列表中移除
     alertList.value = alertList.value.filter((a) => a.id !== selectedAlert.value!.id)
   } catch (err) {
@@ -770,11 +928,78 @@ async function acceptOrder() {
   }
 }
 
+/** 从AI分析结果生成正式医嘱 */
+async function generateOrderFromAnalysis() {
+  if (!selectedAlert.value || !aiAnalysisResult.value?.suggested_orders) return
+  orderGenerating.value = true
+  try {
+    const res = await orderApi.generate({
+      pregnant_id: selectedAlert.value.pregnant_id,
+      alert_id: selectedAlert.value.id,
+      risk_level: selectedAlert.value.level,
+      gestational_weeks: calcGestationalWeek(selectedAlert.value.gestational_age_days),
+    })
+    // 跳转到医嘱签名页
+    router.push({ name: 'OrderSign', params: { orderId: res.data.id } })
+  } catch (err) {
+    console.error('生成医嘱失败:', err)
+  } finally {
+    orderGenerating.value = false
+  }
+}
+
 /** 手写医嘱 */
 function writeManually() {
   orderDialogVisible.value = false
   // 跳转到医嘱管理页面
   router.push('/doctor/orders')
+}
+
+/** 打开随访详情模态框 */
+async function openFollowupDetail(record: FollowUpRecord) {
+  followupDetail.value = record
+  followupDetailVisible.value = true
+  followupTab.value = 'detail'
+  followupDoc.value = null
+  trendsData.value = null
+
+  // 加载随访文档（含签名）
+  try {
+    const res = await followUpApi.getDocument(record.id)
+    followupDoc.value = res.data
+  } catch (err) {
+    console.error('加载随访文档失败:', err)
+  }
+
+  // 加载健康趋势数据
+  if (selectedAlert.value?.pregnant_id) {
+    trendsLoading.value = true
+    try {
+      const res = await pregnantApi.getHealthTrends(selectedAlert.value.pregnant_id, {
+        metrics: 'weight,systolic,diastolic,fetal_movement,blood_sugar',
+        granularity: 'weekly',
+      })
+      trendsData.value = res.data
+    } catch (err) {
+      console.error('加载健康趋势失败:', err)
+    } finally {
+      trendsLoading.value = false
+    }
+  }
+}
+
+/** 随访分类标签颜色 */
+function classificationTag(classification: string): 'success' | 'warning' | 'danger' | 'info' {
+  const map: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+    normal: 'success', abnormal: 'warning', critical: 'danger',
+  }
+  return map[classification] || 'info'
+}
+
+/** 随访分类标签文本 */
+function classificationLabel(classification: string): string {
+  const map: Record<string, string> = { normal: '正常', abnormal: '异常', critical: '高危' }
+  return map[classification] || classification
 }
 
 /** 触发AI分析 */
@@ -1298,5 +1523,155 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.8;
+}
+
+/* ====== 随访详情模态框 ====== */
+
+.followup-item--clickable {
+  cursor: pointer;
+}
+
+.followup-item--clickable:hover {
+  background: rgba(232, 245, 233, 0.2);
+  border-radius: var(--radius-xs);
+}
+
+.soap-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.soap-section {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: var(--glass-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.soap-section__title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid;
+}
+
+.soap-s { border-color: #6366f1; color: #6366f1; }
+.soap-o { border-color: #22c55e; color: #22c55e; }
+.soap-a { border-color: #f59e0b; color: #f59e0b; }
+.soap-p { border-color: #8b5cf6; color: #8b5cf6; }
+
+.soap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.soap-item {
+  display: flex;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.soap-item__key {
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.soap-item__value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.soap-complaint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.soap-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin: 0;
+}
+
+.soap-guidance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 签名 Tab */
+.signature-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.signature-tab__img-wrap {
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+}
+
+.signature-tab__img {
+  max-width: 300px;
+  max-height: 100px;
+}
+
+.signature-tab__info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.signature-tab__info p {
+  margin: 4px 0;
+}
+
+/* 历史数据 Tab */
+.trends-tab {
+  min-height: 200px;
+}
+
+.patient-info-card {
+  display: flex;
+  gap: 24px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(232, 245, 233, 0.4), rgba(46, 125, 50, 0.08));
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  border: 1px solid rgba(46, 125, 50, 0.12);
+}
+
+.patient-info-card__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.patient-info-card__label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.patient-info-card__value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 </style>

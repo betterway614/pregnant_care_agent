@@ -165,8 +165,13 @@
                 <!-- 用户消息：柔和圆角气泡 -->
                 <div v-if="msg.role === 'user'" class="bubble-text">
                   <!-- 音频消息：可播放的音频条 -->
-                  <div v-if="msg.messageType === 'audio' && msg.audioUrl" class="audio-bubble">
-                    <button class="audio-bubble__btn" @click="toggleAudioPlay(msg)">
+                  <div v-if="msg.messageType === 'audio' && msg.audioUrl" class="audio-bubble"
+                    @pointerdown.prevent="onAudioBubblePointerDown(msg)"
+                    @pointerup.prevent="onAudioBubblePointerUp"
+                    @pointerleave="onAudioBubblePointerUp"
+                    @contextmenu.prevent
+                  >
+                    <button class="audio-bubble__btn" @click.stop="toggleAudioPlay(msg)">
                       <el-icon :size="18">
                         <VideoPause v-if="playingMsgId === msg.id" />
                         <VideoPlay v-else />
@@ -176,6 +181,18 @@
                       <span v-for="i in 16" :key="i" class="audio-bubble__bar" :style="{ height: (12 + Math.sin(i * 0.9) * 14 + Math.cos(i * 2.1) * 6) + 'px' }" :class="{ 'audio-bubble__bar--play': playingMsgId === msg.id, 'audio-bubble__bar--played': playingMsgId === msg.id && i <= 8 }" />
                     </div>
                     <span class="audio-bubble__dur">{{ formatDuration(msg.audioDuration || 0) }}</span>
+                    <!-- 转录文本按钮 -->
+                    <button class="audio-bubble__transcribe-btn" @click.stop="handleAudioTranscribe(msg)" :title="isTranscriptionVisible(msg) ? '隐藏文字' : '转文字'">
+                      <el-icon :size="14"><Document /></el-icon>
+                    </button>
+                  </div>
+                  <!-- ASR 转录文本 -->
+                  <div v-if="msg.messageType === 'audio' && isTranscriptionVisible(msg)" class="audio-transcription">
+                    <span v-if="msg.transcribing" class="audio-transcription__loading">正在识别语音...</span>
+                    <span v-else>{{ msg.transcribedText }}</span>
+                  </div>
+                  <div v-else-if="msg.messageType === 'audio' && msg.transcribing" class="audio-transcription">
+                    <span class="audio-transcription__loading">正在识别语音...</span>
                   </div>
                   <!-- 图片消息：预览 -->
                   <div v-else-if="(msg as any).messageType === 'image' && (msg as any).audioUrl" class="image-bubble">
@@ -301,16 +318,38 @@
           </button>
 
           <!-- 图片上传按钮 -->
-          <button
-            class="toolbar-btn interactive-card"
-            @click="triggerImageUpload"
-            :disabled="isUploadingImage"
-            aria-label="上传图片"
-          >
-            <el-icon :size="20"><Picture /></el-icon>
-          </button>
+          <el-popover trigger="click" :width="180" :show-arrow="false" placement="top-end">
+            <template #reference>
+              <button
+                class="toolbar-btn interactive-card"
+                :disabled="isUploadingImage"
+                aria-label="上传图片"
+              >
+                <el-icon :size="20"><Picture /></el-icon>
+              </button>
+            </template>
+            <div class="image-source-menu">
+              <button class="image-source-item" @click="triggerImageUpload('camera')">
+                <el-icon :size="18"><Camera /></el-icon>
+                <span>拍照</span>
+              </button>
+              <button class="image-source-item" @click="triggerImageUpload('album')">
+                <el-icon :size="18"><Picture /></el-icon>
+                <span>从相册选择</span>
+              </button>
+            </div>
+          </el-popover>
+          <!-- 相册选择 input（无 capture 属性） -->
           <input
-            ref="imageInputRef"
+            ref="albumInputRef"
+            type="file"
+            accept="image/*"
+            style="display: none"
+            @change="handleImageSelected"
+          />
+          <!-- 拍照 input（带 capture 属性） -->
+          <input
+            ref="cameraInputRef"
             type="file"
             accept="image/*"
             capture="environment"
@@ -384,7 +423,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Delete, DeleteFilled, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
-  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera, Headset
+  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera, Headset, Document
 } from '@element-plus/icons-vue'
 import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
@@ -468,7 +507,8 @@ const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'pregna
 const ttsSpeakingId = ref<string | null>(null)
 
 // 图片上传
-const imageInputRef = ref<HTMLInputElement | null>(null)
+const albumInputRef = ref<HTMLInputElement | null>(null)
+const cameraInputRef = ref<HTMLInputElement | null>(null)
 const isUploadingImage = ref(false)
 
 // 编辑
@@ -790,7 +830,30 @@ function formatDuration(seconds: number): string {
 // ---- 按住录制 ----
 let shouldSendAudio = false  // 标记是否需要发送音频（true=正常结束，false=取消）
 
+/** 检查麦克风权限 */
+async function checkMicPermission(): Promise<boolean> {
+  // 1. 安全上下文检查
+  if (!navigator.mediaDevices?.getUserMedia) {
+    ElMessage.warning('当前环境不支持录音，请使用 HTTPS 访问')
+    return false
+  }
+
+  // 2. 使用 Permissions API 预检查（非所有浏览器支持）
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+    if (status.state === 'denied') {
+      ElMessage.warning('麦克风权限已被拒绝，请在浏览器设置中允许麦克风访问')
+      return false
+    }
+  } catch { /* Permissions API 不支持，跳过预检查 */ }
+
+  return true
+}
+
 async function startRecording(e: PointerEvent) {
+  // 权限预检
+  if (!(await checkMicPermission())) return
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -875,9 +938,17 @@ async function startRecording(e: PointerEvent) {
     document.addEventListener('pointermove', onPointerMove)
     document.addEventListener('pointerup', onPointerUp)
     document.addEventListener('pointercancel', onPointerUp)
-  } catch (err) {
+  } catch (err: any) {
     console.error('麦克风访问失败:', err)
-    ElMessage.warning('无法访问麦克风，请检查权限设置')
+    if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+      ElMessage.warning('请允许麦克风权限后再试。可点击浏览器地址栏🔒图标设置权限')
+    } else if (err?.name === 'NotFoundError') {
+      ElMessage.warning('未检测到麦克风设备')
+    } else if (err?.name === 'NotReadableError') {
+      ElMessage.warning('麦克风被其他应用占用，请关闭后重试')
+    } else {
+      ElMessage.warning('无法访问麦克风，请检查设备和浏览器设置')
+    }
     isRecording.value = false
   }
 }
@@ -961,6 +1032,15 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
         })
+        // 保存 ASR 转录文本到用户语音消息
+        if (metadata.transcribed_text) {
+          const userAudioMsg = chatStore.messages.find(
+            (m) => m.role === 'user' && m.messageType === 'audio' && !m.transcribedText
+          )
+          if (userAudioMsg) {
+            chatStore.updateMessage(userAudioMsg.id, { transcribedText: metadata.transcribed_text })
+          }
+        }
       },
       onError(err: Error) {
         console.error('Audio SSE error:', err)
@@ -987,8 +1067,12 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
 }
 
 // ---- 图片上传 ----
-function triggerImageUpload() {
-  imageInputRef.value?.click()
+function triggerImageUpload(source: 'camera' | 'album' = 'album') {
+  if (source === 'camera') {
+    cameraInputRef.value?.click()
+  } else {
+    albumInputRef.value?.click()
+  }
 }
 
 async function handleImageSelected(e: Event) {
@@ -1124,6 +1208,75 @@ function toggleAudioPlay(msg: ChatMessage) {
   playingMsgId.value = msg.id
 }
 
+// ---- 语音长按转文字 ----
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+const hiddenTranscriptions = ref<Set<string>>(new Set())
+
+function onAudioBubblePointerDown(msg: ChatMessage) {
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    handleAudioTranscribe(msg)
+  }, 600)
+}
+
+function onAudioBubblePointerUp() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function isTranscriptionVisible(msg: ChatMessage): boolean {
+  return !!msg.transcribedText && !hiddenTranscriptions.value.has(msg.id)
+}
+
+function toggleTranscriptionVisibility(msg: ChatMessage) {
+  const set = hiddenTranscriptions.value
+  if (set.has(msg.id)) {
+    set.delete(msg.id)
+  } else {
+    set.add(msg.id)
+  }
+}
+
+async function handleAudioTranscribe(msg: ChatMessage) {
+  // 已有转录文本，切换显示/隐藏
+  if (msg.transcribedText) {
+    toggleTranscriptionVisibility(msg)
+    return
+  }
+
+  // 需要从音频 blob 获取 base64
+  if (!msg.audioUrl) return
+
+  chatStore.updateMessage(msg.id, { transcribing: true })
+
+  try {
+    const resp = await fetch(msg.audioUrl)
+    const blob = await resp.blob()
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.split(',')[1]
+      // 从 blob URL 推断格式
+      const format = msg.audioUrl?.includes('ogg') ? 'ogg' : msg.audioUrl?.includes('webm') ? 'webm' : 'wav'
+
+      try {
+        const res = await chatApi.asr({ audio_data: base64, audio_format: format })
+        const text = res.data.text || '（语音识别为空）'
+        chatStore.updateMessage(msg.id, { transcribedText: text, transcribing: false })
+      } catch (err) {
+        console.error('ASR failed:', err)
+        chatStore.updateMessage(msg.id, { transcribedText: '（语音识别失败）', transcribing: false })
+      }
+    }
+    reader.readAsDataURL(blob)
+  } catch (err) {
+    console.error('Audio blob read failed:', err)
+    chatStore.updateMessage(msg.id, { transcribing: false })
+  }
+}
+
 /* ==================== 上下文 ==================== */
 async function loadPregnantContext() {
   const pid = pregnantId.value
@@ -1139,8 +1292,31 @@ async function loadPregnantContext() {
   } catch { /* ignore */ }
 }
 
+/* ==================== 移动端键盘适配 ==================== */
+function setupMobileKeyboard() {
+  const vv = window.visualViewport
+  if (!vv) return
+
+  const wrapper = document.querySelector('.chat-wrapper') as HTMLElement
+  if (!wrapper) return
+
+  function onViewportResize() {
+    // 计算键盘弹出时的高度差
+    const offset = window.innerHeight - vv.height - vv.offsetTop
+    wrapper.style.setProperty('--keyboard-offset', `${Math.max(0, offset)}px`)
+    // 键盘弹出时滚动到底部
+    if (offset > 100) {
+      setTimeout(() => scrollToBottom(false), 100)
+    }
+  }
+
+  vv.addEventListener('resize', onViewportResize)
+  vv.addEventListener('scroll', onViewportResize)
+}
+
 /* ==================== 生命周期 ==================== */
 onMounted(async () => {
+  setupMobileKeyboard()
   const fupId = route.query.followup as string | undefined
   if (fupId) {
     followupRecordId.value = fupId
@@ -1185,11 +1361,14 @@ onMounted(async () => {
   grid-template-rows: auto auto 1fr auto;
   grid-template-columns: 100%;
   height: 100vh;
+  height: 100dvh; /* 动态视口高度，正确处理移动端浏览器导航栏 */
   position: relative;
   overflow: hidden;
   font-family: 'Nunito Sans', 'PingFang SC', sans-serif;
   color: #1E293B;
   background-color: #F8FAFC;
+  /* 键盘弹出时的底部偏移 */
+  --keyboard-offset: 0px;
 }
 .chat-wrapper--ios {
   height: 100%;
@@ -1431,7 +1610,10 @@ onMounted(async () => {
   grid-row: 4; grid-column: 1;
   position: relative; z-index: 10;
   display: flex; flex-direction: column; align-items: center;
-  padding: 0 16px 16px; padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  padding: 0 16px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+  /* 防止被移动端浏览器底部导航栏遮挡 */
+  transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
 }
 
 .prompt-chips {
@@ -1667,12 +1849,60 @@ onMounted(async () => {
   0% { opacity: 0.6; }
   100% { opacity: 1; }
 }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 .audio-bubble__dur {
   font-size: 12px;
   font-weight: 600;
   color: #64748B;
   flex-shrink: 0;
   min-width: 36px;
+}
+.audio-bubble__transcribe-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748B;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.audio-bubble__transcribe-btn:hover {
+  background: rgba(251, 113, 133, 0.15);
+  color: #E11D48;
+}
+.audio-bubble__transcribe-btn:active { transform: scale(0.9); }
+
+/* ==================== 语音转录文本 ==================== */
+.audio-transcription {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(100, 116, 139, 0.06);
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.1);
+  user-select: text;
+}
+.audio-transcription__loading {
+  color: #94A3B8;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.audio-transcription__loading::before {
+  content: '';
+  width: 12px; height: 12px;
+  border: 2px solid #CBD5E1;
+  border-top-color: #FB7185;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ==================== 图片消息气泡 ==================== */
@@ -1725,5 +1955,33 @@ onMounted(async () => {
 }
 
 .input-hint { font-size: 11px; color: #94A3B8; }
+
+/* ==================== 图片来源选择菜单 ==================== */
+.image-source-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.image-source-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.image-source-item:hover {
+  background: #FFF1F2;
+  color: #E11D48;
+}
+.image-source-item:active {
+  background: #FFE4E6;
+}
 
 </style>

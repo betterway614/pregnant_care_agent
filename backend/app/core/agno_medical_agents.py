@@ -151,8 +151,8 @@ def create_doctor_agent() -> Agent:
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
-        tool_call_limit=5,
-        max_tool_calls_from_history=3,
+        tool_call_limit=3,
+        max_tool_calls_from_history=2,
     )
 
 

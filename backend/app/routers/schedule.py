@@ -39,13 +39,13 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db)):
     )
 
     # 删除旧排期
-    db.query(ScheduleNode).filter(ScheduleNode.pregnant_id == patient_id).delete()
+    db.query(ScheduleNode).filter(ScheduleNode.pregnant_id == pregnant_id).delete()
 
     # 插入新排期
     created = []
     for node in nodes:
         db_node = ScheduleNode(
-            pregnant_id=patient_id,
+            pregnant_id=pregnant_id,
             gest_week=node["gest_week"],
             scheduled_date=date.fromisoformat(node["scheduled_date"]),
             item=node["item"],

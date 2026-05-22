@@ -15,7 +15,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     """获取统计看板数据"""
     total_pregnant = db.query(func.count(Pregnant.pregnant_id)).scalar() or 0
     pending_alerts = db.query(func.count(Alert.id)).filter(
-        Alert.status == "PENDING"
+        Alert.status.in_(["PENDING", "ESCALATED"])
     ).scalar() or 0
     today_followups = db.query(func.count(FollowUpRecord.id)).filter(
         func.date(FollowUpRecord.follow_up_date) == datetime.now().date()

@@ -260,7 +260,7 @@ async function loadAllData() {
   try {
     const [statsRes, alertsRes, ordersRes] = await Promise.all([
       dashboardApi.stats(),
-      alertApi.list({ status: 'pending' }),
+      alertApi.list({ status: 'pending,escalated' }),
       orderApi.list({ status: 'draft,pending_sign' }),
     ])
     stats.value = statsRes.data
@@ -280,14 +280,9 @@ function handleAlertClick(alert: Alert) {
   }
 }
 
-/** 签署医嘱 */
-async function handleSignOrder(order: MedicalOrder) {
-  try {
-    await orderApi.sign(order.id, 'current-doctor')
-    await loadAllData()
-  } catch (err) {
-    console.error('签署失败:', err)
-  }
+/** 签署医嘱 — 跳转到医嘱签名页 */
+function handleSignOrder(order: MedicalOrder) {
+  router.push({ name: 'OrderSign', params: { orderId: order.id } })
 }
 
 /**

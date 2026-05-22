@@ -7,7 +7,7 @@ from uuid import UUID
 from datetime import datetime
 from ..database import get_db, SessionLocal
 from ..models import MedicalOrder, Pregnant, Alert
-from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderExplainResponse
+from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderExplainResponse, OrderDocumentResponse
 from ..services import order_service
 from ..core import get_llm_client
 
@@ -73,6 +73,11 @@ async def generate_order(req: OrderGenerateRequest, db: Session = Depends(get_db
 
     # 创建草稿医嘱
     alert_id = UUID(req.alert_id) if req.alert_id else None
+
+    # 应用医嘱安全过滤：禁止诊断性结论，只保留医疗建议/诊疗指导
+    from ..core.agno_guardrails import apply_order_draft_safety
+    final_content = apply_order_draft_safety(final_content)
+
     order = MedicalOrder(
         pregnant_id=req.pregnant_id,
         alert_id=alert_id,
@@ -132,10 +137,44 @@ def get_pregnant_orders(pregnant_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{order_id}/sign", response_model=OrderResponse)
 def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_db)):
-    """签署发布医嘱"""
+    """签署发布医嘱（增强版：支持手写签名 + 验证医生已修改）
+
+    签署前验证：
+    1. modified_by_doctor == True（医生必须已修改AI生成的医嘱）
+    2. 生成归档文档快照
+    """
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
+
+    # 验证：AI生成的医嘱必须经医生修改后才能签署
+    if order.source == "AI_RECOMMENDED" and not order.modified_by_doctor:
+        raise HTTPException(400, "AI生成的医嘱必须经医生修改确认后方可签署，请先编辑医嘱内容")
+
+    # 保存手写签名
+    if req.signature_image:
+        order.signature_data = {
+            "image": req.signature_image,
+            "signer": req.signer_name or req.doctor_id,
+            "signed_at": datetime.utcnow().isoformat(),
+        }
+
+    # 生成归档文档
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
+    patient_name = pregnant.display_name if pregnant else "未知"
+    gest_days = pregnant.gestational_age_days if pregnant else 0
+    gest_week = f"{gest_days // 7}+{gest_days % 7}" if gest_days else "未知"
+
+    snapshot, text = order_service.generate_order_document(
+        patient_name=patient_name,
+        gest_week=gest_week,
+        order_content=order.content,
+        order_type=order.order_type,
+        source=order.source,
+        doctor_name=req.signer_name or req.doctor_id,
+    )
+    order.order_snapshot = snapshot
+    order.order_text = text
 
     order.status = "signed"
     order.created_by = req.doctor_id
@@ -143,7 +182,6 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(order)
 
-    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
     return OrderResponse(
         **{c.name: getattr(order, c.name) for c in order.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",
@@ -165,14 +203,17 @@ def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{order_id}", response_model=OrderResponse)
 def update_order(order_id: str, data: dict, db: Session = Depends(get_db)):
-    """更新医嘱"""
+    """更新医嘱（内容修改时自动标记 modified_by_doctor）"""
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
     if "content" in data:
         order.content = data["content"]
+        order.modified_by_doctor = True  # 医生已修改AI生成的医嘱
     if "order_type" in data:
         order.order_type = data["order_type"]
+    if "doctor_notes" in data:
+        order.doctor_notes = data["doctor_notes"]
     db.commit()
     db.refresh(order)
 
@@ -245,6 +286,30 @@ async def explain_order(order_id: str):
             plain_language=plain_language,
             precautions=precautions,
             source="AI_CARE"
+        )
+    finally:
+        db.close()
+
+
+@router.get("/{order_id}/document", response_model=OrderDocumentResponse)
+def get_order_document(order_id: str):
+    """获取医嘱归档文档（含签名）
+
+    返回：order_snapshot（结构化快照）+ order_text（纯文本）+ signature_data（签名）
+    """
+    db = SessionLocal()
+    try:
+        order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+        if not order:
+            raise HTTPException(404, "医嘱不存在")
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
+        return OrderDocumentResponse(
+            order_id=str(order.id),
+            patient_name=pregnant.display_name if pregnant else "未知",
+            snapshot=order.order_snapshot or {},
+            text=order.order_text or "",
+            signature=order.signature_data or {},
+            has_document=bool(order.order_snapshot),
         )
     finally:
         db.close()
