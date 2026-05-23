@@ -1,12 +1,13 @@
 """护士AI辅助 API"""
 import json
 import asyncio
+import time
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from ..utils.timezone import beijing_now
 from sqlalchemy import desc, func
 from ..database import SessionLocal
-from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment
+from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, AgentAuditLog
 from ..schemas import (
     NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse,
     FollowupScheduleResponse, FollowupScheduleRecommendation, FollowupScheduleContext,
@@ -27,6 +28,66 @@ NURSE_TOOL_THINKING_MAP: dict[str, str] = {
     "agno_search_knowledge": "正在查阅护理知识库...",
     "agno_get_patient_context": "正在获取患者信息...",
 }
+
+def _save_nurse_audit_log(
+    session_id: str,
+    user_id: str,
+    agent_variant: str,
+    intent_classification: str | None,
+    run_response,
+    total_latency_ms: int,
+) -> None:
+    """写入护士端审计日志（同步，可靠优先）"""
+    try:
+        if run_response is None:
+            run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
+        metrics = getattr(run_response, "metrics", None)
+        content = getattr(run_response, "content", None) or ""
+
+        tool_calls_detail = []
+        if hasattr(run_response, "messages") and run_response.messages:
+            for msg in run_response.messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tool_calls_detail.append({
+                            "name": getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", ""),
+                            "success": True,
+                        })
+
+        model_id = ""
+        if metrics and hasattr(metrics, "details") and metrics.details:
+            for model_type, model_metrics_list in metrics.details.items():
+                for m in model_metrics_list:
+                    model_id = getattr(m, "id", "") or model_id
+        if not model_id and hasattr(run_response, "model"):
+            model_id = run_response.model or ""
+
+        db = SessionLocal()
+        try:
+            log_entry = AgentAuditLog(
+                session_id=session_id,
+                user_id=user_id,
+                agent_role="nurse",
+                agent_variant=agent_variant,
+                intent_classification=intent_classification,
+                routed_agent=f"小护-{agent_variant}",
+                input_tokens=metrics.input_tokens if metrics else 0,
+                output_tokens=metrics.output_tokens if metrics else 0,
+                total_tokens=metrics.total_tokens if metrics else 0,
+                tool_calls_json=tool_calls_detail if tool_calls_detail else None,
+                model_id=model_id or "unknown",
+                provider="openai",
+                total_latency_ms=total_latency_ms,
+                response_preview=content[:200] if content else None,
+            )
+            db.add(log_entry)
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
 
@@ -182,7 +243,7 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
                                  risk_tags: list, patient_data: dict) -> NurseAnalyzeResponse | None:
     """通过 Agno 护士 Agent 分析（工具驱动 + 结构化输出）"""
     try:
-        from ..core.agno_medical_agents import get_nurse_agent
+        from ..core.agno_medical_agents import get_nurse_analyze_agent
         from ..core.agno_structured import extract_structured_content
 
         risk_text = "、".join(risk_tags) if risk_tags else "无特殊风险"
@@ -191,8 +252,18 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             "提供护理分析。请先调用工具获取最新数据，再输出结构化分析结果。"
         )
 
-        agent = get_nurse_agent()
+        agent = get_nurse_analyze_agent()
+        t0 = time.time()
         response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_nurse_audit_log(
+            session_id=f"nurse_analyze_{pregnant.pregnant_id}",
+            user_id=pregnant.pregnant_id,
+            agent_variant="analyze",
+            intent_classification="ANALYZE",
+            run_response=response,
+            total_latency_ms=elapsed_ms,
+        )
         data = extract_structured_content(response.content)
         if not data:
             return None
@@ -471,12 +542,32 @@ async def nurse_chat_stream(req: dict):
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    from ..core.agno_medical_agents import get_nurse_chat_agent
+    from ..core.agno_medical_agents import get_nurse_chat_agent, NURSE_AGENT_VARIANT_MAP
+    from ..core.agno_tools import resolve_nurse_tools_by_intent
     from agno.agent import RunEvent
-    agent = get_nurse_chat_agent()
+
+    # 意图分类
+    intent_variant = "complex"
+    intent_classification = None
+    if message.strip():
+        try:
+            from ..core.nlu_engine import nlu_engine
+            nlu_result = nlu_engine.parse(message.strip())
+            intent_classification = nlu_result.intent
+            _, intent_variant = resolve_nurse_tools_by_intent({
+                "intent": nlu_result.intent,
+                "entities": nlu_result.entities,
+            })
+        except Exception:
+            pass
+
+    agent_factory = NURSE_AGENT_VARIANT_MAP.get(intent_variant, get_nurse_chat_agent)
+    agent = agent_factory()
 
     async def agno_event_generator():
+        t0 = time.time()
         tool_steps: list[str] = []
+        run_response = None
         try:
             yield {"event": "thinking", "data": "小护正在思考..."}
             async for chunk in agent.arun(
@@ -497,6 +588,8 @@ async def nurse_chat_stream(req: dict):
                     step_desc = NURSE_TOOL_THINKING_MAP.get(tool_name, "")
                     if step_desc and step_desc not in tool_steps:
                         tool_steps.append(step_desc)
+                elif event == RunEvent.run_completed:
+                    run_response = chunk
                 elif event == RunEvent.run_content:
                     if chunk.content and isinstance(chunk.content, str):
                         yield {"event": "chunk", "data": chunk.content}
@@ -506,6 +599,17 @@ async def nurse_chat_stream(req: dict):
             yield {"event": "error", "data": str(e)}
             yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。如果问题持续存在，请检查网络连接或联系管理员。"}
         yield {"event": "done", "data": json.dumps({"source": "NURSE_AI", "tool_steps": tool_steps})}
+
+        # 审计日志
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_nurse_audit_log(
+            session_id=f"nurse_chat_{pregnant_id or 'anon'}",
+            user_id=pregnant_id or "anonymous",
+            agent_variant=intent_variant,
+            intent_classification=intent_classification,
+            run_response=run_response,
+            total_latency_ms=elapsed_ms,
+        )
 
     return EventSourceResponse(agno_event_generator())
 
