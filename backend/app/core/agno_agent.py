@@ -18,7 +18,6 @@ from .agno_knowledge import agno_knowledge
 from .prompts import get_pregnant_system_prompt_instructions
 from .agno_tools import MEDICAL_TOOLS, TOOL_GROUPS
 from .agno_guardrails import EmergencyGuardrail, MedicalSafetyGuardrail
-from ..config import settings
 
 import os
 
@@ -62,6 +61,7 @@ def create_main_agent() -> Agent:
 
 @lru_cache(maxsize=1)
 def get_main_agent() -> Agent:
+    """获取主对话 Agent 单例（缓存复用）— 全量兜底"""
     return create_main_agent()
 
 
