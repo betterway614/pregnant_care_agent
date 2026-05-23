@@ -1,9 +1,13 @@
-"""Agno Agent 定义 - 主 Agent（小安）
+"""Agno Agent 定义 - 主 Agent（小安）+ 场景变体（工具路由）
 
-主 Agent（小安）：配备完整医疗工具集 + 紧急检测 guardrail
-+ Plan-and-Execute 任务规划 + SqliteDb 会话持久化
+Agent 变体:
+- chat: 闲聊/情绪安抚（3 tools）
+- record: 健康数据记录（4 tools）
+- qa: 孕期知识问答（3 tools）
+- emergency: 紧急检测（2 tools）
+- main: 全量兜底（10 tools）
 
-安全设计：每个角色使用独立的 SqliteDb，防止敏感信息泄露
+安全设计：所有变体共享同一个 SqliteDb（session 跨变体连续）
 """
 from functools import lru_cache
 
@@ -12,43 +16,32 @@ from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
 from .agno_knowledge import agno_knowledge
 from .prompts import get_pregnant_system_prompt_instructions
-from .agno_tools import MEDICAL_TOOLS
+from .agno_tools import MEDICAL_TOOLS, TOOL_GROUPS
 from .agno_guardrails import EmergencyGuardrail, MedicalSafetyGuardrail
 from ..config import settings
 
 import os
 
-# 会话持久化数据库路径（每个角色独立，防止敏感信息泄露）
 _db_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
 )
-
-# 孕妇端独立数据库
 _pregnant_db_path = os.path.join(_db_dir, "agent_sessions_pregnant.db")
 
 
 def _create_pregnant_db():
-    """创建孕妇端 Agent 专用 SqliteDb"""
+    """创建孕妇端 Agent 专用 SqliteDb（所有变体共享）"""
     return SqliteDb(db_file=_pregnant_db_path)
 
 
-def create_main_agent() -> Agent:
-    """创建主对话 Agent（小安）
-
-    配备 10 个医疗工具 + 紧急检测 pre-hook + 输出安全 post-hook，
-    集成 Agno 原生 SqliteDb 会话持久化 + Knowledge + agentic Memory。
-    Plan-and-Execute 任务规划通过 instructions 注入。
-
-    安全设计：使用孕妇端独立数据库，与护士端/医生端数据隔离
-    """
+def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
+    """通用 Agent 构造器 — 所有变体共享 SqliteDb"""
     return Agent(
-        name="小安",
+        name=f"小安-{variant_name}",
         model=get_agno_model(role="pregnant"),
         instructions=get_pregnant_system_prompt_instructions(),
-        tools=MEDICAL_TOOLS,
+        tools=tools,
         knowledge=agno_knowledge,
         search_knowledge=False,
-        # 会话持久化：Agno 原生 SqliteDb，自动保存/加载对话历史与 session state
         db=_create_pregnant_db(),
         add_history_to_context=True,
         num_history_runs=8,
@@ -57,12 +50,50 @@ def create_main_agent() -> Agent:
         pre_hooks=[EmergencyGuardrail()],
         post_hooks=[MedicalSafetyGuardrail()],
         markdown=True,
-        tool_call_limit=8,
+        tool_call_limit=tool_call_limit,
         debug_mode=False,
     )
 
 
+def create_main_agent() -> Agent:
+    """全量兜底 Agent（10 tools）"""
+    return _build_agent("main", MEDICAL_TOOLS, tool_call_limit=8)
+
+
 @lru_cache(maxsize=1)
 def get_main_agent() -> Agent:
-    """获取主对话 Agent 单例（缓存复用）"""
     return create_main_agent()
+
+
+@lru_cache(maxsize=1)
+def get_chat_agent() -> Agent:
+    """闲聊/情绪安抚 Agent（3 tools）"""
+    return _build_agent("chat", TOOL_GROUPS["chat"], tool_call_limit=3)
+
+
+@lru_cache(maxsize=1)
+def get_record_agent() -> Agent:
+    """健康数据记录 Agent（4 tools）"""
+    return _build_agent("record", TOOL_GROUPS["record"], tool_call_limit=4)
+
+
+@lru_cache(maxsize=1)
+def get_qa_agent() -> Agent:
+    """孕期知识问答 Agent（3 tools）"""
+    return _build_agent("qa", TOOL_GROUPS["qa"], tool_call_limit=4)
+
+
+@lru_cache(maxsize=1)
+def get_emergency_agent() -> Agent:
+    """紧急检测 Agent（2 tools）"""
+    return _build_agent("emergency", TOOL_GROUPS["emergency"], tool_call_limit=1)
+
+
+# variant → factory 映射（供 chat_handler 路由使用）
+AGENT_VARIANT_MAP = {
+    "chat": get_chat_agent,
+    "record": get_record_agent,
+    "qa": get_qa_agent,
+    "emergency": get_emergency_agent,
+    "complex": get_main_agent,
+}
