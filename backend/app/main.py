@@ -12,7 +12,7 @@ from .config import settings
 from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
-from .routers import websocket, tts
+from .routers import websocket, tts, admin
 from .models import AgentAuditLog
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
@@ -236,6 +236,7 @@ app.include_router(mental_health.router)
 app.include_router(health_trends.router)
 app.include_router(websocket.router)
 app.include_router(tts.router)
+app.include_router(admin.router)
 
 
 @app.get("/")
