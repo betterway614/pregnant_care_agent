@@ -289,3 +289,27 @@ class NurseDoctorIssue(Base):
     resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AgentAuditLog(Base):
+    """Agent 审计日志 — 每次 arun 一条记录"""
+    __tablename__ = "agent_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), nullable=False, index=True, comment="对话会话ID")
+    user_id = Column(String(64), nullable=False, index=True, comment="用户ID")
+    agent_role = Column(String(16), nullable=False, index=True, comment="pregnant|nurse|doctor")
+    agent_variant = Column(String(16), nullable=False, comment="chat|record|qa|emergency|complex|main")
+    intent_classification = Column(String(32), nullable=True, comment="NLU识别的意图")
+    routed_agent = Column(String(32), nullable=False, comment="最终路由的Agent变体")
+    input_tokens = Column(Integer, default=0, comment="输入token数")
+    output_tokens = Column(Integer, default=0, comment="输出token数")
+    total_tokens = Column(Integer, default=0, comment="总token数")
+    tool_calls_json = Column(JSON, nullable=True, comment="工具调用链")
+    model_id = Column(String(64), nullable=False, comment="模型ID")
+    provider = Column(String(32), nullable=False, comment="模型提供商")
+    total_latency_ms = Column(Integer, default=0, comment="总耗时ms")
+    llm_latency_ms = Column(Integer, nullable=True, comment="LLM耗时ms")
+    guardrail_triggered = Column(Boolean, default=False, comment="安全护栏触发")
+    response_preview = Column(String(200), nullable=True, comment="回复预览(前200字)")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True, comment="创建时间")

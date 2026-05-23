@@ -13,6 +13,7 @@ from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
 from .routers import websocket, tts
+from .models import AgentAuditLog
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -124,6 +125,20 @@ def _ensure_order_columns():
         logger.warning("MedicalOrder 列迁移跳过: {}", e)
 
 
+def _ensure_audit_log_table():
+    """为已有数据库添加 agent_audit_logs 表（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        if "agent_audit_logs" not in inspector.get_table_names():
+            Base.metadata.create_all(bind=engine, tables=[AgentAuditLog.__table__])
+            logger.info("agent_audit_logs 表创建完成")
+        else:
+            logger.info("agent_audit_logs 表已存在，跳过创建")
+    except Exception as e:
+        logger.warning("agent_audit_logs 迁移跳过: {}", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -150,6 +165,7 @@ async def lifespan(app: FastAPI):
     _ensure_followup_columns()
     # 对已有 SQLite 数据库添加 MedicalOrder 签署增强新列
     _ensure_order_columns()
+    _ensure_audit_log_table()
 
     # FGR 模式：加载真实预测模型
     if settings.fgr_mode:
