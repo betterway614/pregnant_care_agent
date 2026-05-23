@@ -3,6 +3,7 @@ import json
 import asyncio
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
+from ..utils.timezone import beijing_now
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from ..database import SessionLocal
@@ -80,12 +81,14 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
         "fgr_assessments": [],
         "recent_followups": [],
         "recent_orders": [],
+        "lab_results_history": [],
     }
 
-    # 健康数据摘要：按指标类型汇总最近数据
-    metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar"]
+    # 健康数据摘要：一次查询全部，再按指标分组（避免 N 次查询）
+    metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar",
+                "blood_sugar_fasting", "blood_sugar_postprandial", "heart_rate"]
+    all_recent = get_recent_health_data(db, pregnant_id, limit=50, days=30)
     for metric in metrics:
-        all_recent = get_recent_health_data(db, pregnant_id, limit=20, days=30)
         metric_points = [p for p in all_recent if p["metric"] == metric][:5]
         if metric_points:
             context["health_data_summary"][metric] = [
@@ -123,7 +126,7 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
             "assessed_at": f.assessed_at.isoformat() if f.assessed_at else ""
         })
 
-    # 最近随访记录
+    # 最近随访记录 + 提取生化检验结果
     followups = db.query(FollowUpRecord).filter(
         FollowUpRecord.pregnant_id == pregnant_id
     ).order_by(desc(FollowUpRecord.created_at)).limit(5).all()
@@ -136,6 +139,13 @@ def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_
             "summary": f.summary,
             "created_at": f.created_at.isoformat() if f.created_at else ""
         })
+        lr = f.lab_results or {}
+        if lr:
+            context["lab_results_history"].append({
+                "gestational_week": f.gestational_week,
+                "follow_up_date": f.follow_up_date.isoformat() if f.follow_up_date else "",
+                "lab_results": lr,
+            })
 
     # 最近医嘱
     orders = db.query(MedicalOrder).filter(
@@ -168,7 +178,8 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
         extra = f"\n\n医生关注点：{query}" if query else ""
         prompt = (
             f"请为孕妇 {pregnant.display_name}（孕{gest_week}周+{gest_day}天，风险：{risk_text}）"
-            f"提供综合分析。请先调用工具获取数据，再输出结构化结果。{extra}"
+            f"提供综合分析。请先调用工具获取数据，再输出结构化结果。"
+            f"注意：鉴别诊断(differential_diagnosis)和推理链(reasoning_chain)为必填字段，请基于数据认真分析。{extra}"
         )
 
         agent = get_doctor_agent()
@@ -223,6 +234,20 @@ def _build_doctor_analyze_prompt(pregnant: Pregnant, gest_week: int, gest_day: i
     for o in context.get("recent_orders", [])[:3]:
         order_lines.append(f"  - [{o['status']}] {o['content']}")
 
+    # 生化检验结果
+    lab_lines = []
+    LAB_KEY_NAMES = {
+        "hemoglobin": "血红蛋白", "urine_protein": "尿蛋白",
+        "alt": "ALT", "ast": "AST", "creatinine": "肌酐",
+        "uric_acid": "尿酸", "albumin": "白蛋白",
+        "wbc": "白细胞", "platelet": "血小板", "hct": "红细胞压积",
+    }
+    for lr_entry in context.get("lab_results_history", [])[:3]:
+        gw = lr_entry.get("gestational_week", "?")
+        lr = lr_entry.get("lab_results", {})
+        items = [f"{LAB_KEY_NAMES.get(k, k)}={v}" for k, v in lr.items()]
+        lab_lines.append(f"  - 孕{gw}周: {', '.join(items)}")
+
     extra_query = f"\n医生特别关注：{query}" if query else ""
 
     return f"""请为以下孕妇提供综合分析：
@@ -242,6 +267,9 @@ def _build_doctor_analyze_prompt(pregnant: Pregnant, gest_week: int, gest_day: i
 
 【FGR评估记录】
 {chr(10).join(fgr_lines) if fgr_lines else '  暂无FGR评估'}
+
+【生化检验结果】
+{chr(10).join(lab_lines) if lab_lines else '  暂无化验结果'}
 
 【最近医嘱】
 {chr(10).join(order_lines) if order_lines else '  暂无医嘱记录'}
@@ -273,7 +301,9 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
         analysis_parts.append("## 健康指标趋势")
         for metric, points in health_summary.items():
             metric_names = {"weight": "体重", "systolic": "收缩压", "diastolic": "舒张压",
-                           "fetal_movement": "胎动", "blood_sugar": "血糖"}
+                           "fetal_movement": "胎动", "blood_sugar": "血糖",
+                           "blood_sugar_fasting": "空腹血糖", "blood_sugar_postprandial": "餐后血糖",
+                           "heart_rate": "心率"}
             name = metric_names.get(metric, metric)
             latest = points[0]
             if metric == "weight":
@@ -289,10 +319,10 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
 
     # FGR评估分析
     fgr_list = context.get("fgr_assessments", [])
+    risk_level_map = {"low": "低风险", "medium": "中风险", "high": "高风险", "critical": "危重"}
     if fgr_list:
         analysis_parts.append("## FGR评估结果")
         latest_fgr = fgr_list[0]
-        risk_level_map = {"low": "低风险", "medium": "中风险", "high": "高风险", "critical": "危重"}
         risk_label = risk_level_map.get(latest_fgr["risk_level"], latest_fgr["risk_level"])
         analysis_parts.append(f"- 最近评估（孕{latest_fgr['gestational_weeks']}周）：{risk_label}")
         if latest_fgr.get("explanation"):
@@ -301,6 +331,22 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
             analysis_parts.append("- 历史评估趋势：")
             for f in fgr_list:
                 analysis_parts.append(f"  - 孕{f['gestational_weeks']}周：{risk_level_map.get(f['risk_level'], f['risk_level'])}")
+
+    # 生化检验结果
+    lab_list = context.get("lab_results_history", [])
+    if lab_list:
+        analysis_parts.append("## 生化检验结果")
+        LAB_KEY_NAMES = {
+            "hemoglobin": "血红蛋白", "urine_protein": "尿蛋白",
+            "alt": "ALT", "ast": "AST", "creatinine": "肌酐",
+            "uric_acid": "尿酸", "albumin": "白蛋白",
+            "wbc": "白细胞", "platelet": "血小板", "hct": "红细胞压积",
+        }
+        for lr_entry in lab_list[:3]:
+            gw = lr_entry.get("gestational_week", "?")
+            lr = lr_entry.get("lab_results", {})
+            items = [f"{LAB_KEY_NAMES.get(k, k)}={v}" for k, v in lr.items()]
+            analysis_parts.append(f"- 孕{gw}周：{', '.join(items)}")
 
     # 预警总结
     alerts = context.get("alerts_history", [])
@@ -355,12 +401,58 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
             risk_summary_parts.append("；FGR评估结果需紧急关注")
     risk_summary = "".join(risk_summary_parts) + "。建议严格按医嘱随访，关注异常体征变化。"
 
+    # 鉴别诊断 — 基于风险标签和数据生成
+    differential_diagnosis = []
+    if "FGR高危" in risk_tags:
+        differential_diagnosis.append({
+            "condition": "胎儿生长受限(FGR)",
+            "supported_by": ["胎儿估重低于同孕周第10百分位" if fgr_list else "需进一步超声评估", "脐动脉血流异常可能"],
+            "against": ["需排除孕周计算误差", "需排除遗传性小体格"],
+            "tests_needed": ["胎儿超声生物物理评分", "脐动脉及大脑中动脉血流多普勒", "胎心监护(NST)"],
+        })
+    if "GDM" in risk_tags:
+        differential_diagnosis.append({
+            "condition": "妊娠期糖尿病(GDM)",
+            "supported_by": ["血糖监测异常" if health_summary.get("blood_sugar") else "需完善糖耐量检测"],
+            "against": ["需排除饮食因素影响", "需排除应激性高血糖"],
+            "tests_needed": ["75g OGTT", "糖化血红蛋白(HbA1c)", "空腹+餐后血糖监测"],
+        })
+    if "高血压" in risk_tags:
+        differential_diagnosis.append({
+            "condition": "妊娠期高血压/子痫前期",
+            "supported_by": ["血压监测偏高" if health_summary.get("systolic") else "需动态血压监测"],
+            "against": ["需排除白大衣高血压", "需排除慢性高血压合并妊娠"],
+            "tests_needed": ["24小时动态血压", "尿蛋白定量", "肝肾功能", "血小板计数"],
+        })
+    if not differential_diagnosis:
+        differential_diagnosis.append({
+            "condition": "正常妊娠",
+            "supported_by": ["当前未发现明显异常指标"] if not risk_tags else ["需结合风险因素进一步评估"],
+            "against": ["需持续监测各项指标"],
+            "tests_needed": ["定期产检", "常规实验室检查"],
+        })
+
+    # 推理链
+    reasoning_chain = [
+        f"1. 孕妇处于孕{gest_week_str}，风险标签：{risk_text}",
+        f"2. 已收集健康数据{len(health_summary)}项指标、FGR评估{len(fgr_list)}次、检验结果{len(lab_list)}次",
+    ]
+    if fgr_list:
+        latest_fgr = fgr_list[0]
+        reasoning_chain.append(f"3. FGR评估显示{risk_level_map.get(latest_fgr['risk_level'], latest_fgr['risk_level'])}，需关注胎儿生长趋势")
+    if alerts:
+        pending_count = len([a for a in alerts if a["status"] == "PENDING"])
+        reasoning_chain.append(f"4. 存在{len(alerts)}条预警记录（{pending_count}条待处理），需结合临床综合判断")
+    reasoning_chain.append(f"5. 综合以上信息，给出鉴别诊断和诊疗建议供医生参考")
+
     return DoctorAnalyzeResponse(
         pregnant_id=pregnant.pregnant_id,
         analysis=analysis,
         evidence_references=evidence_references[:5],
         suggested_orders=suggested_orders,
         risk_summary=risk_summary,
+        differential_diagnosis=differential_diagnosis,
+        reasoning_chain=reasoning_chain,
         source="template",
     )
 
@@ -393,7 +485,7 @@ def tool_update_alert_review(db, alert_id: str, action: str, reason: str = "") -
         alert.status = "CONFIRMED"
     elif action == "dismiss":
         alert.status = "DISMISSED"
-    alert.reviewed_at = datetime.utcnow()
+    alert.reviewed_at = beijing_now()
     db.commit()
     return {"success": True, "message": f"预警已{'确认' if action == 'confirm' else 'dismiss'}"}
 
@@ -495,9 +587,16 @@ async def list_issues(status: str = "pending"):
             NurseDoctorIssue.created_at.desc()
         ).limit(20).all()
 
+        # 批量查询孕妇信息，避免 N+1 查询
+        pregnant_ids = list(set(i.pregnant_id for i in issues))
+        pregnant_map = {}
+        if pregnant_ids:
+            pregnants = db.query(Pregnant).filter(Pregnant.pregnant_id.in_(pregnant_ids)).all()
+            pregnant_map = {p.pregnant_id: p for p in pregnants}
+
         result = []
         for issue in issues:
-            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == issue.pregnant_id).first()
+            pregnant = pregnant_map.get(issue.pregnant_id)
             result.append(NurseDoctorIssueResponse(
                 id=str(issue.id),
                 pregnant_id=issue.pregnant_id,
@@ -532,7 +631,7 @@ async def resolve_issue(issue_id: str, resolution: str = ""):
 
         issue.status = "resolved"
         issue.resolution = resolution or "已处理"
-        issue.resolved_at = datetime.utcnow()
+        issue.resolved_at = beijing_now()
         issue.assigned_to = "current-doctor"
         db.commit()
 
@@ -605,7 +704,7 @@ async def generate_report(pregnant_id: str):
             "pregnant_id": pregnant_id,
             "patient_name": pregnant.display_name,
             "report": report_content,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": beijing_now().isoformat(),
         }
     finally:
         db.close()

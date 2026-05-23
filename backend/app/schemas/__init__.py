@@ -19,6 +19,7 @@ from .schemas import (
     FollowupScheduleRecommendation, FollowupScheduleContext, FollowupScheduleResponse,
     DoctorAnalyzeRequest, DoctorAnalyzeResponse,
     OrderExplainResponse,
+    LabTrendItem, LabTrendResponse,
     NurseDoctorIssueCreate, NurseDoctorIssueResponse,
 )
 
@@ -35,7 +36,7 @@ __all__ = [
     "FOLLOWUP_FIELD_SCHEMA",
     "FgrAssessRequest", "FgrAssessResponse", "PatientImageResponse", "FgrTrendPoint",
     "AlertResponse", "AlertReviewRequest",
-    "OrderGenerateRequest", "OrderResponse", "OrderSignRequest",
+    "OrderGenerateRequest", "OrderResponse", "OrderSignRequest", "OrderDocumentResponse",
     "DashboardStats",
     "RecommendRequest", "RecommendResponse",
     "NurseAnalyzeRequest", "NurseAnalyzeResponse",
@@ -43,5 +44,6 @@ __all__ = [
     "FollowupScheduleRecommendation", "FollowupScheduleContext", "FollowupScheduleResponse",
     "DoctorAnalyzeRequest", "DoctorAnalyzeResponse",
     "OrderExplainResponse",
+    "LabTrendItem", "LabTrendResponse",
     "NurseDoctorIssueCreate", "NurseDoctorIssueResponse",
 ]

@@ -1,14 +1,35 @@
 """Alert 分析服务 - 接入 Agno Workflow / Agent"""
 from __future__ import annotations
 
-from datetime import datetime
-
 from loguru import logger
 
-from ..models import Alert, Pregnant
+from ..utils.timezone import beijing_now
+
+from ..models import Alert, Pregnant, FollowUpRecord
 from ..core.agno_medical_agents import get_nurse_agent, get_doctor_agent
 from ..core.agno_structured import extract_structured_content
 from ..core.agno_workflow import get_alert_analysis_workflow
+from ..services.patient_context_service import get_recent_health_data
+
+
+def _build_data_snapshot(db, pregnant_id: str) -> str:
+    """构建健康数据快照，注入 Agent prompt 减少工具调用"""
+    parts = []
+    recent = get_recent_health_data(db, pregnant_id, limit=5)
+    if recent:
+        items = [f"{d['metric']}={d['value']}{d['unit']}" for d in recent[:5]]
+        parts.append(f"最近健康数据: {', '.join(items)}")
+
+    latest_followup = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == pregnant_id,
+        FollowUpRecord.lab_results.isnot(None),
+    ).order_by(FollowUpRecord.created_at.desc()).first()
+    if latest_followup and latest_followup.lab_results:
+        lr = latest_followup.lab_results
+        items = [f"{k}={v}" for k, v in lr.items()]
+        parts.append(f"最新化验(孕{latest_followup.gestational_week or '?'}周): {', '.join(items)}")
+
+    return "\n".join(parts) if parts else ""
 
 
 class AlertAnalysisService:
@@ -17,10 +38,13 @@ class AlertAnalysisService:
     @staticmethod
     async def run_nurse_analysis(db, alert: Alert, pregnant: Pregnant) -> dict | None:
         gest_week = (pregnant.gestational_age_days or 0) // 7
+        snapshot = _build_data_snapshot(db, alert.pregnant_id)
+        snapshot_block = f"\n\n患者数据快照：\n{snapshot}" if snapshot else ""
         prompt = (
             f"预警分析任务：孕妇 {pregnant.display_name}（孕{gest_week}周），"
             f"预警级别 {alert.level}，消息：{alert.message}。"
-            "请先调用工具获取患者数据，再给出护理分析。"
+            f"{snapshot_block}"
+            "请基于以上数据给出护理分析。"
         )
         try:
             agent = get_nurse_agent()
@@ -32,10 +56,10 @@ class AlertAnalysisService:
                     "summary": data.get("summary", ""),
                     "risk_assessment": data.get("risk_assessment", ""),
                     "nursing_suggestions": data.get("nursing_suggestions", ""),
-                    "analyzed_at": datetime.utcnow().isoformat(),
+                    "analyzed_at": beijing_now().isoformat(),
                 }
             text = response.content if isinstance(response.content, str) else str(response.content)
-            return {"role": "nurse", "summary": text, "analyzed_at": datetime.utcnow().isoformat()}
+            return {"role": "nurse", "summary": text, "analyzed_at": beijing_now().isoformat()}
         except Exception as exc:
             logger.warning("护士预警分析失败 alert_id={}: {}", alert.id, exc)
             return None
@@ -46,10 +70,13 @@ class AlertAnalysisService:
             return None
 
         gest_week = (pregnant.gestational_age_days or 0) // 7
+        snapshot = _build_data_snapshot(db, alert.pregnant_id)
+        snapshot_block = f"\n\n患者数据快照：\n{snapshot}" if snapshot else ""
         prompt = (
             f"医生预分析任务：孕妇 {pregnant.display_name}（孕{gest_week}周），"
             f"预警级别 {alert.level}，消息：{alert.message}。"
-            "请先调用工具获取综合数据，再给出结构化分析供医生审核。"
+            f"{snapshot_block}"
+            "请基于以上数据给出结构化分析供医生审核。"
         )
         try:
             agent = get_doctor_agent()
@@ -61,10 +88,10 @@ class AlertAnalysisService:
                     "analysis": data.get("analysis", ""),
                     "risk_summary": data.get("risk_summary", ""),
                     "suggested_orders": data.get("suggested_orders", ""),
-                    "analyzed_at": datetime.utcnow().isoformat(),
+                    "analyzed_at": beijing_now().isoformat(),
                 }
             text = response.content if isinstance(response.content, str) else str(response.content)
-            return {"role": "doctor", "analysis": text, "analyzed_at": datetime.utcnow().isoformat()}
+            return {"role": "doctor", "analysis": text, "analyzed_at": beijing_now().isoformat()}
         except Exception as exc:
             logger.warning("医生预分析失败 alert_id={}: {}", alert.id, exc)
             return None
@@ -95,7 +122,7 @@ class AlertAnalysisService:
 
         details = alert.details or {}
         details["ai_workflow"] = result_payload
-        details["analyzed_at"] = datetime.utcnow().isoformat()
+        details["analyzed_at"] = beijing_now().isoformat()
         alert.details = details
         db.commit()
         return result_payload

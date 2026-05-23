@@ -7,7 +7,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     title?: string
     requiresAuth?: boolean
-    role?: 'nurse' | 'doctor' | 'pregnant'
+    role?: 'nurse' | 'doctor' | 'pregnant' | 'admin'
     hideTabBar?: boolean
   }
 }
@@ -78,6 +78,19 @@ const routes: RouteRecordRaw[] = [
       { path: 'orders/:orderId', name: 'OrderDetail', component: () => import('@/views/pregnant/OrderDetail.vue'), meta: { title: '医嘱详情', hideTabBar: true } },
     ],
   },
+  // 管理员端
+  {
+    path: '/admin',
+    component: () => import('@/components/layout/AdminLayout.vue'),
+    redirect: '/admin/dashboard',
+    meta: { requiresAuth: true, role: 'admin' },
+    children: [
+      { path: 'dashboard', name: 'AdminDashboard', component: () => import('@/views/admin/Dashboard.vue'), meta: { title: '仪表盘' } },
+      { path: 'token-analysis', name: 'AdminTokenAnalysis', component: () => import('@/views/admin/TokenAnalysis.vue'), meta: { title: 'Token 消耗分析' } },
+      { path: 'audit-trail', name: 'AdminAuditTrail', component: () => import('@/views/admin/AuditTrail.vue'), meta: { title: '对话审计追溯' } },
+      { path: 'route-monitor', name: 'AdminRouteMonitor', component: () => import('@/views/admin/RouteMonitor.vue'), meta: { title: '路由监控' } },
+    ],
+  },
 ]
 
 const router = createRouter({
@@ -126,6 +139,7 @@ router.beforeEach((to, _from, next) => {
       nurse: '/nurse/dashboard',
       doctor: '/doctor/dashboard',
       pregnant: '/pregnant/home',
+      admin: '/admin/dashboard',
     }
     next(dashboardMap[currentRole || ''] || '/login')
     return

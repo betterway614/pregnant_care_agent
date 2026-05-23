@@ -14,6 +14,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from ..database import get_db
+from ..utils.timezone import beijing_now
 from ..models import FollowUpRecord, Pregnant
 from ..database import SessionLocal
 from ..schemas import (
@@ -100,7 +101,7 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
     # 审核追溯
     record.status = confirm.status
     record.reviewed_by = confirm.reviewer_id
-    record.reviewed_at = datetime.utcnow()
+    record.reviewed_at = beijing_now()
     if confirm.review_comment:
         record.review_comment = confirm.review_comment
     if confirm.ai_snapshot:
@@ -193,7 +194,7 @@ async def ai_review_followup(record_id: str):
             history_text = "\n".join(lines)
 
         # 最近健康数据
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        seven_days_ago = beijing_now() - timedelta(days=7)
         recent_points = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == record.pregnant_id,
             HealthDataPoint.recorded_at >= seven_days_ago,
@@ -354,7 +355,7 @@ def sign_record(record_id: str, req: FollowUpSignatureRequest):
         record.signature_data = {
             "image": req.signature_image,
             "signer": req.signer_name,
-            "signed_at": datetime.utcnow().isoformat(),
+            "signed_at": beijing_now().isoformat(),
         }
         db.commit()
         return {"message": "签名已保存", "signed_at": record.signature_data["signed_at"]}
@@ -620,18 +621,18 @@ def _save_health_data_point(pregnant_id: str, key: str, value, db):
             points.append(HealthDataPoint(
                 pregnant_id=pregnant_id, metric_code="systolic",
                 value=float(parsed["sbp"]), unit="mmHg", source=source,
-                recorded_at=datetime.utcnow(),
+                recorded_at=beijing_now(),
             ))
             points.append(HealthDataPoint(
                 pregnant_id=pregnant_id, metric_code="diastolic",
                 value=float(parsed["dbp"]), unit="mmHg", source=source,
-                recorded_at=datetime.utcnow(),
+                recorded_at=beijing_now(),
             ))
     elif "metric_code" in parsed:
         points.append(HealthDataPoint(
             pregnant_id=pregnant_id, metric_code=parsed["metric_code"],
             value=float(parsed["value"]), unit=parsed.get("unit", ""), source=source,
-            recorded_at=datetime.utcnow(),
+            recorded_at=beijing_now(),
         ))
 
     for p in points:
@@ -674,7 +675,7 @@ async def _generate_llm_summary(
         # 最近 7 天健康数据
         from datetime import timedelta
         from ..models import HealthDataPoint
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        seven_days_ago = beijing_now() - timedelta(days=7)
         recent_points = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == pregnant_id,
             HealthDataPoint.recorded_at >= seven_days_ago,

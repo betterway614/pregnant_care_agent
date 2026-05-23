@@ -1,4 +1,4 @@
-"""健康趋势 + 随访历史 API"""
+"""健康趋势 + 随访历史 + 生化指标 API"""
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -6,26 +6,35 @@ from sqlalchemy import func
 
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, FollowUpRecord
-from ..core.trend_engine import TrendEngine
+from ..core.trend_engine import trend_engine
+from ..core.metric_registry import get_metric_meta
 from ..schemas.schemas import (
     HealthTrendResponse, TrendSeries, TrendDataPoint,
     FollowUpHistoryResponse, FollowUpHistoryRecord,
+    LabTrendResponse, LabTrendItem,
 )
 
 router = APIRouter(prefix="/api/v1/pregnant", tags=["健康趋势"])
 
-# 指标元数据: metric_code -> (中文名, 单位, normal_range)
-METRIC_META = {
-    "weight": ("体重", "kg", {"min": 40, "max": 120}),
-    "systolic": ("收缩压", "mmHg", {"min": 90, "max": 140}),
-    "diastolic": ("舒张压", "mmHg", {"min": 60, "max": 90}),
-    "blood_sugar_fasting": ("空腹血糖", "mmol/L", {"min": 3.5, "max": 5.1}),
-    "blood_sugar_postprandial": ("餐后血糖", "mmol/L", {"min": 3.5, "max": 8.5}),
-    "fetal_movement": ("胎动", "次/小时", {"min": 3, "max": 10}),
-    "heart_rate": ("心率", "bpm", {"min": 60, "max": 100}),
-    "sleep_hours": ("睡眠", "小时", {"min": 6, "max": 10}),
-    "steps": ("步数", "步", {"min": 2000, "max": 15000}),
-    "emotion_score": ("情绪", "分", {"min": 1, "max": 3}),
+# 从统一注册表派生
+METRIC_META = get_metric_meta()
+
+# 生化指标元数据: lab_key -> (中文名, 单位, normal_low, normal_high, is_qualitative)
+# qualitative指标用文本显示（如尿蛋白），quantitative指标可绘制趋势图
+LAB_METRIC_META = {
+    "hemoglobin_g_L": ("血红蛋白", "g/L", 100, 160, False),
+    "urine_protein": ("尿蛋白", "", None, None, True),
+    "blood_sugar_fasting": ("空腹血糖", "mmol/L", 3.5, 5.3, False),
+    "blood_sugar_2h": ("餐后2h血糖", "mmol/L", 3.5, 6.7, False),
+    "alt": ("谷丙转氨酶(ALT)", "U/L", 0, 40, False),
+    "ast": ("谷草转氨酶(AST)", "U/L", 0, 40, False),
+    "creatinine": ("肌酐", "μmol/L", 45, 84, False),
+    "uric_acid": ("尿酸", "μmol/L", 150, 360, False),
+    "albumin": ("白蛋白", "g/L", 35, 55, False),
+    "wbc": ("白细胞", "×10⁹/L", 4.0, 10.0, False),
+    "platelet": ("血小板", "×10⁹/L", 100, 300, False),
+    "hct": ("红细胞压积", "%", 35, 50, False),
+    "bilirubin_total": ("总胆红素", "μmol/L", 0, 21, False),
 }
 
 
@@ -106,7 +115,6 @@ def get_health_trends(
                     {"metric": metric_code, "value": d.value, "unit": unit, "recorded_at": d.date}
                     for d in data
                 ]
-                trend_engine = TrendEngine()
                 results = trend_engine.analyze(records_for_trend, gest_week)
                 if results:
                     trend_result = results[0]
@@ -161,12 +169,129 @@ def get_follow_up_history(
                 summary=r.summary,
                 chief_complaint=r.chief_complaint,
                 self_reported_data=r.self_reported_data or {},
+                lab_results=r.lab_results or {},
+                obstetric_exam=r.obstetric_exam or {},
+                classification=r.classification or "normal",
                 health_education=r.health_education or [],
+                guidance_tags=r.guidance_tags or [],
+                signature_data=r.signature_data or {},
             ))
 
         return FollowUpHistoryResponse(
             pregnant_id=pregnant_id,
             records=result,
+        )
+    finally:
+        db.close()
+
+
+@router.get("/{pregnant_id}/lab-trends", response_model=LabTrendResponse)
+def get_lab_trends(
+    pregnant_id: str,
+    limit: int = Query(20, ge=1, le=100, description="最近记录条数"),
+):
+    """获取生化指标历史趋势（从随访记录的lab_results中提取）
+
+    返回所有随访记录中的生化指标数据，按时间排序。
+    数值型指标可绘制定量趋势图，定性指标（如尿蛋白）返回文字值。
+    """
+    db: Session = SessionLocal()
+    try:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+        if not pregnant:
+            raise HTTPException(404, "孕妇不存在")
+
+        lmp = pregnant.lmp_date
+
+        # 获取最近的已完成/已确认随访记录（含lab_results）
+        records = (
+            db.query(FollowUpRecord)
+            .filter(
+                FollowUpRecord.pregnant_id == pregnant_id,
+                FollowUpRecord.status.in_(["completed", "confirmed", "archived"]),
+                FollowUpRecord.lab_results.isnot(None),
+            )
+            .order_by(FollowUpRecord.follow_up_date.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # 从各随访记录中提取生化指标，按指标分组
+        lab_series: dict[str, list[dict]] = {}  # lab_key -> [{date, gest_week, value, raw_value}]
+
+        for r in reversed(records):  # 按时间正序
+            lr = r.lab_results or {}
+            if not lr:
+                continue
+
+            rec_date = r.follow_up_date or r.created_at
+            date_str = rec_date.isoformat()[:10] if rec_date else ""
+            gw = 0
+            if lmp and rec_date:
+                gw = (rec_date.date() - lmp).days // 7
+
+            for key, raw_val in lr.items():
+                if key not in LAB_METRIC_META:
+                    continue  # 跳过未注册的指标
+
+                meta = LAB_METRIC_META[key]
+                is_qualitative = meta[4]
+
+                if is_qualitative:
+                    # 定性指标：存文字值，不绘图
+                    if key not in lab_series:
+                        lab_series[key] = []
+                    lab_series[key].append({
+                        "date": date_str,
+                        "gest_week": gw,
+                        "value": None,
+                        "raw_value": str(raw_val),
+                    })
+                else:
+                    # 定量指标：解析数值
+                    try:
+                        val = float(raw_val)
+                    except (ValueError, TypeError):
+                        continue
+                    if key not in lab_series:
+                        lab_series[key] = []
+                    lab_series[key].append({
+                        "date": date_str,
+                        "gest_week": gw,
+                        "value": val,
+                        "raw_value": str(raw_val),
+                    })
+
+        # 构建返回结果
+        items = []
+        for key, data_points in lab_series.items():
+            name, unit, low, high, is_qualitative = LAB_METRIC_META[key]
+
+            # 最新值
+            latest = data_points[-1] if data_points else None
+            latest_value = latest["raw_value"] if latest else ""
+
+            # 判断是否正常（定量指标）
+            is_normal = None
+            if latest and latest["value"] is not None and low is not None and high is not None:
+                is_normal = low <= latest["value"] <= high
+
+            items.append(LabTrendItem(
+                lab_key=key,
+                name=name,
+                unit=unit,
+                normal_low=low,
+                normal_high=high,
+                is_qualitative=is_qualitative,
+                data_points=data_points,
+                latest_value=latest_value,
+                is_normal=is_normal,
+            ))
+
+        return LabTrendResponse(
+            pregnant_id=pregnant_id,
+            gestational_week=f"{(pregnant.gestational_age_days or 0) // 7}+{(pregnant.gestational_age_days or 0) % 7}",
+            items=items,
         )
     finally:
         db.close()

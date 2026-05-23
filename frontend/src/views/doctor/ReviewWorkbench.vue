@@ -580,32 +580,12 @@
           </el-tab-pane>
 
           <el-tab-pane label="历史数据" name="trends">
-            <div class="trends-tab" v-loading="trendsLoading">
-              <!-- 基础信息卡片 -->
-              <div class="patient-info-card" v-if="selectedAlert">
-                <div class="patient-info-card__item">
-                  <span class="patient-info-card__label">孕妇</span>
-                  <span class="patient-info-card__value">{{ selectedAlert.patient_name }}</span>
-                </div>
-                <div class="patient-info-card__item">
-                  <span class="patient-info-card__label">孕周</span>
-                  <span class="patient-info-card__value">{{ calcGestationalWeek(selectedAlert.gestational_age_days) }}周</span>
-                </div>
-                <div class="patient-info-card__item">
-                  <span class="patient-info-card__label">风险等级</span>
-                  <RiskBadge :level="mapRiskLevel(selectedAlert.level)" />
-                </div>
-              </div>
-              <!-- 健康趋势图表 -->
-              <HealthTrendChart
-                v-if="trendsData?.series?.length"
-                :series="trendsData.series"
-                :height="300"
-              />
-              <div v-else class="empty-state">
-                <p>暂无健康趋势数据</p>
-              </div>
-            </div>
+            <PatientBioInfoPanel
+              v-if="selectedAlert?.pregnant_id"
+              :pregnant-id="selectedAlert.pregnant_id"
+              :show-trends="true"
+              :show-lab="true"
+            />
           </el-tab-pane>
         </el-tabs>
       </template>
@@ -621,11 +601,11 @@ import {
   Select, ChatDotSquare, User, CircleCheck,
   MagicStick, Guide, FirstAidKit, DocumentAdd,
 } from '@element-plus/icons-vue'
-import { alertApi, orderApi, followUpApi, doctorAiApi, pregnantApi } from '@/api/endpoints'
+import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
 import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
-import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
+import PatientBioInfoPanel from '@/components/common/PatientBioInfoPanel.vue'
 import { ElNotification } from 'element-plus'
 
 const route = useRoute()
@@ -673,8 +653,6 @@ const followupDetailVisible = ref(false)
 const followupDetail = ref<FollowUpRecord | null>(null)
 const followupDoc = ref<any>(null)
 const followupTab = ref('detail')
-const trendsLoading = ref(false)
-const trendsData = ref<any>(null)
 
 /** 风险级别映射 */
 function mapRiskLevel(level: string): string {
@@ -832,11 +810,25 @@ async function loadAlerts() {
 /** 确认高危 */
 async function confirmHighRisk() {
   if (!selectedAlert.value) return
+  const alert = selectedAlert.value
   submitting.value = true
   try {
-    await alertApi.review(selectedAlert.value.id, 'confirm')
+    await alertApi.review(alert.id, 'confirm')
     // 从列表中移除
-    alertList.value = alertList.value.filter((a) => a.id !== selectedAlert.value!.id)
+    alertList.value = alertList.value.filter((a) => a.id !== alert.id)
+    // 自动生成医嘱并跳转到签名页
+    try {
+      const res = await orderApi.generate({
+        pregnant_id: alert.pregnant_id,
+        alert_id: alert.id,
+        risk_level: alert.level,
+        gestational_weeks: calcGestationalWeek(alert.gestational_age_days),
+      })
+      router.push({ name: 'OrderSign', params: { orderId: res.data.id } })
+    } catch (orderErr) {
+      console.error('生成医嘱失败:', orderErr)
+      ElNotification.warning('高危已确认，但医嘱生成失败，请手动创建医嘱')
+    }
   } catch (err) {
     console.error('确认高危失败:', err)
   } finally {
@@ -961,7 +953,6 @@ async function openFollowupDetail(record: FollowUpRecord) {
   followupDetailVisible.value = true
   followupTab.value = 'detail'
   followupDoc.value = null
-  trendsData.value = null
 
   // 加载随访文档（含签名）
   try {
@@ -970,22 +961,7 @@ async function openFollowupDetail(record: FollowUpRecord) {
   } catch (err) {
     console.error('加载随访文档失败:', err)
   }
-
-  // 加载健康趋势数据
-  if (selectedAlert.value?.pregnant_id) {
-    trendsLoading.value = true
-    try {
-      const res = await pregnantApi.getHealthTrends(selectedAlert.value.pregnant_id, {
-        metrics: 'weight,systolic,diastolic,fetal_movement,blood_sugar',
-        granularity: 'weekly',
-      })
-      trendsData.value = res.data
-    } catch (err) {
-      console.error('加载健康趋势失败:', err)
-    } finally {
-      trendsLoading.value = false
-    }
-  }
+  // 历史数据由 PatientBioInfoPanel 组件自行加载
 }
 
 /** 随访分类标签颜色 */
@@ -1643,35 +1619,4 @@ onUnmounted(() => {
   margin: 4px 0;
 }
 
-/* 历史数据 Tab */
-.trends-tab {
-  min-height: 200px;
-}
-
-.patient-info-card {
-  display: flex;
-  gap: 24px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, rgba(232, 245, 233, 0.4), rgba(46, 125, 50, 0.08));
-  border-radius: var(--radius);
-  margin-bottom: 16px;
-  border: 1px solid rgba(46, 125, 50, 0.12);
-}
-
-.patient-info-card__item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.patient-info-card__label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.patient-info-card__value {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
 </style>

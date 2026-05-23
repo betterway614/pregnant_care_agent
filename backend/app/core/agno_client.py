@@ -15,9 +15,9 @@ _DEFAULT_TEMPERATURE: dict[str, float] = {
     "doctor": 0.3,
 }
 _DEFAULT_MAX_TOKENS: dict[str, int] = {
-    "pregnant": 2048,
-    "nurse": 4096,
-    "doctor": 4096,
+    "pregnant": 4096,
+    "nurse": 8192,
+    "doctor": 8192,
 }
 
 
@@ -81,6 +81,16 @@ def _build_model(role: AgentRole, mode: str):
         )
     if mode == "local":
         local_id = model_id if model_id != settings.llm_model else settings.local_model
+        # 优先使用 vLLM/SGLang 等 OpenAI 兼容端点（本地部署推荐）
+        if settings.local_base_url:
+            return OpenAIChat(
+                id=local_id,
+                api_key="not-needed",
+                base_url=settings.local_base_url,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
+            )
         return Ollama(
             id=local_id,
             host=settings.ollama_host,

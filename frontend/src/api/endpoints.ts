@@ -5,7 +5,7 @@ import type {
   FgrAssessment, FgrTrendPoint, PatientImageInfo, MedicalOrder, OrderDocument,
   DashboardStats, ChatRequest, ChatResponse,
   HomeResponse, RecommendResponse,
-  HealthTrendResponse, FollowUpHistoryResponse,
+  HealthTrendResponse, FollowUpHistoryResponse, LabTrendResponse,
   FollowUpPendingResponse,
 } from '@/types'
 
@@ -84,6 +84,7 @@ export const fgrApi = {
   upload: (pregnantId: string, formData: FormData) =>
     client.post<FgrAssessment>(`/fgr/upload/${pregnantId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,  // nnU-Net 5折推理 + FGR 预测需要较长时间
     }),
   // 获取患者绑定的超声图信息
   patientImages: (pregnantId: string) =>
@@ -157,6 +158,8 @@ export const pregnantApi = {
     `/pregnant/${pregnantId}/follow-up-history`,
     { params }
   ),
+  getLabTrends: (pregnantId: string, limit?: number) =>
+    client.get<LabTrendResponse>(`/pregnant/${pregnantId}/lab-trends`, { params: { limit } }),
 }
 
 // AI 推荐

@@ -473,10 +473,18 @@ def get_llm_client() -> LLMClient:
             model=settings.llm_model,
         )
     elif mode == "local":
-        _llm_client_instance = LocalOllamaClient(
-            host=settings.ollama_host,
-            model=settings.local_model,
-        )
+        # vLLM/SGLang 等 OpenAI 兼容端点优先
+        if settings.local_base_url:
+            _llm_client_instance = CloudAPIClient(
+                api_key="not-needed",
+                base_url=settings.local_base_url,
+                model=settings.local_model,
+            )
+        else:
+            _llm_client_instance = LocalOllamaClient(
+                host=settings.ollama_host,
+                model=settings.local_model,
+            )
     else:
         _llm_client_instance = MockLLMClient()
     return _llm_client_instance
@@ -505,10 +513,17 @@ def get_pregnant_llm_client() -> LLMClient:
             model=settings.llm_model,
         )
     elif mode == "local":
-        _pregnant_llm_client_instance = LocalOllamaClient(
-            host=settings.ollama_host,
-            model=settings.local_model,
-        )
+        if settings.local_base_url:
+            _pregnant_llm_client_instance = CloudAPIClient(
+                api_key="not-needed",
+                base_url=settings.local_base_url,
+                model=settings.local_model,
+            )
+        else:
+            _pregnant_llm_client_instance = LocalOllamaClient(
+                host=settings.ollama_host,
+                model=settings.local_model,
+            )
     else:
         _pregnant_llm_client_instance = MockLLMClient()
     return _pregnant_llm_client_instance

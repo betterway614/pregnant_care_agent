@@ -63,6 +63,23 @@ def _create_doctor_db():
     return SqliteDb(db_file=_doctor_db_path)
 
 
+# ==================== 结构化输出子模型 ====================
+
+
+class DifferentialDiagnosis(BaseModel):
+    """鉴别诊断条目"""
+    condition: str = Field(description="疑似疾病/情况名称")
+    supported_by: list[str] = Field(description="支持该考虑的依据")
+    against: list[str] = Field(description="不支持/排除的依据")
+    tests_needed: list[str] = Field(description="需要进一步完善的检查")
+
+
+class FollowUpQuestion(BaseModel):
+    """随访问题条目"""
+    question: str = Field(description="问题文本")
+    purpose: str = Field(description="该问题的目的/考察重点")
+
+
 # ==================== Structured Output Schemas ====================
 
 
@@ -80,33 +97,33 @@ class DoctorAnalysisOutput(BaseModel):
     evidence_references: list[str] = Field(description="证据引用（3-5条），引用相关临床指南")
     suggested_orders: str = Field(description="建议医嘱（100-300字），具体的下一步处理建议")
     risk_summary: str = Field(description="风险摘要（50-100字），一句话总结当前核心风险和建议")
-    differential_diagnosis: list[dict] = Field(default_factory=list, description="鉴别诊断考虑")
-    reasoning_chain: list[str] = Field(default_factory=list, description="推理链，展示逐步推理过程")
+    differential_diagnosis: list[DifferentialDiagnosis] = Field(description="鉴别诊断考虑（至少2-3项）")
+    reasoning_chain: list[str] = Field(description="推理链，展示从数据到结论的逐步推理过程")
 
 
 class FollowUpGenerateOutput(BaseModel):
     """随访对话脚本生成结果"""
     opening_message: str = Field(description="亲切的开场白（30-50字）")
-    questions: list[dict] = Field(description="随访问题列表（4-6个问题），每项含question和purpose")
+    questions: list[FollowUpQuestion] = Field(description="随访问题列表（4-6个问题）")
     closing_message: str = Field(description="温暖的结束语（30-50字）")
 
 
 class FollowUpAnalysisOutput(BaseModel):
     """随访完成后 LLM 结构化分析结果"""
     warm_summary: str = Field(description="温馨总结（30-50字），语气温和自然")
-    abnormal_indicators: list[str] = Field(default_factory=list, description="异常指标列表")
-    trend_analysis: str = Field(default="", description="与历史数据对比的趋势分析（50-100字）")
-    personalized_advice: str = Field(default="", description="基于回答内容的个性化建议（50-100字）")
-    nurse_action_suggestion: str = Field(default="", description="护士行动建议")
+    abnormal_indicators: list[str] = Field(description="异常指标列表，无异常则为空列表")
+    trend_analysis: str = Field(description="与历史数据对比的趋势分析（50-100字）")
+    personalized_advice: str = Field(description="基于回答内容的个性化建议（50-100字）")
+    nurse_action_suggestion: str = Field(description="护士行动建议")
 
 
 class FollowUpAiReviewOutput(BaseModel):
     """护士审核随访时的 AI 辅助分析结果"""
     summary: str = Field(description="本次随访要点摘要（100-200字）")
-    abnormal_flags: list[str] = Field(default_factory=list, description="异常指标标红列表")
-    action_needed: bool = Field(default=False, description="是否需要上报医生")
+    abnormal_flags: list[str] = Field(description="异常指标标红列表，无异常则为空列表")
+    action_needed: bool = Field(description="是否需要上报医生")
     recommendation: str = Field(description="审核建议：确认通过/需进一步沟通/紧急上报")
-    detail_analysis: str = Field(default="", description="详细分析（100-200字）")
+    detail_analysis: str = Field(description="详细分析（100-200字）")
 
 
 class ChatOutput(BaseModel):
@@ -151,7 +168,7 @@ def create_doctor_agent() -> Agent:
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
-        tool_call_limit=3,
+        tool_call_limit=4,
         max_tool_calls_from_history=2,
     )
 

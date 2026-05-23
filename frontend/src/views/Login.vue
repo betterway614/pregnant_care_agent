@@ -54,6 +54,7 @@
         <p>孕妇：卡号 H202501 ~ H202520，密码 123456</p>
         <p>护士：nurse / nurse123</p>
         <p>医生：doctor / doctor123</p>
+        <p>管理员：admin / admin123</p>
       </div>
     </div>
   </div>
@@ -90,6 +91,15 @@ async function handleLogin() {
 
   loggingIn.value = true
   try {
+    // admin 本地登录（不经过后端auth）
+    if (form.hospital_id.trim() === 'admin' && form.password.trim() === 'admin123') {
+      appStore.login('admin')
+      ElMessage.success('欢迎，管理员！')
+      const redirect = router.currentRoute.value.query.redirect as string
+      router.push(redirect || '/admin/dashboard')
+      return
+    }
+
     const res = await axios.post('/api/v1/auth/login', {
       hospital_id: form.hospital_id.trim(),
       password: form.password.trim(),

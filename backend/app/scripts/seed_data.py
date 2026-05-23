@@ -444,6 +444,16 @@ def seed_followup_records(db):
                 lab_results["blood_sugar_fasting"] = round(_norm(5.5, 0.8, lo=4.0, hi=8.0), 1)
                 lab_results["blood_sugar_2h"] = round(_norm(7.0, 1.2, lo=5.0, hi=12.0), 1)
 
+            # 扩展生化指标（模拟产检化验单）
+            lab_results["alt"] = round(_norm(18, 8, lo=5, hi=50), 1)
+            lab_results["ast"] = round(_norm(22, 8, lo=5, hi=50), 1)
+            lab_results["creatinine"] = round(_norm(55, 12, lo=35, hi=80), 1)
+            lab_results["uric_acid"] = round(_norm(240, 50, lo=120, hi=400), 0)
+            lab_results["albumin"] = round(_norm(38, 4, lo=28, hi=50), 1)
+            lab_results["wbc"] = round(_norm(8.5, 2.0, lo=4.0, hi=14.0), 1)
+            lab_results["platelet"] = round(_norm(200, 45, lo=100, hi=350), 0)
+            lab_results["hct"] = round(_norm(36, 4, lo=30, hi=45), 1)
+
             # ---- A: 评估 ----
             has_abnormal_bp = int(obstetric_exam["blood_pressure"].split("/")[0]) >= 140
             has_low_hb = hb < 100
@@ -845,7 +855,8 @@ def supplement_health_data(db):
             prev_sleep = sleep_hours
 
             for metric, value, unit in [
-                ("blood_sugar", blood_sugar, "mmol/L"),
+                ("blood_sugar_fasting", round(blood_sugar - 0.3, 1), "mmol/L"),
+                ("blood_sugar_postprandial", round(blood_sugar + 1.2, 1), "mmol/L"),
                 ("emotion_score", emotion_score, "分"),
                 ("sleep_hours", sleep_hours, "小时"),
             ]:

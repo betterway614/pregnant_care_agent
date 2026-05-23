@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, date
+from datetime import date
 from typing import Optional
+from ..utils.timezone import beijing_now
 from enum import Enum
 
 from ..database import SessionLocal
@@ -80,7 +81,7 @@ def save_health_metrics(
 
     db = SessionLocal()
     saved = []
-    now = recorded_at or datetime.utcnow()
+    now = recorded_at or beijing_now()
 
     try:
         for key, value in metrics.items():

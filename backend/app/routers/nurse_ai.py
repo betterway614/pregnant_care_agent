@@ -3,6 +3,7 @@ import json
 import asyncio
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
+from ..utils.timezone import beijing_now
 from sqlalchemy import desc, func
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment
@@ -630,7 +631,7 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
     gest_week = gest_days // 7
     gest_day = gest_days % 7
     risk_tags = pregnant.risk_tags or []
-    current_date = datetime.utcnow().date()
+    current_date = beijing_now().date()
 
     # 2. 查询最近随访记录
     last_followup = db.query(FollowUpRecord).filter(
@@ -654,7 +655,7 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
     alert_count = len(active_alerts)
 
     # 4. 查询14天健康数据量
-    fourteen_days_ago = datetime.utcnow() - timedelta(days=14)
+    fourteen_days_ago = beijing_now() - timedelta(days=14)
     data_count_14d = db.query(func.count(HealthDataPoint.id)).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
         HealthDataPoint.recorded_at >= fourteen_days_ago

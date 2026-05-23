@@ -1,21 +1,14 @@
 """胎动计数 API"""
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from ..database import SessionLocal
 from ..models import FetalMovementSession
+from ..utils.timezone import beijing_now
 
 router = APIRouter(prefix="/api/v1/fetal-movement", tags=["胎动计数"])
-
-BEIJING_TZ = ZoneInfo("Asia/Shanghai")
-
-
-def beijing_now():
-    """返回东八区当前时间（timezone-naive，适合存入 SQLite DateTime 列）"""
-    return datetime.now(BEIJING_TZ).replace(tzinfo=None)
 
 
 class SessionCreateRequest(BaseModel):

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from uuid import UUID
 from datetime import datetime
 from ..database import get_db
+from ..utils.timezone import beijing_now
 from ..models import Alert, Pregnant
 from ..schemas import AlertResponse, AlertReviewRequest
 from ..core import rule_engine
@@ -50,9 +51,16 @@ def get_alerts(status: Optional[str] = None,
 
     alerts = query.order_by(Alert.created_at.desc()).limit(100).all()
 
+    # 批量查询孕妇信息，避免 N+1 查询
+    pregnant_ids = list(set(a.pregnant_id for a in alerts))
+    pregnant_map = {}
+    if pregnant_ids:
+        pregnants = db.query(Pregnant).filter(Pregnant.pregnant_id.in_(pregnant_ids)).all()
+        pregnant_map = {p.pregnant_id: p for p in pregnants}
+
     result = []
     for a in alerts:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == a.pregnant_id).first()
+        pregnant = pregnant_map.get(a.pregnant_id)
         result.append(AlertResponse(
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
             patient_name=pregnant.display_name if pregnant else "未知",
@@ -195,7 +203,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
         if alert.level != "RED":
             alert.level = "RED"
 
-    alert.reviewed_at = datetime.utcnow()
+    alert.reviewed_at = beijing_now()
     db.commit()
     db.refresh(alert)
 

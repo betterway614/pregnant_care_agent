@@ -55,13 +55,14 @@ def get_recent_health_data(
         健康数据列表，按 recorded_at 降序
     """
     from ..models import HealthDataPoint
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from ..utils.timezone import beijing_now
 
     query = db.query(HealthDataPoint).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
     )
     if days is not None:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = beijing_now() - timedelta(days=days)
         query = query.filter(HealthDataPoint.recorded_at >= cutoff)
 
     points = query.order_by(desc(HealthDataPoint.recorded_at)).limit(limit).all()

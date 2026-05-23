@@ -33,16 +33,17 @@ def _get_patient_images(pregnant_id: str) -> tuple[str, str] | None:
 
 # ==================== Mock 评估 ====================
 
-def _mock_fgr_assess(gestational_weeks: float) -> dict:
-    """Mock FGR评估（fgr_mode=False 时使用）"""
+def _mock_fgr_assess(gestational_weeks: float, pregnant_id: str = "") -> dict:
+    """Mock FGR评估（fgr_mode=False 时使用）。使用确定性随机种子保证同一输入产生相同结果。"""
+    rng = random.Random(int(gestational_weeks * 1000) + hash(pregnant_id) % 10000)
     base_risk = min(0.8, max(0.05, (gestational_weeks - 20) / 50))
-    risk_score = base_risk + random.uniform(-0.15, 0.15)
+    risk_score = base_risk + rng.uniform(-0.15, 0.15)
     risk_score = max(0.01, min(0.95, risk_score))
 
     risk_level, risk_label = _prob_to_risk(risk_score)
-    ci_width = random.uniform(0.04, 0.08)
+    ci_width = rng.uniform(0.04, 0.08)
     return {
-        "case_id": f"CASE_{uuid_lib.uuid4().hex[:8].upper()}",
+        "case_id": f"MOCK_{int(gestational_weeks):03d}",
         "risk_level": risk_level,
         "risk_label": risk_label,
         "fgr_probability": round(risk_score, 4),
@@ -58,7 +59,7 @@ def _mock_fgr_assess(gestational_weeks: float) -> dict:
             "medium": "部分生长指标偏低，需要持续监测",
             "low": "各项生长指标在正常范围内",
         }.get(risk_level, "评估完成，各项指标正常"),
-        "processing_time": random.randint(500, 1500),
+        "processing_time": rng.randint(500, 1500),
         "fold_details": None,
     }
 
@@ -273,6 +274,7 @@ async def upload_and_assess(
     db: Session = Depends(get_db),
 ):
     """上传超声图像 + 自动分割 + FGR分析入库"""
+    logger.info("[FGR-上传] 收到请求: pregnant_id={}", pregnant_id)
     # 先异步读取文件（I/O 密集，不阻塞）
     image_bytes = await image.read()
     if not image_bytes:
@@ -362,7 +364,7 @@ def get_fgr_trend(pregnant_id: str, db: Session = Depends(get_db)):
         mock_trend = []
         for i in range(6):
             gw = 24 + i * 2
-            result = _mock_fgr_assess(gw)
+            result = _mock_fgr_assess(gw, pregnant_id)
             mock_trend.append(FgrTrendPoint(
                 gestational_weeks=float(gw),
                 risk_score=result["fgr_probability"] or 0.1,

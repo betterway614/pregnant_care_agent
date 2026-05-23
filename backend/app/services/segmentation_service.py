@@ -40,8 +40,8 @@ class SegmentationService:
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # 2. 创建临时输入目录（nnU-Net 需要目录作为输入）
-        input_dir = os.path.join(output_dir, "_input")
+        # 2. 创建临时输入目录（nnU-Net 需要目录作为输入，必须在输出目录外）
+        input_dir = output_dir + "_nnunet_input"
         os.makedirs(input_dir, exist_ok=True)
         ext = os.path.splitext(input_path)[1] or ".png"
         tmp_input = os.path.join(input_dir, f"image_0000{ext}")
@@ -56,9 +56,11 @@ class SegmentationService:
             "nnUNetv2_predict",
             "-i", input_dir,
             "-o", output_dir,
-            "-d", str(self.dataset_id),
-            "-f", self.folds,
+            "-d", "Dataset001_PlacentaNT",
+            "-f", "0", "1", "2", "3", "4",
+            "-tr", "nnUNetTrainer",
             "-c", "2d",
+            "-p", "nnUNetPlans",
         ]
 
         logger.info("[分割] 执行 nnU-Net 5折集成推理...")
@@ -82,15 +84,22 @@ class SegmentationService:
             raise SegmentationError("nnUNetv2_predict 命令未找到，请确认 nnunetv2 已安装并在 PATH 中")
 
         # 4. 找到生成的掩码文件
+        # nnU-Net 命名规则：输入 image_0000.png → 输出 image.png
         mask_path = None
-        input_basename = os.path.basename(tmp_input)
+        expected_mask = os.path.basename(tmp_input).replace("_0000", "")
         for f in sorted(os.listdir(output_dir)):
             fp = os.path.join(output_dir, f)
-            if f == input_basename or f == os.path.basename(input_path):
+            if not os.path.isfile(fp):
                 continue
-            if os.path.isfile(fp) and f.endswith((".nii.gz", ".png", ".jpg", ".jpeg")):
+            if f == expected_mask or f.endswith((".nii.gz", ".png", ".jpg", ".jpeg")):
                 mask_path = fp
                 break
+
+        # 清理临时输入目录
+        try:
+            shutil.rmtree(input_dir, ignore_errors=True)
+        except Exception:
+            pass
 
         if mask_path is None:
             # 列出 output_dir 内容帮助调试
@@ -99,6 +108,7 @@ class SegmentationService:
             raise SegmentationError("nnU-Net 未生成掩码文件")
 
         # 5. 验证掩码非空
+        logger.info("[分割] 找到掩码文件: {} (size: {} bytes)", os.path.basename(mask_path), os.path.getsize(mask_path))
         if not self._verify_mask(mask_path):
             raise SegmentationError("图像质量不符合要求，请上传清晰的NT期超声图像")
 

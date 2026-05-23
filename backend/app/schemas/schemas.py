@@ -506,8 +506,10 @@ class FollowUpHistoryRecord(BaseModel):
     guidance_tags: list = []
     referral: Optional[dict] = None
     next_followup_date: str | None = None
+    signature_data: dict = {}
 
-    @field_validator("self_reported_data", "obstetric_exam", "lab_results", mode="before")
+    @field_validator("self_reported_data", "obstetric_exam", "lab_results",
+                     "signature_data", mode="before")
     @classmethod
     def _none_to_dict(cls, v: Any) -> Any:
         return v if v is not None else {}
@@ -521,6 +523,27 @@ class FollowUpHistoryRecord(BaseModel):
 class FollowUpHistoryResponse(BaseModel):
     pregnant_id: str
     records: list[FollowUpHistoryRecord] = []
+
+
+# === 生化指标趋势 ===
+class LabTrendItem(BaseModel):
+    """单项生化指标趋势"""
+    lab_key: str
+    name: str
+    unit: str
+    normal_low: Optional[float] = None
+    normal_high: Optional[float] = None
+    is_qualitative: bool = False
+    data_points: list[dict] = []  # [{date, gest_week, value, raw_value}]
+    latest_value: str = ""
+    is_normal: Optional[bool] = None
+
+
+class LabTrendResponse(BaseModel):
+    """生化指标趋势响应"""
+    pregnant_id: str
+    gestational_week: str
+    items: list[LabTrendItem] = []
 
 
 # === 医护协作 ===

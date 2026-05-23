@@ -419,3 +419,226 @@ def test_ensure_audit_log_table_skips_existing():
                 _ensure_audit_log_table()
                 # 不应调用 create_all
                 mock_base.metadata.create_all.assert_not_called()
+
+
+# ==================== list_audit_sessions 测试 ====================
+
+
+def test_list_audit_sessions_empty():
+    """验证分页会话列表在无数据时返回空列表"""
+    from app.routers.admin import list_audit_sessions
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.count.return_value = 0
+    mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    mock_db.query.return_value = mock_query
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant=None, date_from=None, date_to=None)
+        assert result["total"] == 0
+        assert result["page"] == 1
+        assert result["data"] == []
+
+
+def test_list_audit_sessions_with_data():
+    """验证分页会话列表正确返回数据"""
+    from app.routers.admin import list_audit_sessions
+
+    mock_log = MagicMock()
+    mock_log.id = 1
+    mock_log.session_id = "sess-001"
+    mock_log.user_id = "P001"
+    mock_log.agent_role = "pregnant"
+    mock_log.agent_variant = "chat"
+    mock_log.intent_classification = "emotion"
+    mock_log.routed_agent = "小安-chat"
+    mock_log.input_tokens = 500
+    mock_log.output_tokens = 200
+    mock_log.total_tokens = 700
+    mock_log.total_latency_ms = 1200
+    mock_log.guardrail_triggered = False
+    mock_log.response_preview = "我理解你的感受..."
+    mock_log.created_at = None
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.count.return_value = 1
+    mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_log]
+    mock_db.query.return_value = mock_query
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant=None, date_from=None, date_to=None)
+        assert result["total"] == 1
+        assert result["page"] == 1
+        assert result["page_size"] == 20
+        assert len(result["data"]) == 1
+        assert result["data"][0]["session_id"] == "sess-001"
+        assert result["data"][0]["agent_variant"] == "chat"
+        assert result["data"][0]["total_tokens"] == 700
+
+
+def test_list_audit_sessions_with_user_filter():
+    """验证按 user_id 筛选"""
+    from app.routers.admin import list_audit_sessions
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query  # 链式 filter 返回自身
+    mock_query.count.return_value = 0
+    mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    mock_db.query.return_value = mock_query
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = list_audit_sessions(page=1, page_size=20, user_id="P001", agent_variant=None, date_from=None, date_to=None)
+        assert result["total"] == 0
+        # 验证 filter 被调用（user_id 筛选触发了一次 filter）
+        assert mock_query.filter.called
+
+
+def test_list_audit_sessions_with_variant_filter():
+    """验证按 agent_variant 筛选"""
+    from app.routers.admin import list_audit_sessions
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.count.return_value = 0
+    mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    mock_db.query.return_value = mock_query
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant="chat", date_from=None, date_to=None)
+        assert result["total"] == 0
+        assert mock_query.filter.called
+
+
+def test_list_audit_sessions_pagination():
+    """验证分页参数正确传递"""
+    from app.routers.admin import list_audit_sessions
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.count.return_value = 50
+    mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    mock_db.query.return_value = mock_query
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = list_audit_sessions(page=3, page_size=10, user_id=None, agent_variant=None, date_from=None, date_to=None)
+        assert result["page"] == 3
+        assert result["page_size"] == 10
+        assert result["total"] == 50
+        # 验证 offset = (page - 1) * page_size = 20
+        mock_query.order_by.return_value.offset.assert_called_with(20)
+
+
+# ==================== get_audit_dashboard 测试 ====================
+
+
+def test_get_audit_dashboard_returns_structure():
+    """验证仪表盘端点返回完整结构"""
+    from app.routers.admin import get_audit_dashboard
+
+    mock_summary = MagicMock()
+    mock_summary.total_calls = 100
+    mock_summary.total_tokens = 50000
+    mock_summary.avg_latency_ms = 1234.5
+    mock_summary.active_sessions = 20
+
+    mock_trend_row = MagicMock()
+    mock_trend_row.date = "2026-05-23"
+    mock_trend_row.total_tokens = 8000
+    mock_trend_row.call_count = 15
+
+    mock_variant_row = MagicMock()
+    mock_variant_row.agent_variant = "chat"
+    mock_variant_row.count = 40
+    mock_variant_row.total_tokens = 20000
+
+    mock_recent_log = MagicMock()
+    mock_recent_log.id = 1
+    mock_recent_log.session_id = "sess-001"
+    mock_recent_log.user_id = "P001"
+    mock_recent_log.agent_variant = "chat"
+    mock_recent_log.intent_classification = "emotion"
+    mock_recent_log.total_tokens = 800
+    mock_recent_log.total_latency_ms = 1000
+    mock_recent_log.guardrail_triggered = False
+    mock_recent_log.response_preview = "你好"
+    mock_recent_log.created_at = None
+
+    mock_db = MagicMock()
+    # query() 被多次调用, 使用 side_effect 逐个返回
+    mock_query_summary = MagicMock()
+    mock_query_summary.filter.return_value.first.return_value = mock_summary
+
+    mock_query_trend = MagicMock()
+    mock_query_trend.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = [mock_trend_row]
+
+    mock_query_variant = MagicMock()
+    mock_query_variant.filter.return_value.group_by.return_value.all.return_value = [mock_variant_row]
+
+    mock_query_recent = MagicMock()
+    mock_query_recent.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_recent_log]
+
+    mock_db.query.side_effect = [
+        mock_query_summary,
+        mock_query_trend,
+        mock_query_variant,
+        mock_query_recent,
+    ]
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = get_audit_dashboard(date_from="2026-05-23", date_to="2026-05-23")
+
+    assert "summary" in result
+    assert "daily_trend" in result
+    assert "variant_distribution" in result
+    assert "recent_logs" in result
+
+    assert result["summary"]["total_calls"] == 100
+    assert result["summary"]["total_tokens"] == 50000
+    assert result["summary"]["avg_latency_ms"] == 1234.5
+    assert result["summary"]["active_sessions"] == 20
+
+    assert len(result["daily_trend"]) == 1
+    assert result["daily_trend"][0]["date"] == "2026-05-23"
+
+    assert len(result["variant_distribution"]) == 1
+    assert result["variant_distribution"][0]["agent_variant"] == "chat"
+
+    assert len(result["recent_logs"]) == 1
+    assert result["recent_logs"][0]["session_id"] == "sess-001"
+
+
+def test_get_audit_dashboard_empty():
+    """验证仪表盘在无数据时返回零值"""
+    from app.routers.admin import get_audit_dashboard
+
+    mock_summary = MagicMock()
+    mock_summary.total_calls = None
+    mock_summary.total_tokens = None
+    mock_summary.avg_latency_ms = None
+    mock_summary.active_sessions = None
+
+    mock_db = MagicMock()
+    mock_query_empty = MagicMock()
+    mock_query_empty.filter.return_value.first.return_value = mock_summary
+    mock_query_empty.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = []
+    mock_query_empty.filter.return_value.group_by.return_value.all.return_value = []
+    mock_query_empty.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+
+    # 所有 query 调用返回同一个 mock（空数据场景）
+    mock_db.query.return_value = mock_query_empty
+
+    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
+        result = get_audit_dashboard(date_from="2026-01-01", date_to="2026-01-02")
+
+    assert result["summary"]["total_calls"] == 0
+    assert result["summary"]["total_tokens"] == 0
+    assert result["summary"]["avg_latency_ms"] == 0
+    assert result["summary"]["active_sessions"] == 0
+    assert result["daily_trend"] == []
+    assert result["variant_distribution"] == []
+    assert result["recent_logs"] == []

@@ -382,7 +382,7 @@ class FollowUpService:
             - record_snapshot: 全量字段冻结快照 (JSON dict)
             record_text: 格式化纯文本 (用于检索/打印/导出)
         """
-        from datetime import datetime as _dt
+        from ..utils.timezone import beijing_now
 
         classification = record.get("classification", "normal")
         cls_label = {"normal": "正常", "abnormal": "异常", "critical": "高危"}.get(classification, classification)
@@ -412,7 +412,7 @@ class FollowUpService:
             "reviewed_at": str(record.get("reviewed_at", "")),
             "review_comment": record.get("review_comment"),
             "ai_snapshot": record.get("ai_snapshot", {}),
-            "generated_at": _dt.utcnow().isoformat(),
+            "generated_at": beijing_now().isoformat(),
         }
 
         # ---- 格式化纯文本 ----

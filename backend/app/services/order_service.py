@@ -104,7 +104,7 @@ class OrderService:
         Returns:
             (order_snapshot, order_text)
         """
-        from datetime import datetime as _dt
+        from ..utils.timezone import beijing_now
 
         source_label = {"AI_RECOMMENDED": "AI辅助生成", "DOCTOR_WRITTEN": "医生手写"}.get(source, source)
         type_label = {"standard": "标准医嘱", "custom": "自定义医嘱"}.get(order_type, order_type)
@@ -117,7 +117,7 @@ class OrderService:
             "order_type": order_type,
             "source": source,
             "doctor_name": doctor_name,
-            "generated_at": _dt.utcnow().isoformat(),
+            "generated_at": beijing_now().isoformat(),
         }
 
         # ---- 格式化纯文本（含红色警告） ----
@@ -128,7 +128,7 @@ class OrderService:
         lines.append("=" * 50)
         lines.append(f"孕妇：{patient_name}  孕周：{gest_week}")
         lines.append(f"类型：{type_label}  来源：{source_label}")
-        lines.append(f"签署日期：{_dt.utcnow().strftime('%Y-%m-%d')}")
+        lines.append(f"签署日期：{beijing_now().strftime('%Y-%m-%d')}")
         lines.append("")
         lines.append("-" * 50)
         lines.append("【医嘱内容】")
@@ -141,7 +141,7 @@ class OrderService:
         lines.append("")
         lines.append("-" * 50)
         lines.append(f"医生签名：{'__________________' if not doctor_name else doctor_name}")
-        lines.append(f"日期：{_dt.utcnow().strftime('%Y-%m-%d')}")
+        lines.append(f"日期：{beijing_now().strftime('%Y-%m-%d')}")
         lines.append("=" * 50)
         lines.append("本记录由 AI-Care 孕期智能管理平台生成")
 

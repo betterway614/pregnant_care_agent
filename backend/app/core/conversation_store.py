@@ -1,9 +1,10 @@
 """对话消息持久化存储 - 支持异步/同步双模式"""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sqlalchemy import desc
 from ..database import SessionLocal
+from ..utils.timezone import beijing_now
 from ..models import ConversationMessage
 
 
@@ -97,7 +98,7 @@ class ConversationStore:
         """清理超过指定天数的旧消息"""
         db = SessionLocal()
         try:
-            cutoff = datetime.utcnow() - timedelta(days=days)
+            cutoff = beijing_now() - timedelta(days=days)
             db.query(ConversationMessage).filter(
                 ConversationMessage.created_at < cutoff
             ).delete()

@@ -12,13 +12,15 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = True
 
-    # LLM配置 - 全局默认（开发阶段使用云模型）
+    # LLM配置 - 全局默认（本地部署 Qwen3.6-35B-A3B，开发阶段可切 cloud）
     llm_mode: Literal["cloud", "local", "mock", "mixed"] = "cloud"
     llm_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    llm_model: str = "qwen3-vl-235b-a22b-thinking"
+    llm_model: str = "Qwen3.6-35B-A3B"
     ollama_host: str = "http://localhost:11434"
-    local_model: str = "qwen2.5:7b"
+    local_model: str = "Qwen3.6-35B-A3B"
+    # vLLM / SGLang 等 OpenAI 兼容本地推理服务（留空则自动使用 ollama_host）
+    local_base_url: str = ""
 
     # LLM配置 - 角色专属（优先级高于全局配置）
     llm_pregnant_mode: Literal["cloud", "local", "mock", ""] = "cloud"
@@ -32,18 +34,18 @@ class Settings(BaseSettings):
     llm_pregnant_temperature: float = 0.7
     llm_nurse_temperature: float = 0.3
     llm_doctor_temperature: float = 0.3
-    llm_pregnant_max_tokens: int = 2048
-    llm_nurse_max_tokens: int = 4096
-    llm_doctor_max_tokens: int = 4096
+    llm_pregnant_max_tokens: int = 4096
+    llm_nurse_max_tokens: int = 8192
+    llm_doctor_max_tokens: int = 8192
 
     # ASR配置 - 全局默认（cloud 使用 DashScope Paraformer 专用 ASR 服务，local 使用 Whisper）
     asr_mode: Literal["cloud", "local"] = "cloud"
     asr_pregnant_mode: Literal["cloud", "local", ""] = ""
     asr_nurse_mode: Literal["cloud", "local", ""] = ""
     asr_doctor_mode: Literal["cloud", "local", ""] = ""
-    asr_cloud_api_key: str = ""
+    asr_cloud_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
     asr_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
-    asr_cloud_model: str = "fun-asr-mtl"
+    asr_cloud_model: str = "paraformer-v1"
     asr_local_model: str = "base"
 
     # TTS配置 - 全局默认
@@ -51,7 +53,7 @@ class Settings(BaseSettings):
     tts_pregnant_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_nurse_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_doctor_mode: Literal["browser", "cloud", "local", ""] = ""
-    tts_cloud_api_key: str = ""
+    tts_cloud_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
     tts_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     tts_cloud_model: str = "cosyvoice-v1"
     tts_cloud_voice: str = "longxiaochun"
@@ -61,7 +63,7 @@ class Settings(BaseSettings):
     fgr_mode: bool = True
 
     # nnU-Net 分割配置
-    nnunet_model_dir: str = "backend/fgr_compete/Dataset001_PlacentaNT"
+    nnunet_model_dir: str = "fgr_compete/Dataset001_PlacentaNT"
     nnunet_dataset_id: int = 1
     nnunet_folds: str = "all"
 

@@ -30,7 +30,12 @@ export default defineConfig({
     https: httpsConfig,
     proxy: {
       '/api': {
-        target: 'http://localhost:9999',
+        target: 'http://10.254.206.46:9999',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://10.254.206.46:9999',
+        ws: true,
         changeOrigin: true,
       },
     },

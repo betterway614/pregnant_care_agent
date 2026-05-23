@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from ..database import get_db, SessionLocal
+from ..utils.timezone import beijing_now
 from ..models import MedicalOrder, Pregnant, Alert
 from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderExplainResponse, OrderDocumentResponse
 from ..services import order_service
@@ -156,7 +157,7 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
         order.signature_data = {
             "image": req.signature_image,
             "signer": req.signer_name or req.doctor_id,
-            "signed_at": datetime.utcnow().isoformat(),
+            "signed_at": beijing_now().isoformat(),
         }
 
     # 生成归档文档
@@ -178,7 +179,7 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
 
     order.status = "signed"
     order.created_by = req.doctor_id
-    order.signed_at = datetime.utcnow()
+    order.signed_at = beijing_now()
     db.commit()
     db.refresh(order)
 
@@ -196,7 +197,7 @@ def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "医嘱不存在")
     if order.acknowledged_at:
         return {"success": True, "message": "已确认阅读"}
-    order.acknowledged_at = datetime.utcnow()
+    order.acknowledged_at = beijing_now()
     db.commit()
     return {"success": True, "message": "已确认阅读"}
 

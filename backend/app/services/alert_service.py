@@ -1,25 +1,31 @@
 """预警服务 - 创建和管理预警记录"""
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from loguru import logger
+from ..utils.timezone import beijing_now
 from ..models import Alert
 
 
-# 去重时间窗口（小时）
-DEDUP_WINDOW_HOURS = 24
+# 分级去重时间窗口（小时）：RED 更敏感，窗口更短
+DEDUP_WINDOWS = {
+    "RED": 4,
+    "ORANGE": 12,
+    "YELLOW": 24,
+}
 
 
 class AlertService:
     """预警服务"""
 
     @staticmethod
-    def _find_duplicate(db: Session, pregnant_id: str, rule_id: str) -> Alert | None:
-        """查找24h内相同 rule_id 的 PENDING 预警"""
+    def _find_duplicate(db: Session, pregnant_id: str, rule_id: str, level: str = "YELLOW") -> Alert | None:
+        """查找同级别去重窗口内相同 rule_id 的 PENDING 预警"""
         if not rule_id:
             return None
-        cutoff = datetime.utcnow() - timedelta(hours=DEDUP_WINDOW_HOURS)
+        hours = DEDUP_WINDOWS.get(level, 24)
+        cutoff = beijing_now() - timedelta(hours=hours)
         return db.query(Alert).filter(
             and_(
                 Alert.pregnant_id == pregnant_id,
@@ -40,7 +46,7 @@ class AlertService:
         details: dict = None,
     ) -> Alert:
         """创建预警记录（自动去重）"""
-        existing = AlertService._find_duplicate(db, pregnant_id, rule_id)
+        existing = AlertService._find_duplicate(db, pregnant_id, rule_id, level)
         if existing:
             logger.info(f"预警去重: {rule_id} for {pregnant_id} 已存在, 跳过创建")
             return existing
@@ -80,7 +86,7 @@ class AlertService:
                 trigger_source=trigger_source,
                 details={
                     "action": hit.get("action", "ALERT_NURSE"),
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": beijing_now().isoformat(),
                 },
             )
             alerts.append(alert)
@@ -101,7 +107,7 @@ class AlertService:
             "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
             "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
             "severity_assessment": nurse_result.get("summary", ""),
-            "analyzed_at": nurse_result.get("analyzed_at", datetime.utcnow().isoformat()),
+            "analyzed_at": nurse_result.get("analyzed_at", beijing_now().isoformat()),
             "source": "agno_nurse_agent",
         }
         alert.details = details

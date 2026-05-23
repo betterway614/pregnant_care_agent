@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
+from .metric_registry import get_normal_ranges, get_metric_names
+
 
 @dataclass
 class TrendResult:
@@ -16,18 +18,8 @@ class TrendResult:
 class TrendEngine:
     """分析 HealthDataPoint 历史数据，生成趋势摘要"""
 
-    # 各指标正常范围（简化版，实际应基于孕周动态调整）
-    NORMAL_RANGES = {
-        "weight": {"min": 40, "max": 120, "unit": "kg"},
-        "systolic": {"min": 90, "max": 140, "unit": "mmHg"},
-        "diastolic": {"min": 60, "max": 90, "unit": "mmHg"},
-        "fetal_movement": {"min": 3, "max": 10, "unit": "次/小时"},
-        "blood_sugar": {"min": 3.5, "max": 6.0, "unit": "mmol/L"},
-        "heart_rate": {"min": 60, "max": 100, "unit": "bpm"},
-        "emotion_score": {"min": 0, "max": 8, "unit": "分"},
-        "sleep_hours": {"min": 6, "max": 10, "unit": "小时"},
-        "steps": {"min": 2000, "max": 15000, "unit": "步"},
-    }
+    # 从统一注册表派生
+    NORMAL_RANGES = get_normal_ranges()
 
     def analyze(self, health_records: list[dict], gest_week: int = 0) -> list[TrendResult]:
         """
@@ -95,17 +87,7 @@ class TrendEngine:
 
     def _generate_summary(self, metric: str, current: float, unit: str,
                           trend: str, is_normal: bool | None, gest_week: int, data_count: int) -> str:
-        metric_names = {
-            "weight": "体重",
-            "systolic": "收缩压",
-            "diastolic": "舒张压",
-            "fetal_movement": "胎动",
-            "blood_sugar": "血糖",
-            "heart_rate": "心率",
-            "emotion_score": "情绪评分",
-            "sleep_hours": "睡眠时长",
-            "steps": "运动步数",
-        }
+        metric_names = get_metric_names()
         name = metric_names.get(metric, metric)
 
         trend_text = {

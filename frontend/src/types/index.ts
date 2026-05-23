@@ -282,6 +282,7 @@ export interface FollowUpHistoryRecord {
   guidance_tags: Array<{ tag: string; content: string }>
   referral: Record<string, any> | null
   next_followup_date: string | null
+  signature_data?: Record<string, any>
   reviewed_by?: string
   reviewed_at?: string
   review_comment?: string
@@ -290,6 +291,32 @@ export interface FollowUpHistoryRecord {
 export interface FollowUpHistoryResponse {
   pregnant_id: string
   records: FollowUpHistoryRecord[]
+}
+
+// 生化指标趋势
+export interface LabTrendDataPoint {
+  date: string
+  gest_week: number
+  value: number | null
+  raw_value: string
+}
+
+export interface LabTrendItem {
+  lab_key: string
+  name: string
+  unit: string
+  normal_low: number | null
+  normal_high: number | null
+  is_qualitative: boolean
+  data_points: LabTrendDataPoint[]
+  latest_value: string
+  is_normal: boolean | null
+}
+
+export interface LabTrendResponse {
+  pregnant_id: string
+  gestational_week: string
+  items: LabTrendItem[]
 }
 
 // 随访表单
@@ -314,4 +341,111 @@ export interface FollowUpPendingResponse {
   total_count: number
   has_pending: boolean
   health_education: string[]
+}
+
+// ==================== Admin 审计日志类型 ====================
+
+export interface AdminDashboardSummary {
+  total_calls: number
+  total_tokens: number
+  avg_latency_ms: number
+  active_sessions: number
+}
+
+export interface AdminDailyTrend {
+  date: string
+  total_tokens: number
+  call_count: number
+}
+
+export interface AdminVariantDist {
+  agent_variant: string
+  count: number
+  total_tokens: number
+}
+
+export interface AdminRecentLog {
+  id: number
+  session_id: string
+  user_id: string
+  agent_variant: string
+  intent_classification: string | null
+  total_tokens: number
+  total_latency_ms: number
+  guardrail_triggered: boolean
+  response_preview: string | null
+  created_at: string
+}
+
+export interface AdminDashboardResponse {
+  summary: AdminDashboardSummary
+  daily_trend: AdminDailyTrend[]
+  variant_distribution: AdminVariantDist[]
+  recent_logs: AdminRecentLog[]
+}
+
+export interface AdminTokenDaily {
+  date: string
+  total_tokens: number
+  input_tokens: number
+  output_tokens: number
+  call_count: number
+  avg_latency_ms: number
+}
+
+export interface AdminTokenByAgent {
+  agent_role: string
+  agent_variant: string
+  total_tokens: number
+  call_count: number
+  avg_input_tokens: number
+  avg_output_tokens: number
+  avg_latency_ms: number
+}
+
+export interface AdminSessionItem {
+  id: number
+  session_id: string
+  user_id: string
+  agent_role: string
+  agent_variant: string
+  intent_classification: string | null
+  routed_agent: string
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  total_latency_ms: number
+  guardrail_triggered: boolean
+  response_preview: string | null
+  created_at: string
+}
+
+export interface AdminSessionListResponse {
+  total: number
+  page: number
+  page_size: number
+  data: AdminSessionItem[]
+}
+
+export interface AdminSessionRun {
+  id: number
+  agent_role: string
+  agent_variant: string
+  intent_classification: string | null
+  routed_agent: string
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  tool_calls: Array<{ name: string; success: boolean; result_preview: string }> | null
+  model_id: string
+  total_latency_ms: number
+  guardrail_triggered: boolean
+  response_preview: string | null
+  created_at: string
+}
+
+export interface AdminSessionDetail {
+  session_id: string
+  run_count: number
+  runs: AdminSessionRun[]
 }
