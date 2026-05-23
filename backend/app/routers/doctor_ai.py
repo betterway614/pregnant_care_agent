@@ -1,13 +1,14 @@
 """医生AI辅助 API"""
 import json
 import asyncio
+import time
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from ..utils.timezone import beijing_now
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from ..database import SessionLocal
-from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
+from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder, AgentAuditLog
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
@@ -24,6 +25,66 @@ DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
     "agno_search_knowledge": "正在查阅医学知识库...",
     "agno_query_patient_data": "正在查询患者数据...",
 }
+
+def _save_doctor_audit_log(
+    session_id: str,
+    user_id: str,
+    agent_variant: str,
+    intent_classification: str | None,
+    run_response,
+    total_latency_ms: int,
+) -> None:
+    """写入医生端审计日志（同步，可靠优先）"""
+    try:
+        if run_response is None:
+            run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
+        metrics = getattr(run_response, "metrics", None)
+        content = getattr(run_response, "content", None) or ""
+
+        tool_calls_detail = []
+        if hasattr(run_response, "messages") and run_response.messages:
+            for msg in run_response.messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tool_calls_detail.append({
+                            "name": getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", ""),
+                            "success": True,
+                        })
+
+        model_id = ""
+        if metrics and hasattr(metrics, "details") and metrics.details:
+            for model_type, model_metrics_list in metrics.details.items():
+                for m in model_metrics_list:
+                    model_id = getattr(m, "id", "") or model_id
+        if not model_id and hasattr(run_response, "model"):
+            model_id = run_response.model or ""
+
+        db = SessionLocal()
+        try:
+            log_entry = AgentAuditLog(
+                session_id=session_id,
+                user_id=user_id,
+                agent_role="doctor",
+                agent_variant=agent_variant,
+                intent_classification=intent_classification,
+                routed_agent=f"智医-{agent_variant}",
+                input_tokens=metrics.input_tokens if metrics else 0,
+                output_tokens=metrics.output_tokens if metrics else 0,
+                total_tokens=metrics.total_tokens if metrics else 0,
+                tool_calls_json=tool_calls_detail if tool_calls_detail else None,
+                model_id=model_id or "unknown",
+                provider="openai",
+                total_latency_ms=total_latency_ms,
+                response_preview=content[:200] if content else None,
+            )
+            db.add(log_entry)
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
@@ -171,7 +232,7 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
     from loguru import logger
 
     try:
-        from ..core.agno_medical_agents import get_doctor_agent
+        from ..core.agno_medical_agents import get_doctor_analyze_agent
         from ..core.agno_structured import extract_structured_content
 
         risk_text = "、".join(risk_tags) if risk_tags else "无特殊风险"
@@ -182,10 +243,20 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             f"注意：鉴别诊断(differential_diagnosis)和推理链(reasoning_chain)为必填字段，请基于数据认真分析。{extra}"
         )
 
-        agent = get_doctor_agent()
+        agent = get_doctor_analyze_agent()
+        t0 = time.time()
         response = await asyncio.wait_for(
             agent.arun(input=prompt, user_id=pregnant.pregnant_id),
             timeout=120,
+        )
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_doctor_audit_log(
+            session_id=f"doctor_analyze_{pregnant.pregnant_id}",
+            user_id=pregnant.pregnant_id,
+            agent_variant="analyze",
+            intent_classification="ANALYZE",
+            run_response=response,
+            total_latency_ms=elapsed_ms,
         )
         data = extract_structured_content(response.content)
         if not data:
@@ -532,9 +603,27 @@ async def doctor_chat_stream(req: dict):
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    from ..core.agno_medical_agents import get_doctor_chat_agent
+    from ..core.agno_medical_agents import get_doctor_chat_agent, DOCTOR_AGENT_VARIANT_MAP
+    from ..core.agno_tools import resolve_doctor_tools_by_intent
     from agno.agent import RunEvent
-    agent = get_doctor_chat_agent()
+
+    # 意图分类（chat 端点）
+    intent_variant = "complex"
+    intent_classification = None
+    if message.strip():
+        try:
+            from ..core.nlu_engine import nlu_engine
+            nlu_result = nlu_engine.parse(message.strip())
+            intent_classification = nlu_result.intent
+            _, intent_variant = resolve_doctor_tools_by_intent({
+                "intent": nlu_result.intent,
+                "entities": nlu_result.entities,
+            })
+        except Exception:
+            pass
+
+    agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
+    agent = agent_factory()
 
     async def agno_event_generator():
         tool_steps: list[str] = []
@@ -695,9 +784,37 @@ async def generate_report(pregnant_id: str):
 3. 风险评估
 4. 建议"""
 
-        from ..core.agno_medical_agents import get_doctor_chat_agent
-        agent = get_doctor_chat_agent()
+        from ..core.agno_medical_agents import get_doctor_chat_agent, DOCTOR_AGENT_VARIANT_MAP
+        from ..core.agno_tools import resolve_doctor_tools_by_intent
+
+        # 意图分类（report 端点）
+        intent_variant = "analyze"
+        intent_classification = "ANALYZE"
+        if prompt.strip():
+            try:
+                from ..core.nlu_engine import nlu_engine
+                nlu_result = nlu_engine.parse(prompt.strip())
+                intent_classification = nlu_result.intent
+                _, intent_variant = resolve_doctor_tools_by_intent({
+                    "intent": nlu_result.intent,
+                    "entities": nlu_result.entities,
+                })
+            except Exception:
+                pass
+
+        agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
+        agent = agent_factory()
+        t0 = time.time()
         response = await agent.arun(input=prompt, user_id=pregnant_id)
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_doctor_audit_log(
+            session_id=f"doctor_report_{pregnant_id}",
+            user_id=pregnant_id,
+            agent_variant=intent_variant,
+            intent_classification=intent_classification,
+            run_response=response,
+            total_latency_ms=elapsed_ms,
+        )
         report_content = response.content or ""
 
         return {
