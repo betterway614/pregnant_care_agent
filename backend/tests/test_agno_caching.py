@@ -36,7 +36,7 @@ def test_get_main_agent_has_tools():
         with patch("agno.agent._init.get_model", return_value=mock_model):
             get_main_agent.cache_clear()
             agent = get_main_agent()
-            assert agent.name == "小安"
+            assert "小安" in agent.name
             assert len(agent.tools) > 0
 
 

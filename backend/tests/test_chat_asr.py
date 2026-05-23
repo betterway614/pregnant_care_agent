@@ -214,7 +214,7 @@ class TestStreamWithASRPreprocessing:
 
         with patch("app.core.agno_chat_handler._transcribe_audio_pregnant",
                    new_callable=AsyncMock, return_value="我想问一下产检时间"), \
-             patch("app.core.agno_agent.get_main_agent", return_value=mock_agent), \
+             patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
              patch("app.core.agno_chat_handler.settings") as mock_settings:
             mock_settings.persist_chat_messages = False
 
@@ -253,7 +253,7 @@ class TestStreamWithASRPreprocessing:
 
         with patch("app.core.agno_chat_handler._transcribe_audio_pregnant",
                    new_callable=AsyncMock) as mock_asr, \
-             patch("app.core.agno_agent.get_main_agent", return_value=mock_agent), \
+             patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
              patch("app.core.agno_chat_handler.settings") as mock_settings:
             mock_settings.persist_chat_messages = False
 
@@ -291,7 +291,7 @@ class TestStreamWithASRPreprocessing:
         with patch("app.core.agno_chat_handler._transcribe_audio_pregnant",
                    new_callable=AsyncMock,
                    return_value="（语音识别失败，请重试或使用文字输入）"), \
-             patch("app.core.agno_agent.get_main_agent", return_value=mock_agent), \
+             patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
              patch("app.core.agno_chat_handler.settings") as mock_settings:
             mock_settings.persist_chat_messages = False
 
@@ -334,7 +334,7 @@ class TestNonStreamWithASRPreprocessing:
 
         with patch("app.core.agno_chat_handler._transcribe_audio_pregnant",
                    new_callable=AsyncMock, return_value="产检时间是什么时候"), \
-             patch("app.core.agno_agent.get_main_agent", return_value=mock_agent), \
+             patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
              patch("app.core.agno_chat_handler.settings") as mock_settings:
             mock_settings.persist_chat_messages = False
 
