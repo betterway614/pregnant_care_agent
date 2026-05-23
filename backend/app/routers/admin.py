@@ -1,0 +1,135 @@
+"""Agent 审计日志查询 API"""
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Query
+from sqlalchemy import func
+from ..database import SessionLocal
+from ..models import AgentAuditLog
+
+router = APIRouter(prefix="/api/v1/admin", tags=["审计日志"])
+
+
+@router.get("/audit/token/daily")
+def get_token_daily(
+    date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    date_to: str = Query(..., description="结束日期 YYYY-MM-DD"),
+):
+    """日级别 token 消耗汇总"""
+    db = SessionLocal()
+    try:
+        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+        rows = (
+            db.query(
+                func.date(AgentAuditLog.created_at).label("date"),
+                func.sum(AgentAuditLog.total_tokens).label("total_tokens"),
+                func.sum(AgentAuditLog.input_tokens).label("input_tokens"),
+                func.sum(AgentAuditLog.output_tokens).label("output_tokens"),
+                func.count(AgentAuditLog.id).label("call_count"),
+                func.avg(AgentAuditLog.total_latency_ms).label("avg_latency_ms"),
+            )
+            .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
+            .group_by(func.date(AgentAuditLog.created_at))
+            .order_by(func.date(AgentAuditLog.created_at))
+            .all()
+        )
+
+        return {
+            "data": [
+                {
+                    "date": str(row.date),
+                    "total_tokens": row.total_tokens or 0,
+                    "input_tokens": row.input_tokens or 0,
+                    "output_tokens": row.output_tokens or 0,
+                    "call_count": row.call_count,
+                    "avg_latency_ms": round(row.avg_latency_ms or 0, 1),
+                }
+                for row in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.get("/audit/token/by-agent")
+def get_token_by_agent(
+    date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    date_to: str = Query(..., description="结束日期 YYYY-MM-DD"),
+):
+    """按智能体角色 + 变体汇总 token"""
+    db = SessionLocal()
+    try:
+        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+        rows = (
+            db.query(
+                AgentAuditLog.agent_role,
+                AgentAuditLog.agent_variant,
+                func.sum(AgentAuditLog.total_tokens).label("total_tokens"),
+                func.count(AgentAuditLog.id).label("call_count"),
+                func.avg(AgentAuditLog.input_tokens).label("avg_input_tokens"),
+                func.avg(AgentAuditLog.output_tokens).label("avg_output_tokens"),
+                func.avg(AgentAuditLog.total_latency_ms).label("avg_latency_ms"),
+            )
+            .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
+            .group_by(AgentAuditLog.agent_role, AgentAuditLog.agent_variant)
+            .order_by(AgentAuditLog.agent_role, func.sum(AgentAuditLog.total_tokens).desc())
+            .all()
+        )
+
+        return {
+            "data": [
+                {
+                    "agent_role": row.agent_role,
+                    "agent_variant": row.agent_variant,
+                    "total_tokens": row.total_tokens or 0,
+                    "call_count": row.call_count,
+                    "avg_input_tokens": round(row.avg_input_tokens or 0, 1),
+                    "avg_output_tokens": round(row.avg_output_tokens or 0, 1),
+                    "avg_latency_ms": round(row.avg_latency_ms or 0, 1),
+                }
+                for row in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.get("/audit/sessions/{session_id}")
+def get_session_audit(session_id: str):
+    """单次会话完整审计链"""
+    db = SessionLocal()
+    try:
+        logs = (
+            db.query(AgentAuditLog)
+            .filter(AgentAuditLog.session_id == session_id)
+            .order_by(AgentAuditLog.created_at)
+            .all()
+        )
+
+        return {
+            "session_id": session_id,
+            "run_count": len(logs),
+            "runs": [
+                {
+                    "id": log.id,
+                    "agent_role": log.agent_role,
+                    "agent_variant": log.agent_variant,
+                    "intent_classification": log.intent_classification,
+                    "routed_agent": log.routed_agent,
+                    "input_tokens": log.input_tokens,
+                    "output_tokens": log.output_tokens,
+                    "total_tokens": log.total_tokens,
+                    "tool_calls": log.tool_calls_json,
+                    "model_id": log.model_id,
+                    "total_latency_ms": log.total_latency_ms,
+                    "guardrail_triggered": log.guardrail_triggered,
+                    "response_preview": log.response_preview,
+                    "created_at": log.created_at.isoformat() if log.created_at else None,
+                }
+                for log in logs
+            ],
+        }
+    finally:
+        db.close()
