@@ -215,3 +215,98 @@ def test_intent_to_group_entries_valid():
 
     for intent, group_name in INTENT_TO_GROUP.items():
         assert group_name in TOOL_GROUPS, f"INTENT_TO_GROUP['{intent}']='{group_name}' 不在 TOOL_GROUPS 中"
+
+
+# ==================== 护士/医生 TOOL_GROUPS 测试 ====================
+
+
+def test_nurse_tool_groups_exist():
+    """验证 NURSE_TOOL_GROUPS 包含 4 个场景"""
+    from app.core.agno_tools import NURSE_TOOL_GROUPS
+    assert set(NURSE_TOOL_GROUPS.keys()) == {"analyze", "followup", "report", "chat"}
+
+
+def test_nurse_tool_groups_tool_count():
+    """验证护士各分组工具数量"""
+    from app.core.agno_tools import NURSE_TOOL_GROUPS
+    assert len(NURSE_TOOL_GROUPS["analyze"]) == 4
+    assert len(NURSE_TOOL_GROUPS["followup"]) == 2
+    assert len(NURSE_TOOL_GROUPS["report"]) == 2
+    assert len(NURSE_TOOL_GROUPS["chat"]) == 3
+
+
+def test_doctor_tool_groups_exist():
+    """验证 DOCTOR_TOOL_GROUPS 包含 4 个场景"""
+    from app.core.agno_tools import DOCTOR_TOOL_GROUPS
+    assert set(DOCTOR_TOOL_GROUPS.keys()) == {"analyze", "order", "issue", "chat"}
+
+
+def test_doctor_tool_groups_tool_count():
+    """验证医生各分组工具数量"""
+    from app.core.agno_tools import DOCTOR_TOOL_GROUPS
+    assert len(DOCTOR_TOOL_GROUPS["analyze"]) == 5
+    assert len(DOCTOR_TOOL_GROUPS["order"]) == 2
+    assert len(DOCTOR_TOOL_GROUPS["issue"]) == 2
+    assert len(DOCTOR_TOOL_GROUPS["chat"]) == 3
+
+
+@pytest.mark.parametrize("intent,expected_variant", [
+    ("analyze", "analyze"), ("nurse_analyze", "analyze"),
+    ("followup", "followup"), ("create_followup", "followup"),
+    ("report", "report"), ("report_issue", "report"),
+    ("chat", "chat"), ("greeting", "chat"),
+])
+def test_resolve_nurse_tools_by_intent(intent, expected_variant):
+    """验证护士意图路由"""
+    from app.core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS
+    tools, variant = resolve_nurse_tools_by_intent({"intent": intent})
+    assert variant == expected_variant
+    assert tools != NURSE_TOOLS
+
+
+@pytest.mark.parametrize("intent,expected_variant", [
+    ("analyze", "analyze"), ("doctor_analyze", "analyze"),
+    ("order", "order"), ("generate_order", "order"),
+    ("handle_issue", "issue"), ("resolve_issue", "issue"),
+    ("chat", "chat"), ("greeting", "chat"),
+])
+def test_resolve_doctor_tools_by_intent(intent, expected_variant):
+    """验证医生意图路由"""
+    from app.core.agno_tools import resolve_doctor_tools_by_intent, DOCTOR_TOOLS
+    tools, variant = resolve_doctor_tools_by_intent({"intent": intent})
+    assert variant == expected_variant
+    assert tools != DOCTOR_TOOLS
+
+
+def test_resolve_nurse_tools_none():
+    """验证护士 None 输入回退"""
+    from app.core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS
+    tools, variant = resolve_nurse_tools_by_intent(None)
+    assert variant == "complex"
+    assert tools == NURSE_TOOLS
+
+
+def test_resolve_doctor_tools_none():
+    """验证医生 None 输入回退"""
+    from app.core.agno_tools import resolve_doctor_tools_by_intent, DOCTOR_TOOLS
+    tools, variant = resolve_doctor_tools_by_intent(None)
+    assert variant == "complex"
+    assert tools == DOCTOR_TOOLS
+
+
+def test_resolve_nurse_tools_case_insensitive():
+    """验证护士意图大小写不敏感"""
+    from app.core.agno_tools import resolve_nurse_tools_by_intent
+    _, v = resolve_nurse_tools_by_intent({"intent": "ANALYZE"})
+    assert v == "analyze"
+    _, v = resolve_nurse_tools_by_intent({"intent": "FollowUp"})
+    assert v == "followup"
+
+
+def test_resolve_doctor_tools_case_insensitive():
+    """验证医生意图大小写不敏感"""
+    from app.core.agno_tools import resolve_doctor_tools_by_intent
+    _, v = resolve_doctor_tools_by_intent({"intent": "ANALYZE"})
+    assert v == "analyze"
+    _, v = resolve_doctor_tools_by_intent({"intent": "Generate_Order"})
+    assert v == "order"

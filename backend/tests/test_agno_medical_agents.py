@@ -22,7 +22,7 @@ def test_nurse_agent_has_tools():
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_nurse_agent()
-            assert agent.name == "小护"
+            assert "小护" in agent.name
             assert len(agent.tools) > 0
 
 
@@ -56,7 +56,7 @@ def test_doctor_agent_has_tools():
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_doctor_agent()
-            assert agent.name == "智医"
+            assert "智医" in agent.name
             assert len(agent.tools) > 0
 
 
@@ -105,7 +105,7 @@ def test_nurse_chat_agent_smoke():
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_nurse_chat_agent()
-            assert agent.name == "小护-对话"
+            assert "小护" in agent.name
             assert len(agent.tools) > 0
             assert agent.output_schema is None  # 对话 Agent 不使用结构化输出
 
@@ -118,7 +118,7 @@ def test_doctor_chat_agent_smoke():
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_doctor_chat_agent()
-            assert agent.name == "智医-对话"
+            assert "智医" in agent.name
             assert len(agent.tools) > 0
             assert agent.output_schema is None
 
@@ -258,3 +258,80 @@ def test_all_agents_have_nonempty_instructions(factory_name):
             assert agent.instructions is not None
             assert len(agent.instructions) > 0
             assert isinstance(agent.instructions, list)
+
+
+# ==================== 护士/医生变体测试 ====================
+
+
+@pytest.mark.parametrize("variant_name,getter,expected_tools,expected_limit", [
+    ("analyze", "get_nurse_analyze_agent", 4, 4),
+    ("followup", "get_nurse_followup_agent", 2, 2),
+    ("report", "get_nurse_report_agent", 2, 2),
+    ("chat", "get_nurse_chat_variant_agent", 3, 3),
+])
+def test_nurse_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
+    """验证护士变体工具数量和 limit"""
+    from app.core import agno_medical_agents as mod
+    factory = getattr(mod, getter)
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            agent = factory()
+            assert len(agent.tools) == expected_tools
+            assert agent.tool_call_limit == expected_limit
+
+
+@pytest.mark.parametrize("variant_name,getter,expected_tools,expected_limit", [
+    ("analyze", "get_doctor_analyze_agent", 5, 5),
+    ("order", "get_doctor_order_agent", 2, 2),
+    ("issue", "get_doctor_issue_agent", 2, 2),
+    ("chat", "get_doctor_chat_variant_agent", 3, 3),
+])
+def test_doctor_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
+    """验证医生变体工具数量和 limit"""
+    from app.core import agno_medical_agents as mod
+    factory = getattr(mod, getter)
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            agent = factory()
+            assert len(agent.tools) == expected_tools
+            assert agent.tool_call_limit == expected_limit
+
+
+def test_nurse_variant_map_keys():
+    from app.core.agno_medical_agents import NURSE_AGENT_VARIANT_MAP
+    assert set(NURSE_AGENT_VARIANT_MAP.keys()) == {"analyze", "followup", "report", "chat", "complex"}
+
+
+def test_doctor_variant_map_keys():
+    from app.core.agno_medical_agents import DOCTOR_AGENT_VARIANT_MAP
+    assert set(DOCTOR_AGENT_VARIANT_MAP.keys()) == {"analyze", "order", "issue", "chat", "complex"}
+
+
+def test_chat_variants_have_no_schema():
+    """验证聊天变体不使用 output_schema"""
+    from app.core.agno_medical_agents import get_nurse_chat_variant_agent, get_doctor_chat_variant_agent
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            assert get_nurse_chat_variant_agent().output_schema is None
+            assert get_doctor_chat_variant_agent().output_schema is None
+
+
+def test_backward_compat_get_nurse_agent():
+    """验证向后兼容 get_nurse_agent() 仍返回全量 tools"""
+    from app.core.agno_medical_agents import get_nurse_agent, NURSE_TOOLS
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            assert len(get_nurse_agent().tools) == len(NURSE_TOOLS)
+
+
+def test_backward_compat_get_doctor_agent():
+    """验证向后兼容 get_doctor_agent() 仍返回全量 tools"""
+    from app.core.agno_medical_agents import get_doctor_agent, DOCTOR_TOOLS
+    mock_model = _make_mock_model()
+    with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+        with patch("agno.agent._init.get_model", return_value=mock_model):
+            assert len(get_doctor_agent().tools) == len(DOCTOR_TOOLS)

@@ -134,12 +134,12 @@ class ChatOutput(BaseModel):
     tools_used: list[str] = Field(default_factory=list, description="使用的工具列表")
 
 
-def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True) -> Agent:
+def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
     """护士 Agent 通用构造器"""
     kwargs = dict(
         name=f"小护-{variant_name}",
         model=get_agno_model(role="nurse"),
-        instructions=get_nurse_system_prompt_instructions(),
+        instructions=instructions if instructions is not None else get_nurse_system_prompt_instructions(),
         tools=tools,
         session_state={},
         db=_create_nurse_db(),
@@ -155,12 +155,12 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
     return Agent(**kwargs)
 
 
-def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True) -> Agent:
+def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
     """医生 Agent 通用构造器"""
     kwargs = dict(
         name=f"智医-{variant_name}",
         model=get_agno_model(role="doctor"),
-        instructions=get_doctor_system_prompt_instructions(),
+        instructions=instructions if instructions is not None else get_doctor_system_prompt_instructions(),
         tools=tools,
         session_state={},
         db=_create_doctor_db(),
@@ -212,7 +212,7 @@ def get_nurse_report_agent() -> Agent:
 @lru_cache(maxsize=1)
 def get_nurse_chat_variant_agent() -> Agent:
     """护士对话变体（3 tools: query + knowledge + trends, 无 schema 支持流式）"""
-    return _build_nurse_agent_variant("chat", NURSE_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False)
+    return _build_nurse_agent_variant("chat", NURSE_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
 
 
 # ---- 医生端场景变体 ----
@@ -238,7 +238,7 @@ def get_doctor_issue_agent() -> Agent:
 @lru_cache(maxsize=1)
 def get_doctor_chat_variant_agent() -> Agent:
     """医生对话变体（3 tools: knowledge + trends + rules, 无 schema 支持流式）"""
-    return _build_doctor_agent_variant("chat", DOCTOR_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False)
+    return _build_doctor_agent_variant("chat", DOCTOR_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
 
 
 # ---- 向后兼容的 getter（全量兜底） ----
@@ -258,13 +258,25 @@ def get_doctor_agent() -> Agent:
 @lru_cache(maxsize=1)
 def get_nurse_chat_agent() -> Agent:
     """获取护士对话 Agent（全量兜底，向后兼容）"""
-    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False)
+    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
 
 
 @lru_cache(maxsize=1)
 def get_doctor_chat_agent() -> Agent:
     """获取医生对话 Agent（全量兜底，向后兼容）"""
-    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False)
+    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
+
+
+# ---- 向后兼容的 create_* 工厂函数 ----
+
+def create_nurse_chat_agent() -> Agent:
+    """创建护士对话 Agent（向后兼容别名）"""
+    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
+
+
+def create_doctor_chat_agent() -> Agent:
+    """创建医生对话 Agent（向后兼容别名）"""
+    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
 
 
 # ---- 变体路由映射 ----
