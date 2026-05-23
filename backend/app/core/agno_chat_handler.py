@@ -66,6 +66,9 @@ def _save_audit_log(
 ) -> None:
     """同步写入 Agent 审计日志（可靠优先）"""
     try:
+        # 守卫：流式异常时 run_response 可能为 None
+        if run_response is None:
+            run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
         metrics = getattr(run_response, "metrics", None)
         content = getattr(run_response, "content", None) or ""
 
@@ -228,8 +231,10 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     elapsed_ms = int((time.time() - start_time) * 1000)
     content = response.content or ""
 
-    # 4. 审计日志
-    _save_audit_log(
+    # 4. 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
+    import asyncio
+    await asyncio.to_thread(
+        _save_audit_log,
         session_id=session_id,
         user_id=req.pregnant_id,
         agent_role="pregnant",
@@ -352,8 +357,10 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         }),
     }
 
-    # 审计日志
-    _save_audit_log(
+    # 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
+    import asyncio
+    await asyncio.to_thread(
+        _save_audit_log,
         session_id=session_id,
         user_id=req.pregnant_id,
         agent_role="pregnant",
