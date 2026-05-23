@@ -295,11 +295,13 @@ class AgentAuditLog(Base):
     """Agent 审计日志 — 每次 arun 一条记录"""
     __tablename__ = "agent_audit_logs"
 
+    # 使用 Integer 自增主键（非 UUID）：审计日志为追加写入高频表，Integer 索引更紧凑、查询性能更好
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(64), nullable=False, index=True, comment="对话会话ID")
     user_id = Column(String(64), nullable=False, index=True, comment="用户ID")
+    # 审计日志有意不使用 ForeignKey：松耦合设计，确保父记录删除时审计日志不丢失
     agent_role = Column(String(16), nullable=False, index=True, comment="pregnant|nurse|doctor")
-    agent_variant = Column(String(16), nullable=False, comment="chat|record|qa|emergency|complex|main")
+    agent_variant = Column(String(32), nullable=False, comment="chat|record|qa|emergency|complex|main")
     intent_classification = Column(String(32), nullable=True, comment="NLU识别的意图")
     routed_agent = Column(String(32), nullable=False, comment="最终路由的Agent变体")
     input_tokens = Column(Integer, default=0, comment="输入token数")
