@@ -24,6 +24,8 @@ from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_tools import (
     NURSE_TOOLS,
     DOCTOR_TOOLS,
+    NURSE_TOOL_GROUPS,
+    DOCTOR_TOOL_GROUPS,
 )
 from .prompts import (
     get_nurse_system_prompt_instructions,
@@ -132,89 +134,156 @@ class ChatOutput(BaseModel):
     tools_used: list[str] = Field(default_factory=list, description="使用的工具列表")
 
 
+def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True) -> Agent:
+    """护士 Agent 通用构造器"""
+    kwargs = dict(
+        name=f"小护-{variant_name}",
+        model=get_agno_model(role="nurse"),
+        instructions=get_nurse_system_prompt_instructions(),
+        tools=tools,
+        session_state={},
+        db=_create_nurse_db(),
+        search_knowledge=False,
+        add_datetime_to_context=True,
+        markdown=True,
+        post_hooks=[NurseSafetyGuardrail()],
+        tool_call_limit=tool_call_limit,
+        max_tool_calls_from_history=2,
+    )
+    if use_schema:
+        kwargs["output_schema"] = NurseAnalysisOutput
+    return Agent(**kwargs)
+
+
+def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True) -> Agent:
+    """医生 Agent 通用构造器"""
+    kwargs = dict(
+        name=f"智医-{variant_name}",
+        model=get_agno_model(role="doctor"),
+        instructions=get_doctor_system_prompt_instructions(),
+        tools=tools,
+        session_state={},
+        db=_create_doctor_db(),
+        search_knowledge=False,
+        add_datetime_to_context=True,
+        markdown=True,
+        post_hooks=[DoctorDraftGuardrail()],
+        tool_call_limit=tool_call_limit,
+        max_tool_calls_from_history=2,
+    )
+    if use_schema:
+        kwargs["output_schema"] = DoctorAnalysisOutput
+    return Agent(**kwargs)
+
+
 # ==================== Agent 工厂 ====================
 
 
 def create_nurse_agent() -> Agent:
-    """创建护士 AI Agent — 工具路由 + 结构化输出"""
-    return Agent(
-        name="小护",
-        model=get_agno_model(role="nurse"),
-        instructions=get_nurse_system_prompt_instructions(),
-        tools=NURSE_TOOLS,
-        output_schema=NurseAnalysisOutput,
-        session_state={},
-        db=_create_nurse_db(),
-        search_knowledge=False,
-        add_datetime_to_context=True,
-        markdown=True,
-        post_hooks=[NurseSafetyGuardrail()],
-        tool_call_limit=5,
-        max_tool_calls_from_history=3,
-    )
+    """护士分析 Agent（全量兜底，6 tools, output_schema）"""
+    return _build_nurse_agent_variant("main", NURSE_TOOLS, tool_call_limit=5, use_schema=True)
 
 
 def create_doctor_agent() -> Agent:
-    """创建医生 AI Agent — 工具路由 + 结构化输出"""
-    return Agent(
-        name="智医",
-        model=get_agno_model(role="doctor"),
-        instructions=get_doctor_system_prompt_instructions(),
-        tools=DOCTOR_TOOLS,
-        output_schema=DoctorAnalysisOutput,
-        session_state={},
-        db=_create_doctor_db(),
-        search_knowledge=False,
-        add_datetime_to_context=True,
-        markdown=True,
-        post_hooks=[DoctorDraftGuardrail()],
-        tool_call_limit=4,
-        max_tool_calls_from_history=2,
-    )
+    """医生分析 Agent（全量兜底，7 tools, output_schema）"""
+    return _build_doctor_agent_variant("main", DOCTOR_TOOLS, tool_call_limit=4, use_schema=True)
 
 
-def create_nurse_chat_agent() -> Agent:
-    """创建护士对话 Agent — 流式对话场景
+# ---- 护士端场景变体 ----
 
-    用于护士端悬浮球的对话功能，不使用 output_schema 以支持流式输出。
-    支持工具间上下文持久化（护士端独立数据库）。
-    """
-    return Agent(
-        name="小护-对话",
-        model=get_agno_model(role="nurse"),
-        instructions=get_nurse_chat_system_prompt_instructions(),
-        tools=NURSE_TOOLS,
-        session_state={},
-        db=_create_nurse_db(),
-        search_knowledge=False,
-        add_datetime_to_context=True,
-        markdown=True,
-        post_hooks=[NurseSafetyGuardrail()],
-        tool_call_limit=3,
-        max_tool_calls_from_history=2,
-    )
+@lru_cache(maxsize=1)
+def get_nurse_analyze_agent() -> Agent:
+    """护士分析变体（4 tools: query + trends + rules + knowledge）"""
+    return _build_nurse_agent_variant("analyze", NURSE_TOOL_GROUPS["analyze"], tool_call_limit=4)
 
 
-def create_doctor_chat_agent() -> Agent:
-    """创建医生对话 Agent — 流式对话场景
+@lru_cache(maxsize=1)
+def get_nurse_followup_agent() -> Agent:
+    """护士随访变体（2 tools: create_followup + query）"""
+    return _build_nurse_agent_variant("followup", NURSE_TOOL_GROUPS["followup"], tool_call_limit=2)
 
-    用于医生端悬浮球的对话功能，不使用 output_schema 以支持流式输出。
-    支持工具间上下文持久化（医生端独立数据库）。
-    """
-    return Agent(
-        name="智医-对话",
-        model=get_agno_model(role="doctor"),
-        instructions=get_doctor_chat_system_prompt_instructions(),
-        tools=DOCTOR_TOOLS,
-        session_state={},
-        db=_create_doctor_db(),
-        search_knowledge=False,
-        add_datetime_to_context=True,
-        markdown=True,
-        post_hooks=[DoctorDraftGuardrail()],
-        tool_call_limit=3,
-        max_tool_calls_from_history=2,
-    )
+
+@lru_cache(maxsize=1)
+def get_nurse_report_agent() -> Agent:
+    """护士上报变体（2 tools: report_issue + query）"""
+    return _build_nurse_agent_variant("report", NURSE_TOOL_GROUPS["report"], tool_call_limit=2)
+
+
+@lru_cache(maxsize=1)
+def get_nurse_chat_variant_agent() -> Agent:
+    """护士对话变体（3 tools: query + knowledge + trends, 无 schema 支持流式）"""
+    return _build_nurse_agent_variant("chat", NURSE_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False)
+
+
+# ---- 医生端场景变体 ----
+
+@lru_cache(maxsize=1)
+def get_doctor_analyze_agent() -> Agent:
+    """医生分析变体（5 tools: comprehensive + trends + rules + knowledge + guideline）"""
+    return _build_doctor_agent_variant("analyze", DOCTOR_TOOL_GROUPS["analyze"], tool_call_limit=5)
+
+
+@lru_cache(maxsize=1)
+def get_doctor_order_agent() -> Agent:
+    """医生医嘱变体（2 tools: generate_order + comprehensive）"""
+    return _build_doctor_agent_variant("order", DOCTOR_TOOL_GROUPS["order"], tool_call_limit=2)
+
+
+@lru_cache(maxsize=1)
+def get_doctor_issue_agent() -> Agent:
+    """医生问题处理变体（2 tools: handle_issue + comprehensive）"""
+    return _build_doctor_agent_variant("issue", DOCTOR_TOOL_GROUPS["issue"], tool_call_limit=2)
+
+
+@lru_cache(maxsize=1)
+def get_doctor_chat_variant_agent() -> Agent:
+    """医生对话变体（3 tools: knowledge + trends + rules, 无 schema 支持流式）"""
+    return _build_doctor_agent_variant("chat", DOCTOR_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False)
+
+
+# ---- 向后兼容的 getter（全量兜底） ----
+
+@lru_cache(maxsize=1)
+def get_nurse_agent() -> Agent:
+    """获取护士分析 Agent（全量兜底，向后兼容）"""
+    return create_nurse_agent()
+
+
+@lru_cache(maxsize=1)
+def get_doctor_agent() -> Agent:
+    """获取医生分析 Agent（全量兜底，向后兼容）"""
+    return create_doctor_agent()
+
+
+@lru_cache(maxsize=1)
+def get_nurse_chat_agent() -> Agent:
+    """获取护士对话 Agent（全量兜底，向后兼容）"""
+    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False)
+
+
+@lru_cache(maxsize=1)
+def get_doctor_chat_agent() -> Agent:
+    """获取医生对话 Agent（全量兜底，向后兼容）"""
+    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False)
+
+
+# ---- 变体路由映射 ----
+
+NURSE_AGENT_VARIANT_MAP = {
+    "analyze": get_nurse_analyze_agent,
+    "followup": get_nurse_followup_agent,
+    "report": get_nurse_report_agent,
+    "chat": get_nurse_chat_variant_agent,
+    "complex": get_nurse_agent,
+}
+
+DOCTOR_AGENT_VARIANT_MAP = {
+    "analyze": get_doctor_analyze_agent,
+    "order": get_doctor_order_agent,
+    "issue": get_doctor_issue_agent,
+    "chat": get_doctor_chat_variant_agent,
+    "complex": get_doctor_agent,
+}
 
 
 def create_followup_generate_agent() -> Agent:
@@ -256,23 +325,3 @@ def create_followup_review_agent() -> Agent:
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
     )
-
-
-@lru_cache(maxsize=1)
-def get_nurse_agent() -> Agent:
-    return create_nurse_agent()
-
-
-@lru_cache(maxsize=1)
-def get_doctor_agent() -> Agent:
-    return create_doctor_agent()
-
-
-@lru_cache(maxsize=1)
-def get_nurse_chat_agent() -> Agent:
-    return create_nurse_chat_agent()
-
-
-@lru_cache(maxsize=1)
-def get_doctor_chat_agent() -> Agent:
-    return create_doctor_chat_agent()
