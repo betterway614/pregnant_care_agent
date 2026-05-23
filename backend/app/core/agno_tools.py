@@ -25,6 +25,7 @@ from datetime import datetime
 from uuid import UUID
 
 from agno.run import RunContext
+from ..utils.timezone import beijing_now
 from agno.tools import tool
 
 
@@ -577,7 +578,7 @@ def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunCo
         return {"error": "未指定孕妇"}
 
     from ..database import SessionLocal
-    from ..models import Pregnant, HealthDataPoint, Alert, FgrAssessment, MedicalOrder
+    from ..models import Pregnant, HealthDataPoint, Alert, FgrAssessment, MedicalOrder, FollowUpRecord
     from sqlalchemy import desc
 
     db = SessionLocal()
@@ -595,18 +596,20 @@ def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunCo
             }
         }
 
-        metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar"]
+        # 一次查询所有指标，再在内存中分组（避免 N 次查询）
+        metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar",
+                    "blood_sugar_fasting", "blood_sugar_postprandial", "heart_rate"]
+        all_points = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pid,
+            HealthDataPoint.metric_code.in_(metrics),
+        ).order_by(desc(HealthDataPoint.recorded_at)).limit(40).all()
         trends = {}
-        for metric in metrics:
-            points = db.query(HealthDataPoint).filter(
-                HealthDataPoint.pregnant_id == pid,
-                HealthDataPoint.metric_code == metric,
-            ).order_by(desc(HealthDataPoint.recorded_at)).limit(5).all()
-            if points:
-                trends[metric] = [
-                    {"value": p.value, "unit": p.unit, "time": p.recorded_at.isoformat()}
-                    for p in points
-                ]
+        for p in all_points:
+            m = p.metric_code
+            if m not in trends:
+                trends[m] = []
+            if len(trends[m]) < 5:
+                trends[m].append({"value": p.value, "unit": p.unit, "time": p.recorded_at.isoformat()})
         result["health_trends"] = trends
 
         alerts = db.query(Alert).filter(
@@ -617,14 +620,31 @@ def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunCo
             for a in alerts
         ]
 
-        fgr = db.query(FgrAssessment).filter(
+        # FGR 取最近 5 条（含趋势）
+        fgrs = db.query(FgrAssessment).filter(
             FgrAssessment.pregnant_id == pid
-        ).order_by(desc(FgrAssessment.assessed_at)).first()
-        if fgr:
-            result["fgr_assessment"] = {
-                "risk_level": fgr.risk_level,
-                "gestational_weeks": fgr.gestational_weeks,
-                "explanation": fgr.explanation,
+        ).order_by(desc(FgrAssessment.assessed_at)).limit(5).all()
+        if fgrs:
+            result["fgr_assessments"] = [
+                {
+                    "risk_level": f.risk_level,
+                    "gestational_weeks": f.gestational_weeks,
+                    "explanation": f.explanation,
+                    "assessed_at": f.assessed_at.isoformat() if f.assessed_at else "",
+                }
+                for f in fgrs
+            ]
+
+        # 最新生化检验结果
+        latest_followup = db.query(FollowUpRecord).filter(
+            FollowUpRecord.pregnant_id == pid,
+            FollowUpRecord.lab_results.isnot(None),
+        ).order_by(desc(FollowUpRecord.created_at)).first()
+        if latest_followup and latest_followup.lab_results:
+            result["latest_lab_results"] = {
+                "gestational_week": latest_followup.gestational_week,
+                "follow_up_date": latest_followup.follow_up_date.isoformat() if latest_followup.follow_up_date else "",
+                "lab_results": latest_followup.lab_results,
             }
 
         orders = db.query(MedicalOrder).filter(
@@ -714,7 +734,7 @@ def agno_handle_issue(
 
         issue.status = "resolved"
         issue.resolution = resolution
-        issue.resolved_at = datetime.utcnow()
+        issue.resolved_at = beijing_now()
         db.commit()
 
         return {"success": True, "message": "问题已处理"}
@@ -765,3 +785,62 @@ DOCTOR_TOOLS = [
     agno_evaluate_vital_rules,
     agno_search_knowledge,
 ]
+
+# ==================== 工具子集分组（工具路由） ====================
+
+TOOL_GROUPS: dict[str, list] = {
+    "chat": [
+        agno_parse_nlu,
+        agno_check_emergency,
+        agno_get_patient_context,
+    ],
+    "record": [
+        agno_parse_nlu,
+        agno_save_health_data,
+        agno_evaluate_vital_rules,
+        agno_get_patient_context,
+    ],
+    "qa": [
+        agno_search_knowledge,
+        agno_get_patient_context,
+        agno_analyze_health_trends,
+    ],
+    "emergency": [
+        agno_check_emergency,
+        agno_get_patient_context,
+    ],
+}
+
+# 意图 → 工具组路由映射
+INTENT_TO_GROUP: dict[str, str] = {
+    "chat": "chat",
+    "greeting": "chat",
+    "emotion": "chat",
+    "record_weight": "record",
+    "record_bp": "record",
+    "record_glucose": "record",
+    "record_fetal_movement": "record",
+    "ask_knowledge": "qa",
+    "ask_symptom": "qa",
+    "ask_exam": "qa",
+    "emergency": "emergency",
+}
+
+
+def resolve_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
+    """根据 NLU 意图返回工具子集和 variant 名称。
+
+    Returns:
+        (tools_list, variant_name)
+        variant_name: "chat" | "record" | "qa" | "emergency" | "complex"
+    """
+    if nlu_result is None or not nlu_result.get("intent"):
+        return (MEDICAL_TOOLS, "complex")
+
+    intent = nlu_result.get("intent", "")
+    group_name = INTENT_TO_GROUP.get(intent)
+
+    if group_name and group_name in TOOL_GROUPS:
+        return (TOOL_GROUPS[group_name], group_name)
+
+    return (MEDICAL_TOOLS, "complex")
