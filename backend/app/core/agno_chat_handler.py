@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import base64
+import time
 import uuid
 from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any, Union
@@ -21,7 +22,8 @@ from agno.agent import RunEvent
 from loguru import logger
 
 from ..schemas import ChatSendRequest, ChatResponse
-from ..database import db_call
+from ..database import db_call, SessionLocal
+from ..models import AgentAuditLog
 from ..core.conversation_store import conversation_store
 from ..config import settings, get_asr_mode
 
@@ -50,6 +52,73 @@ def _generate_session_id(pregnant_id: str) -> str:
     date_str = datetime.now().strftime("%Y%m%d")
     rand_str = uuid.uuid4().hex[:4]
     return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
+
+
+def _save_audit_log(
+    session_id: str,
+    user_id: str,
+    agent_role: str,
+    agent_variant: str,
+    intent_classification: str | None,
+    run_response: Any,
+    total_latency_ms: int,
+    guardrail_triggered: bool = False,
+) -> None:
+    """同步写入 Agent 审计日志（可靠优先）"""
+    try:
+        metrics = getattr(run_response, "metrics", None)
+        content = getattr(run_response, "content", None) or ""
+
+        # 提取工具调用详情
+        tool_calls_detail = []
+        if hasattr(run_response, "messages") and run_response.messages:
+            for msg in run_response.messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tool_calls_detail.append({
+                            "name": getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", ""),
+                            "success": True,
+                        })
+
+        model_id = ""
+        provider = ""
+        if metrics and hasattr(metrics, "details") and metrics.details:
+            for model_type, model_metrics_list in metrics.details.items():
+                for m in model_metrics_list:
+                    model_id = getattr(m, "id", "") or model_id
+                    provider = getattr(m, "provider", "") or provider
+
+        if not model_id and hasattr(run_response, "model"):
+            model_id = run_response.model or ""
+
+        db = SessionLocal()
+        try:
+            log_entry = AgentAuditLog(
+                session_id=session_id,
+                user_id=user_id,
+                agent_role=agent_role,
+                agent_variant=agent_variant,
+                intent_classification=intent_classification,
+                routed_agent=f"小安-{agent_variant}",
+                input_tokens=metrics.input_tokens if metrics else 0,
+                output_tokens=metrics.output_tokens if metrics else 0,
+                total_tokens=metrics.total_tokens if metrics else 0,
+                tool_calls_json=tool_calls_detail if tool_calls_detail else None,
+                model_id=model_id or "unknown",
+                provider=provider or "openai",
+                total_latency_ms=total_latency_ms,
+                guardrail_triggered=guardrail_triggered,
+                response_preview=content[:200] if content else None,
+            )
+            db.add(log_entry)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.warning("审计日志写入失败 session_id={}", session_id, exc_info=True)
+        finally:
+            db.close()
+    except Exception:
+        logger.warning("审计日志构建失败 session_id={}", session_id, exc_info=True)
 
 
 async def _transcribe_audio_pregnant(audio_data: str, audio_format: str) -> str:
@@ -113,35 +182,64 @@ def _build_multimodal_input(req: ChatSendRequest, transcribed_text: str | None =
 
 
 async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
-    """主对话 Agno Agent 处理（非流式）
+    """主对话 Agno Agent 处理（非流式）— 工具路由 + 审计日志"""
+    from .agno_agent import AGENT_VARIANT_MAP, get_main_agent
 
-    Agent 自主调用工具链：parse_nlu → check_emergency → save_health_data
-    → should_ask_weight → get_patient_context → analyze_health_trends → ...
-
-    支持多模态音频输入（message_type=AUDIO 时使用多模态消息格式）
-    当 asr_pregnant_mode 为 cloud/local 时，先 ASR 转写再传纯文本
-    """
-    from .agno_agent import get_main_agent
-
-    agent = get_main_agent()
     session_id = req.session_id or _generate_session_id(req.pregnant_id)
+    start_time = time.time()
 
-    # ASR 预处理：音频输入转文本
+    # ASR 预处理
     transcribed_text = None
     if req.message_type == "AUDIO" and req.audio_data:
         transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
 
     agent_input = _build_multimodal_input(req, transcribed_text)
 
+    # 1. 快速意图分类（复用 NLU 引擎，不通过 Agent 减少一次 LLM 调用）
+    nlu_result = None
+    intent_variant = "complex"
+    try:
+        from ..core.nlu_engine import nlu_engine
+        user_text = req.message.strip() if req.message else ""
+        if user_text:
+            nlu_result = nlu_engine.parse(user_text)
+            nlu_dict = {
+                "intent": nlu_result.intent,
+                "entities": nlu_result.entities,
+                "emotion": nlu_result.emotion,
+                "is_emergency": nlu_result.is_emergency,
+            }
+            from .agno_tools import resolve_tools_by_intent
+            _, intent_variant = resolve_tools_by_intent(nlu_dict)
+    except Exception:
+        logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
+
+    # 2. Agent 路由
+    agent_factory = AGENT_VARIANT_MAP.get(intent_variant, get_main_agent)
+    agent = agent_factory()
+
+    # 3. arun
     response = await agent.arun(
         input=agent_input,
         user_id=req.pregnant_id,
         session_id=session_id,
     )
 
+    elapsed_ms = int((time.time() - start_time) * 1000)
     content = response.content or ""
 
-    # 对话持久化
+    # 4. 审计日志
+    _save_audit_log(
+        session_id=session_id,
+        user_id=req.pregnant_id,
+        agent_role="pregnant",
+        agent_variant=intent_variant,
+        intent_classification=nlu_result.intent if nlu_result else None,
+        run_response=response,
+        total_latency_ms=elapsed_ms,
+    )
+
+    # 5. 对话持久化
     if settings.persist_chat_messages:
         try:
             await conversation_store.async_save_single(
@@ -161,32 +259,48 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
 
 
 async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[dict, None]:
-    """主对话 Agno Agent 流式处理 — 逐 token 产出 SSE 事件
+    """主对话 Agno Agent 流式处理 — 工具路由 + 审计日志"""
+    from .agno_agent import AGENT_VARIANT_MAP, get_main_agent
 
-    增强特性：
-    - 捕获 RunEvent.tool_call_started/completed，产出 thinking 事件
-    - 工具调用过程对用户透明可见（展示 Agent 的"思考"过程）
-    - 完成后持久化对话消息
-    - 音频消息 ASR 预处理：cloud/local 模式先转写再传纯文本
-    """
-    from .agno_agent import get_main_agent
-
-    agent = get_main_agent()
     session_id = req.session_id or _generate_session_id(req.pregnant_id)
+    start_time = time.time()
 
-    # ASR 预处理：音频输入转文本
+    # ASR 预处理
     transcribed_text = None
     if req.message_type == "AUDIO" and req.audio_data:
         transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
 
-    # 构建多模态输入（有 ASR 文本时使用纯文本，否则使用多模态内容数组）
     agent_input = _build_multimodal_input(req, transcribed_text)
+
+    # 1. 快速意图分类
+    nlu_result = None
+    intent_variant = "complex"
+    try:
+        from ..core.nlu_engine import nlu_engine
+        user_text = req.message.strip() if req.message else ""
+        if user_text:
+            nlu_result = nlu_engine.parse(user_text)
+            nlu_dict = {
+                "intent": nlu_result.intent,
+                "entities": nlu_result.entities,
+                "emotion": nlu_result.emotion,
+                "is_emergency": nlu_result.is_emergency,
+            }
+            from .agno_tools import resolve_tools_by_intent
+            _, intent_variant = resolve_tools_by_intent(nlu_dict)
+    except Exception:
+        logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
+
+    # 2. Agent 路由
+    agent_factory = AGENT_VARIANT_MAP.get(intent_variant, get_main_agent)
+    agent = agent_factory()
 
     # 初始思考状态
     yield {"event": "thinking", "data": "小安正在思考..."}
 
     full_response = ""
-    tool_steps: list[str] = []  # 已完成工具调用的中文描述列表
+    tool_steps: list[str] = []
+    run_response = None
 
     try:
         async for chunk in agent.arun(
@@ -198,7 +312,6 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         ):
             event = chunk.event
 
-            # 工具调用开始 → 发送 thinking 事件
             if event == RunEvent.tool_call_started and chunk.tool is not None:
                 tool_name = getattr(chunk.tool, "tool_name", "") or ""
                 thinking_msg = TOOL_THINKING_MAP.get(
@@ -206,25 +319,27 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
                 )
                 yield {"event": "thinking", "data": thinking_msg}
 
-            # 工具调用完成 → 记录步骤
             elif event == RunEvent.tool_call_completed and chunk.tool is not None:
                 tool_name = getattr(chunk.tool, "tool_name", "") or ""
                 step_desc = TOOL_THINKING_MAP.get(tool_name, "")
                 if step_desc and step_desc not in tool_steps:
                     tool_steps.append(step_desc)
 
-            # 流式内容输出
             elif event == RunEvent.run_content:
                 if chunk.content and isinstance(chunk.content, str):
                     full_response += chunk.content
                     yield {"event": "chunk", "data": chunk.content}
+
+            elif event == RunEvent.run_completed:
+                run_response = chunk
 
     except Exception:
         import traceback
         logger.error("Agno stream error: {}", traceback.format_exc())
         yield {"event": "chunk", "data": "\n\n抱歉，我遇到了问题，请稍后再试。"}
 
-    # 发送完成事件（含工具调用步骤信息 + ASR 转录文本）
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
     yield {
         "event": "done",
         "data": json.dumps({
@@ -236,6 +351,17 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             "transcribed_text": transcribed_text,
         }),
     }
+
+    # 审计日志
+    _save_audit_log(
+        session_id=session_id,
+        user_id=req.pregnant_id,
+        agent_role="pregnant",
+        agent_variant=intent_variant,
+        intent_classification=nlu_result.intent if nlu_result else None,
+        run_response=run_response,
+        total_latency_ms=elapsed_ms,
+    )
 
     # 对话持久化
     if settings.persist_chat_messages:
