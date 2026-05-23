@@ -837,7 +837,7 @@ def resolve_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
     if nlu_result is None or not nlu_result.get("intent"):
         return (MEDICAL_TOOLS, "complex")
 
-    intent = nlu_result.get("intent", "")
+    intent = nlu_result.get("intent", "").lower()
     group_name = INTENT_TO_GROUP.get(intent)
 
     if group_name and group_name in TOOL_GROUPS:
