@@ -844,3 +844,100 @@ def resolve_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
         return (TOOL_GROUPS[group_name], group_name)
 
     return (MEDICAL_TOOLS, "complex")
+
+
+# ==================== 护士端工具子集分组（工具路由） ====================
+
+NURSE_TOOL_GROUPS: dict[str, list] = {
+    "analyze": [
+        agno_query_patient_data,
+        agno_analyze_health_trends,
+        agno_evaluate_vital_rules,
+        agno_search_knowledge,
+    ],
+    "followup": [
+        agno_create_followup_record,
+        agno_query_patient_data,
+    ],
+    "report": [
+        agno_report_issue_to_doctor,
+        agno_query_patient_data,
+    ],
+    "chat": [
+        agno_query_patient_data,
+        agno_search_knowledge,
+        agno_analyze_health_trends,
+    ],
+}
+
+
+def resolve_nurse_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
+    """根据 NLU 意图返回护士工具子集和 variant 名称。
+
+    Returns:
+        (tools_list, variant_name)
+        variant_name: "analyze" | "followup" | "report" | "chat" | "complex"
+    """
+    if nlu_result is None or not nlu_result.get("intent"):
+        return (NURSE_TOOLS, "complex")
+    intent = nlu_result.get("intent", "").lower()
+    nurse_intent_map = {
+        "analyze": "analyze", "nurse_analyze": "analyze",
+        "followup": "followup", "create_followup": "followup",
+        "report": "report", "report_issue": "report",
+        "chat": "chat", "greeting": "chat", "emotion": "chat",
+        "ask_knowledge": "chat", "ask_symptom": "chat",
+    }
+    group_name = nurse_intent_map.get(intent)
+    if group_name and group_name in NURSE_TOOL_GROUPS:
+        return (NURSE_TOOL_GROUPS[group_name], group_name)
+    return (NURSE_TOOLS, "complex")
+
+
+# ==================== 医生端工具子集分组（工具路由） ====================
+
+DOCTOR_TOOL_GROUPS: dict[str, list] = {
+    "analyze": [
+        agno_analyze_patient_comprehensive,
+        agno_analyze_health_trends,
+        agno_evaluate_vital_rules,
+        agno_search_knowledge,
+        agno_query_clinical_guideline,
+    ],
+    "order": [
+        agno_generate_medical_order,
+        agno_analyze_patient_comprehensive,
+    ],
+    "issue": [
+        agno_handle_issue,
+        agno_analyze_patient_comprehensive,
+    ],
+    "chat": [
+        agno_search_knowledge,
+        agno_analyze_health_trends,
+        agno_evaluate_vital_rules,
+    ],
+}
+
+
+def resolve_doctor_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
+    """根据 NLU 意图返回医生工具子集和 variant 名称。
+
+    Returns:
+        (tools_list, variant_name)
+        variant_name: "analyze" | "order" | "issue" | "chat" | "complex"
+    """
+    if nlu_result is None or not nlu_result.get("intent"):
+        return (DOCTOR_TOOLS, "complex")
+    intent = nlu_result.get("intent", "").lower()
+    doctor_intent_map = {
+        "analyze": "analyze", "doctor_analyze": "analyze",
+        "order": "order", "generate_order": "order",
+        "handle_issue": "issue", "resolve_issue": "issue",
+        "chat": "chat", "greeting": "chat",
+        "ask_knowledge": "chat", "guideline": "analyze",
+    }
+    group_name = doctor_intent_map.get(intent)
+    if group_name and group_name in DOCTOR_TOOL_GROUPS:
+        return (DOCTOR_TOOL_GROUPS[group_name], group_name)
+    return (DOCTOR_TOOLS, "complex")
