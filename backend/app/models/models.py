@@ -49,6 +49,8 @@ class Pregnant(Base):
     phone = Column(String(20), nullable=True, comment="手机号(脱敏)")
     hospital_id = Column(String(32), nullable=True, comment="医院ID卡号")
     gestational_age_days = Column(Integer, nullable=True, comment="孕周天数")
+    height_cm = Column(Float, nullable=True, comment="身高(cm)")
+    pre_pregnancy_weight_kg = Column(Float, nullable=True, comment="孕前体重(kg)")
     lmp_date = Column(Date, nullable=True, comment="末次月经")
     edd = Column(Date, nullable=True, comment="预产期")
     risk_tags = Column(JSON, default=list, comment="风险标签列表")

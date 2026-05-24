@@ -125,7 +125,37 @@ def _ensure_order_columns():
         logger.warning("MedicalOrder 列迁移跳过: {}", e)
 
 
+def _ensure_pregnant_columns():
+    """为已有 SQLite 数据库添加 Pregnant 基线数据新列（幂等）
+
+    新增身高、孕前体重两个静态基线字段。
+    """
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("pregnant")]
+        new_cols = [
+            ("height_cm", "FLOAT", None),
+            ("pre_pregnancy_weight_kg", "FLOAT", None),
+        ]
+        added = 0
+        with engine.connect() as conn:
+            for col_name, col_type, default_val in new_cols:
+                if col_name not in columns:
+                    sql = f"ALTER TABLE pregnant ADD COLUMN {col_name} {col_type}"
+                    if default_val:
+                        sql += f" DEFAULT {default_val}"
+                    conn.execute(sa.text(sql))
+                    added += 1
+            conn.commit()
+        if added:
+            logger.info("Pregnant 基线列迁移完成: 新增 {} 列", added)
+    except Exception as e:
+        logger.warning("Pregnant 列迁移跳过: {}", e)
+
+
 def _ensure_audit_log_table():
+
     """为已有数据库添加 agent_audit_logs 表（幂等）"""
     import sqlalchemy as sa
     try:
@@ -159,6 +189,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("数据库已存在，跳过初始化")
 
+    # 对已有 SQLite 数据库添加 Pregnant 基线数据新列
+    _ensure_pregnant_columns()
     # 对已有 SQLite 数据库添加 FGR 新列
     _ensure_fgr_columns()
     # 对已有 SQLite 数据库添加 FollowUpRecord 归档新列

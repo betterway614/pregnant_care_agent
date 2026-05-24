@@ -656,6 +656,10 @@ function labLabel(key: string): string {
   const map: Record<string, string> = {
     hemoglobin_g_L: '血红蛋白', urine_protein: '尿蛋白',
     blood_sugar_fasting: '空腹血糖', blood_sugar_2h: '餐后血糖',
+    alt: '谷丙转氨酶(ALT)', ast: '谷草转氨酶(AST)',
+    creatinine: '肌酐', uric_acid: '尿酸', albumin: '白蛋白',
+    wbc: '白细胞', platelet: '血小板', hct: '红细胞压积',
+    bilirubin_total: '总胆红素',
   }
   return map[key] || key
 }

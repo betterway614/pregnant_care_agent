@@ -36,13 +36,22 @@
           <div class="content-card__header">
             <span class="content-card__title">健康趋势</span>
             <div class="chart-controls">
-              <el-checkbox-group v-model="selectedMetrics" @change="loadTrendData" size="small">
-                <el-checkbox value="weight">体重</el-checkbox>
-                <el-checkbox value="systolic">收缩压</el-checkbox>
-                <el-checkbox value="diastolic">舒张压</el-checkbox>
-                <el-checkbox value="blood_sugar_fasting">空腹血糖</el-checkbox>
-                <el-checkbox value="fetal_movement">胎动</el-checkbox>
-              </el-checkbox-group>
+              <div class="chart-controls__row">
+                <span class="chart-controls__label">基础指标</span>
+                <el-checkbox-group v-model="selectedMetrics" @change="loadTrendData" size="small">
+                  <el-checkbox value="weight">体重</el-checkbox>
+                  <el-checkbox value="systolic">收缩压</el-checkbox>
+                  <el-checkbox value="diastolic">舒张压</el-checkbox>
+                  <el-checkbox value="blood_sugar_fasting">空腹血糖</el-checkbox>
+                  <el-checkbox value="fetal_movement">胎动</el-checkbox>
+                </el-checkbox-group>
+              </div>
+              <div class="chart-controls__row">
+                <span class="chart-controls__label">生化指标</span>
+                <el-checkbox-group v-model="selectedLabMetrics" @change="loadTrendData" size="small">
+                  <el-checkbox v-for="m in labMetricOptions" :key="m.value" :value="m.value">{{ m.label }}</el-checkbox>
+                </el-checkbox-group>
+              </div>
               <el-radio-group v-model="axisMode" size="small" @change="loadTrendData" style="margin-left: 12px">
                 <el-radio-button value="date">日期</el-radio-button>
                 <el-radio-button value="gestational_week">孕周</el-radio-button>
@@ -88,7 +97,7 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { pregnantApi } from '@/api/endpoints'
 import FollowUpTimeline from '@/components/followup/FollowUpTimeline.vue'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
-import type { TrendSeries, FollowUpHistoryRecord, Pregnant } from '@/types'
+import type { TrendSeries, FollowUpHistoryRecord, Pregnant, LabTrendItem } from '@/types'
 
 const route = useRoute()
 const pregnantId = computed(() => route.params.pregnantId as string)
@@ -97,9 +106,36 @@ const pregnantInfo = ref<Pregnant | null>(null)
 const followUpRecords = ref<FollowUpHistoryRecord[]>([])
 const selectedFollowUpId = ref<string | null>(null)
 const selectedMetrics = ref(['systolic', 'diastolic', 'weight'])
+const selectedLabMetrics = ref<string[]>([])
 const axisMode = ref<'date' | 'gestational_week'>('date')
 const trendSeries = ref<TrendSeries[]>([])
 const chartRef = ref()
+
+const labMetricOptions = [
+  { value: 'hemoglobin_g_L', label: '血红蛋白' },
+  { value: 'alt', label: '谷丙转氨酶' },
+  { value: 'ast', label: '谷草转氨酶' },
+  { value: 'creatinine', label: '肌酐' },
+  { value: 'albumin', label: '白蛋白' },
+  { value: 'uric_acid', label: '尿酸' },
+  { value: 'wbc', label: '白细胞' },
+  { value: 'platelet', label: '血小板' },
+  { value: 'hct', label: '红细胞压积' },
+  { value: 'bilirubin_total', label: '总胆红素' },
+]
+
+const LAB_METRIC_META: Record<string, { name: string; unit: string; normal_low: number | null; normal_high: number | null }> = {
+  hemoglobin_g_L: { name: '血红蛋白', unit: 'g/L', normal_low: 100, normal_high: 160 },
+  alt: { name: '谷丙转氨酶(ALT)', unit: 'U/L', normal_low: 0, normal_high: 40 },
+  ast: { name: '谷草转氨酶(AST)', unit: 'U/L', normal_low: 0, normal_high: 40 },
+  creatinine: { name: '肌酐', unit: 'μmol/L', normal_low: 45, normal_high: 84 },
+  uric_acid: { name: '尿酸', unit: 'μmol/L', normal_low: 150, normal_high: 360 },
+  albumin: { name: '白蛋白', unit: 'g/L', normal_low: 35, normal_high: 55 },
+  wbc: { name: '白细胞', unit: '×10⁹/L', normal_low: 4.0, normal_high: 10.0 },
+  platelet: { name: '血小板', unit: '×10⁹/L', normal_low: 100, normal_high: 300 },
+  hct: { name: '红细胞压积', unit: '%', normal_low: 35, normal_high: 50 },
+  bilirubin_total: { name: '总胆红素', unit: 'μmol/L', normal_low: 0, normal_high: 21 },
+}
 
 async function loadPregnantInfo() {
   try {
@@ -116,19 +152,72 @@ async function loadFollowUpHistory() {
 }
 
 async function loadTrendData() {
-  if (!pregnantId.value || !selectedMetrics.value.length) {
+  if (!pregnantId.value || (!selectedMetrics.value.length && !selectedLabMetrics.value.length)) {
     trendSeries.value = []
     return
   }
-  try {
-    const res = await pregnantApi.getHealthTrends(pregnantId.value, {
-      metrics: selectedMetrics.value.join(','),
-      axis_mode: axisMode.value,
-    })
-    trendSeries.value = res.data.series || []
-  } catch {
-    trendSeries.value = []
+  const allSeries: TrendSeries[] = []
+
+  // 加载基础健康趋势
+  if (selectedMetrics.value.length) {
+    try {
+      const res = await pregnantApi.getHealthTrends(pregnantId.value, {
+        metrics: selectedMetrics.value.join(','),
+        axis_mode: axisMode.value,
+      })
+      allSeries.push(...(res.data.series || []))
+    } catch { /* ignore */ }
   }
+
+  // 加载生化指标趋势
+  if (selectedLabMetrics.value.length) {
+    try {
+      const labRes = await pregnantApi.getLabTrends(pregnantId.value, 50)
+      const labItems: LabTrendItem[] = labRes.data.items || []
+      for (const item of labItems) {
+        if (!selectedLabMetrics.value.includes(item.lab_key)) continue
+        if (item.is_qualitative) continue  // 定性指标不绘图
+        const meta = LAB_METRIC_META[item.lab_key]
+        if (!meta) continue
+
+        // 将 LabTrendItem 转为 TrendSeries 格式
+        const data = item.data_points
+          .filter(dp => dp.value != null)
+          .map(dp => ({
+            date: dp.date,
+            gest_week: dp.gest_week,
+            value: dp.value!,
+          }))
+        if (!data.length) continue
+
+        // 简单趋势判断
+        let trend: TrendSeries['trend'] = 'insufficient_data'
+        if (data.length >= 2) {
+          const first = data[0].value
+          const last = data[data.length - 1].value
+          const diff = last - first
+          if (Math.abs(diff) < (meta.normal_high || 100) * 0.05) trend = 'stable'
+          else trend = diff > 0 ? 'rising' : 'falling'
+        }
+
+        allSeries.push({
+          metric: item.lab_key,
+          name: meta.name,
+          unit: meta.unit,
+          normal_range: {
+            min: meta.normal_low ?? 0,
+            max: meta.normal_high ?? 999,
+          },
+          data,
+          trend,
+          latest_value: data.length ? data[data.length - 1].value : null,
+          is_normal: item.is_normal,
+        })
+      }
+    } catch { /* ignore */ }
+  }
+
+  trendSeries.value = allSeries
 }
 
 function handleFollowUpSelect(record: FollowUpHistoryRecord) {
@@ -184,9 +273,21 @@ onMounted(() => {
 
 .chart-controls {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chart-controls__row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
+}
+.chart-controls__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 4px;
+  white-space: nowrap;
+  min-width: 56px;
 }
 
 .point-detail-card {

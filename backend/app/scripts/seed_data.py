@@ -18,6 +18,7 @@ def seed_all():
         _seed_patients(db)
         db.flush()  # 确保已添加的孕妇数据对后续查询可见（autoflush=False）
         _seed_health_data(db)
+        seed_historical_baseline(db)
         _seed_schedules(db)
         _seed_fgr_assessments(db)
         seed_followup_records(db)
@@ -66,6 +67,12 @@ def _seed_patients(db):
         (["GDM"], "GDM"),
     ]
 
+    # 身高(cm) & 孕前体重(kg) — 与BMI分层对应
+    heights = [160, 160, 162, 162, 162, 160, 160, 160, 158, 163,
+               162, 158, 165, 162, 160, 160, 163, 160, 163, 160]
+    pre_weights = [45, 55, 58, 52, 56, 54, 68, 53, 44, 57,
+                   70, 55, 60, 82, 52, 46, 72, 55, 85, 54]
+
     # 记录前10位患者ID，用于图片绑���
     patient_ids_1_10 = []
 
@@ -92,6 +99,8 @@ def _seed_patients(db):
             phone=phones[i],
             hospital_id=hospital_ids[i],
             gestational_age_days=gest_days,
+            height_cm=heights[i],
+            pre_pregnancy_weight_kg=pre_weights[i],
             lmp_date=lmp,
             edd=edd,
             risk_tags=risk_configs[i][0],
@@ -806,6 +815,88 @@ def seed_feedback(db):
             db.add(feedback)
             count += 1
     logger.info("生成 {} 条反馈记录", count)
+
+
+def seed_historical_baseline(db):
+    """为每位孕妇从孕8周起每2周生成体重+血压历史基线数据
+
+    与 _seed_health_data (近56天密集数据) 互补，提供孕早期至今的稀疏长程轨迹。
+    仅生成 weight / systolic / diastolic 三项核心指标。
+    """
+    existing = db.query(HealthDataPoint).filter(
+        HealthDataPoint.source == "HISTORICAL_BASELINE"
+    ).count()
+    if existing > 0:
+        logger.info("历史基线数据已存在，跳过")
+        return
+
+    pregnant_list = db.query(Pregnant).all()
+    count = 0
+
+    # 每周增重速率（与 _seed_health_data bmi_configs 保持一致）
+    def _weekly_gain(pre_w: float) -> float:
+        if pre_w <= 47:
+            return 0.46  # 偏瘦
+        elif pre_w <= 62:
+            return 0.37  # 正常
+        elif pre_w <= 75:
+            return 0.30  # 超重
+        else:
+            return 0.22  # 肥胖
+
+    for p in pregnant_list:
+        pre_w = p.pre_pregnancy_weight_kg or 55
+        weekly_gain = _weekly_gain(pre_w)
+        current_gw = (p.gestational_age_days or 168) // 7
+        is_hypertensive = "高血压" in (p.risk_tags or [])
+        is_fgr = "FGR高危" in (p.risk_tags or [])
+
+        # 从孕8周到当前孕周，每2周一条记录
+        for gw in range(8, current_gw + 1, 2):
+            # 根据孕周推算日期: lmp + gw*7 天
+            record_date = (p.lmp_date or datetime.now().date() - timedelta(days=current_gw * 7)) + timedelta(weeks=gw)
+
+            # ---- 体重 ----
+            early_gain = 1.0
+            weeks_after_12 = max(0, gw - 12)
+            base_weight = pre_w + early_gain + weeks_after_12 * weekly_gain
+            weight = round(base_weight + random.uniform(-0.6, 0.6), 1)
+
+            # ---- 血压 (U形曲线) ----
+            bp_dip = 0
+            if 16 <= gw <= 28:
+                if gw <= 22:
+                    bp_dip = round((gw - 16) / 6 * 6)
+                else:
+                    bp_dip = round((1 - (gw - 22) / 6) * 6)
+
+            if is_hypertensive:
+                sbp = round(random.uniform(130, 148), 0)
+                dbp = round(random.uniform(82, 95), 0)
+            elif is_fgr and gw >= 28:
+                sbp = round(min(145, random.uniform(108, 125) - bp_dip + random.uniform(8, 15)), 0)
+                dbp = round(min(92, random.uniform(68, 80) - bp_dip * 0.6 + random.uniform(5, 10)), 0)
+            else:
+                sbp = round(random.uniform(105, 125) - bp_dip, 0)
+                dbp = round(random.uniform(65, 80) - bp_dip * 0.6, 0)
+
+            for metric, value, unit in [
+                ("weight", weight, "kg"),
+                ("systolic", sbp, "mmHg"),
+                ("diastolic", dbp, "mmHg"),
+            ]:
+                point = HealthDataPoint(
+                    pregnant_id=p.pregnant_id,
+                    metric_code=metric,
+                    value=value,
+                    unit=unit,
+                    recorded_at=record_date,
+                    source="HISTORICAL_BASELINE",
+                )
+                db.add(point)
+                count += 1
+
+    logger.info("生成 {} 条历史基线数据（8w起每2周体重+血压）", count)
 
 
 def supplement_health_data(db):
