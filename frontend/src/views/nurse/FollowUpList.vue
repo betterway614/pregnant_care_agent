@@ -24,7 +24,7 @@
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
         <el-option label="草稿" value="draft" />
-        <el-option label="进行中" value="in_progress" />
+        <el-option label="进行中" value="draft,in_progress" />
         <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
         <el-option label="已归档" value="archived" />
@@ -608,11 +608,12 @@ function statusLabel(status: string): string {
   return map[status] || status
 }
 
-/** 日期格式化 */
+/** 日期格式化（从ISO字符串直接提取，避免浏览器时区干扰） */
 function formatDate(d?: string): string {
   if (!d) return '--'
-  const date = new Date(d)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  // 直接从字符串提取日期部分，避免 new Date() 的时区偏差
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : d.slice(0, 10)
 }
 
 /** 字段标签映射 */

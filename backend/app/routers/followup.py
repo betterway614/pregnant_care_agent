@@ -7,12 +7,16 @@
 - confirmed: 护士确认审核
 - archived: 长期存档
 """
+import json
+from typing import Optional, AsyncGenerator
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from sse_starlette.sse import EventSourceResponse
+
 from ..database import get_db
 from ..utils.timezone import beijing_now
 from ..models import FollowUpRecord, Pregnant
@@ -49,6 +53,7 @@ def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db)):
     record = FollowUpRecord(
         pregnant_id=pregnant.pregnant_id,
         gestational_week=gest_week_display,
+        follow_up_date=beijing_now(),
         health_education=health_education,
         status="draft",
     )
@@ -71,7 +76,8 @@ def get_records(status: Optional[str] = None,
     """获取随访记录列表"""
     query = db.query(FollowUpRecord)
     if status:
-        query = query.filter(FollowUpRecord.status == status)
+        statuses = [s.strip() for s in status.split(",")]
+        query = query.filter(FollowUpRecord.status.in_(statuses))
     if pregnant_id:
         query = query.filter(FollowUpRecord.pregnant_id == pregnant_id)
     records = query.order_by(FollowUpRecord.follow_up_date.desc()).limit(100).all()
@@ -568,26 +574,14 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
             answers=reported_data,
         )
 
-        summary = await _generate_llm_summary(
-            patient_name=patient_name,
-            gest_week=record.gestational_week or "?",
-            answers=reported_data,
-            risk_tags=pregnant.risk_tags if pregnant else [],
-            pregnant_id=record.pregnant_id,
-        )
-
-        # LLM 个性化健康教育
-        try:
+        # LLM 分析和健康教育改为按需触发（通过 /respond/analyze/stream 端点）
+        # 规则引擎已执行，模板健康教育兜底
+        if not record.health_education:
             gest_week_int = int(record.gestational_week.split("+")[0]) if record.gestational_week and "+" in record.gestational_week else 20
-            personalized_edu = await followup_service.generate_health_education_with_llm(
-                gest_week=gest_week_int,
-                risk_tags=pregnant.risk_tags if pregnant else [],
-                answers=reported_data,
+            record.health_education = followup_service.generate_health_education(
+                gest_week_int,
+                pregnant.risk_tags if pregnant else [],
             )
-            if personalized_edu:
-                record.health_education = personalized_edu
-        except Exception:
-            pass  # 保留原有模板健康教育
 
     db.commit()
 
@@ -597,10 +591,244 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
         "answered_count": len(answered_keys),
         "total_count": total,
     }
-    if summary:
-        result["summary"] = summary.get("warm_summary", "")
-        result["analysis_report"] = summary
+    if all_answered and record.status == FOLLOWUP_STATUS_COMPLETED:
+        result["summary"] = record.summary or ""
+        result["analysis_available"] = True
+        result["health_education"] = record.health_education or []
     return result
+
+
+class FollowUpAnalyzeRequest(BaseModel):
+    record_id: str
+
+
+@router.post("/respond/analyze/stream")
+async def respond_analyze_stream(req: FollowUpAnalyzeRequest, db: Session = Depends(get_db)):
+    """SSE 流式端点：对已完成的随访记录进行 AI 分析
+
+    事件类型：
+    - phase:  分析阶段提示（data 为阶段描述字符串）
+    - chunk:  分析文本流式片段
+    - done:   分析完成（data 为 JSON，包含 analysis_report 和 health_education）
+    - error:  分析失败（data 为错误信息）
+    """
+    record = db.query(FollowUpRecord).filter(
+        FollowUpRecord.id == UUID(req.record_id)
+    ).first()
+    if not record:
+        raise HTTPException(404, "随访记录不存在")
+    if record.status != FOLLOWUP_STATUS_COMPLETED:
+        raise HTTPException(400, "随访尚未完成，无法进行分析")
+
+    answers = dict(record.self_reported_data) if record.self_reported_data else {}
+    pregnant = db.query(Pregnant).filter(
+        Pregnant.pregnant_id == record.pregnant_id
+    ).first()
+    patient_name = (pregnant.nickname or pregnant.display_name) if pregnant else ""
+    risk_tags = pregnant.risk_tags if pregnant else []
+    gest_week = record.gestational_week or "?"
+
+    return EventSourceResponse(
+        _stream_followup_analysis(
+            patient_name=patient_name,
+            gest_week=gest_week,
+            answers=answers,
+            risk_tags=risk_tags,
+            pregnant_id=record.pregnant_id,
+            db=db,
+            record=record,
+            pregnant=pregnant,
+        )
+    )
+
+
+async def _stream_followup_analysis(
+    patient_name: str,
+    gest_week: str,
+    answers: dict,
+    risk_tags: list[str],
+    pregnant_id: str,
+    db: Session,
+    record: FollowUpRecord,
+    pregnant,
+) -> AsyncGenerator[dict, None]:
+    """流式生成随访分析报告的 SSE 事件生成器"""
+    from loguru import logger
+
+    # Phase 1: 收集历史数据
+    yield {"event": "phase", "data": "正在收集历史健康数据..."}
+
+    history_text = ""
+    recent_health_text = ""
+    try:
+        prev_records = db.query(FollowUpRecord).filter(
+            FollowUpRecord.pregnant_id == pregnant_id,
+            FollowUpRecord.status.in_(["completed", "confirmed", "archived"]),
+        ).order_by(FollowUpRecord.created_at.desc()).limit(3).all()
+
+        if prev_records:
+            history_lines = []
+            for pr in prev_records:
+                pr_data = pr.self_reported_data or {}
+                pr_date = pr.created_at.strftime("%Y-%m-%d") if pr.created_at else "未知"
+                pr_items = [f"{k}={v}" for k, v in pr_data.items() if v]
+                history_lines.append(f"  [{pr_date}] {'; '.join(pr_items)}")
+            history_text = "\n".join(history_lines)
+
+        from datetime import timedelta
+        from ..models import HealthDataPoint
+        seven_days_ago = beijing_now() - timedelta(days=7)
+        recent_points = db.query(HealthDataPoint).filter(
+            HealthDataPoint.pregnant_id == pregnant_id,
+            HealthDataPoint.recorded_at >= seven_days_ago,
+        ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
+
+        if recent_points:
+            health_lines = [
+                f"  {hp.metric_code}: {hp.value}{hp.unit} ({hp.recorded_at.strftime('%m-%d')})"
+                for hp in recent_points
+            ]
+            recent_health_text = "\n".join(health_lines)
+    except Exception:
+        pass
+
+    # Phase 2: 开始 AI 分析
+    yield {"event": "phase", "data": "正在分析您的健康趋势..."}
+
+    answer_lines = [f"- {k}: {v}" for k, v in answers.items()]
+    answer_text = "\n".join(answer_lines)
+    risk_text = "、".join(risk_tags) if risk_tags else "无"
+
+    context_section = ""
+    if history_text:
+        context_section += f"\n\n最近随访历史：\n{history_text}"
+    if recent_health_text:
+        context_section += f"\n\n最近7天健康数据：\n{recent_health_text}"
+
+    analysis_report = None
+    health_education_list = []
+
+    # 尝试1: Agno Agent 流式输出
+    agno_success = False
+    try:
+        from ..core.agno_medical_agents import create_followup_analysis_agent
+        agent = create_followup_analysis_agent()
+        prompt = (
+            f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
+            f"孕妇：{patient_name}，孕{gest_week}周\n"
+            f"风险标签：{risk_text}\n"
+            f"本次随访数据：\n{answer_text}"
+            f"{context_section}"
+        )
+        full_response = ""
+        async for chunk in agent.arun(input=prompt, stream=True):
+            if hasattr(chunk, "content") and chunk.content:
+                content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                full_response += content
+                yield {"event": "chunk", "data": content}
+
+        if full_response.strip():
+            from ..core.agno_structured import extract_structured_content
+            data = extract_structured_content(full_response)
+            if data:
+                analysis_report = {
+                    "warm_summary": data.get("warm_summary", ""),
+                    "abnormal_indicators": data.get("abnormal_indicators", []),
+                    "trend_analysis": data.get("trend_analysis", ""),
+                    "personalized_advice": data.get("personalized_advice", ""),
+                    "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
+                }
+                agno_success = True
+    except Exception:
+        logger.warning("Agno stream analysis failed, falling back to standard LLM")
+
+    # 尝试2: 普通 LLM + 最终兜底
+    if not agno_success:
+        try:
+            from ..core import get_llm_client
+            client = get_llm_client()
+            system_prompt = (
+                "你是一位专业的孕期健康分析助手。请根据随访数据生成JSON格式的分析报告。\n"
+                "返回字段：\n"
+                "- warm_summary: 温馨总结（30-50字）\n"
+                "- abnormal_indicators: 异常指标列表（字符串数组）\n"
+                "- trend_analysis: 趋势分析（50-100字）\n"
+                "- personalized_advice: 个性化建议（50-100字）\n"
+                "- nurse_action_suggestion: 护士行动建议（确认通过/需进一步沟通/紧急上报）\n"
+                "不要包含markdown代码块标记，直接返回JSON。"
+            )
+            user_msg = (
+                f"孕妇：{patient_name}，孕{gest_week}周，风险标签：{risk_text}\n"
+                f"本次随访：\n{answer_text}"
+                f"{context_section}"
+            )
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ]
+            response = await client.chat(messages)
+            if response and response.strip():
+                from ..core.json_parser import parse_llm_json
+                data = parse_llm_json(response)
+                if data:
+                    analysis_report = {
+                        "warm_summary": data.get("warm_summary", ""),
+                        "abnormal_indicators": data.get("abnormal_indicators", []),
+                        "trend_analysis": data.get("trend_analysis", ""),
+                        "personalized_advice": data.get("personalized_advice", ""),
+                        "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
+                    }
+                    warm = data.get("warm_summary", "")
+                    trend = data.get("trend_analysis", "")
+                    advice = data.get("personalized_advice", "")
+                    if warm:
+                        yield {"event": "chunk", "data": warm + "\n\n"}
+                    if trend:
+                        yield {"event": "chunk", "data": "📊 " + trend + "\n\n"}
+                    if advice:
+                        yield {"event": "chunk", "data": "💡 " + advice}
+        except Exception:
+            logger.warning("Standard LLM analysis failed, using fallback template")
+
+    # 降级: 模板兜底
+    if not analysis_report:
+        analysis_report = _fallback_analysis_report(patient_name, gest_week, answers, risk_tags)
+        yield {"event": "chunk", "data": analysis_report.get("warm_summary", "")}
+
+    # Phase 3: 生成个性化健康教育
+    yield {"event": "phase", "data": "正在生成个性化健康建议..."}
+
+    try:
+        gest_week_int = int(gest_week.split("+")[0]) if gest_week and "+" in gest_week else 20
+        personalized_edu = await followup_service.generate_health_education_with_llm(
+            gest_week=gest_week_int,
+            risk_tags=risk_tags,
+            answers=answers,
+        )
+        if personalized_edu:
+            health_education_list = personalized_edu
+            record.health_education = personalized_edu
+        else:
+            health_education_list = record.health_education or []
+    except Exception:
+        logger.warning("Health education generation failed")
+        health_education_list = record.health_education or []
+
+    # 写入 LLM 分析结果到记录
+    if analysis_report:
+        record.summary = analysis_report.get("warm_summary", record.summary)
+    db.commit()
+
+    # Phase 4: 完成
+    yield {
+        "event": "done",
+        "data": json.dumps({
+            "record_id": str(record.id),
+            "status": record.status,
+            "analysis_report": analysis_report,
+            "health_education": health_education_list,
+        }),
+    }
 
 
 def _save_health_data_point(pregnant_id: str, key: str, value, db):

@@ -1302,7 +1302,7 @@ function setupMobileKeyboard() {
 
   function onViewportResize() {
     // 计算键盘弹出时的高度差
-    const offset = window.innerHeight - vv.height - vv.offsetTop
+    const offset = window.innerHeight - vv!.height - vv!.offsetTop
     wrapper.style.setProperty('--keyboard-offset', `${Math.max(0, offset)}px`)
     // 键盘弹出时滚动到底部
     if (offset > 100) {

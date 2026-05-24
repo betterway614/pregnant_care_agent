@@ -54,7 +54,7 @@
         发布排期
       </el-button>
       <el-tag v-if="selectedPregnantId && nodes.length" type="info" effect="plain" size="small" class="publish-tag">
-        {{ nodes[0]?.is_published ? '已发布' : '未发布' }}
+        {{ isSchedulePublished ? '已发布' : '未发布' }}
       </el-tag>
     </div>
 
@@ -156,6 +156,11 @@ const currentPregnantName = computed(() => {
 /** 按孕周排序的节点 */
 const sortedNodes = computed(() => {
   return [...nodes.value].sort((a, b) => a.gest_week - b.gest_week)
+})
+
+/** 排期是否已发布（所有节点 is_published 都为 1） */
+const isSchedulePublished = computed(() => {
+  return nodes.value.length > 0 && nodes.value.every((n) => n.is_published)
 })
 
 /** 获取时间轴类型 */

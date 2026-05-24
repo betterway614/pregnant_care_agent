@@ -60,10 +60,9 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{pregnant_id}/publish")
 def publish_schedule(pregnant_id: str, db: Session = Depends(get_db)):
-    """发布排期"""
+    """发布排期 — 将该孕妇所有排期节点标记为已发布"""
     nodes = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id,
-        ScheduleNode.status == "pending",
     ).all()
     for node in nodes:
         node.status = "published"

@@ -338,6 +338,14 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             elif event == RunEvent.run_completed:
                 run_response = chunk
 
+        # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
+        # 结构化输出需从 run_response.content 提取并发送到前端。
+        if not full_response and run_response is not None:
+            from .agno_medical_agents import format_structured_output_to_markdown
+            fallback_text = format_structured_output_to_markdown(run_response.content)
+            if fallback_text:
+                yield {"event": "chunk", "data": fallback_text}
+
     except Exception:
         import traceback
         logger.error("Agno stream error: {}", traceback.format_exc())

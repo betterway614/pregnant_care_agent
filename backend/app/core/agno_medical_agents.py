@@ -134,6 +134,88 @@ class ChatOutput(BaseModel):
     tools_used: list[str] = Field(default_factory=list, description="使用的工具列表")
 
 
+def format_structured_output_to_markdown(content: object) -> str | None:
+    """将结构化输出 Pydantic 模型转换为可读的 Markdown 文本。
+
+    当 Agent 使用 output_schema 时，Agno 框架不会产生 RunEvent.run_content
+    流式事件。此函数将 run_response.content 转为前端可渲染的 Markdown。
+    如果 content 已是字符串，直接返回；若非预期类型，返回 None。
+    """
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return content if content.strip() else None
+
+    # NurseAnalysisOutput
+    if isinstance(content, NurseAnalysisOutput):
+        parts: list[str] = []
+        if content.summary:
+            parts.append(f"## 综合概述\n\n{content.summary}")
+        if content.risk_assessment:
+            parts.append(f"## 风险评估\n\n{content.risk_assessment}")
+        if content.nursing_suggestions:
+            parts.append(f"## 护理建议\n\n{content.nursing_suggestions}")
+        if content.followup_focus:
+            items = "\n".join(f"- {item}" for item in content.followup_focus)
+            parts.append(f"## 随访重点\n\n{items}")
+        return "\n\n".join(parts) if parts else None
+
+    # DoctorAnalysisOutput
+    if isinstance(content, DoctorAnalysisOutput):
+        parts: list[str] = []
+        if content.analysis:
+            parts.append(f"## 综合分析\n\n{content.analysis}")
+        if content.evidence_references:
+            items = "\n".join(f"- {ref}" for ref in content.evidence_references)
+            parts.append(f"## 证据引用\n\n{items}")
+        if content.suggested_orders:
+            parts.append(f"## 建议医嘱\n\n{content.suggested_orders}")
+        if content.risk_summary:
+            parts.append(f"## 风险摘要\n\n{content.risk_summary}")
+        if content.differential_diagnosis:
+            items = "\n".join(
+                f"- **{d.condition}**: 支持依据: {', '.join(d.supported_by) if d.supported_by else '无'}; 排除依据: {', '.join(d.against) if d.against else '无'}; 需检查: {', '.join(d.tests_needed) if d.tests_needed else '无'}"
+                for d in content.differential_diagnosis
+            )
+            parts.append(f"## 鉴别诊断\n\n{items}")
+        if content.reasoning_chain:
+            items = "\n".join(f"- {step}" for step in content.reasoning_chain)
+            parts.append(f"## 推理链\n\n{items}")
+        return "\n\n".join(parts) if parts else None
+
+    # FollowUpGenerateOutput
+    if isinstance(content, FollowUpGenerateOutput):
+        parts: list[str] = []
+        if content.opening_message:
+            parts.append(content.opening_message)
+        if content.questions:
+            for i, q in enumerate(content.questions, 1):
+                parts.append(f"**{i}. {q.question}**")
+                if q.purpose:
+                    parts.append(f"*目的: {q.purpose}*")
+        if content.closing_message:
+            parts.append(content.closing_message)
+        return "\n\n".join(parts) if parts else None
+
+    # FollowUpAnalysisOutput
+    if isinstance(content, FollowUpAnalysisOutput):
+        parts: list[str] = []
+        if content.warm_summary:
+            parts.append(f"## 温馨总结\n\n{content.warm_summary}")
+        if content.abnormal_indicators:
+            items = "\n".join(f"- {item}" for item in content.abnormal_indicators)
+            parts.append(f"## 异常指标\n\n{items}")
+        if content.trend_analysis:
+            parts.append(f"## 趋势分析\n\n{content.trend_analysis}")
+        if content.personalized_advice:
+            parts.append(f"## 个性化建议\n\n{content.personalized_advice}")
+        if content.nurse_action_suggestion:
+            parts.append(f"## 护士行动建议\n\n{content.nurse_action_suggestion}")
+        return "\n\n".join(parts) if parts else None
+
+    return None
+
+
 def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
     """护士 Agent 通用构造器"""
     kwargs = dict(

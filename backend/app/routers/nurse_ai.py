@@ -568,6 +568,7 @@ async def nurse_chat_stream(req: dict):
         t0 = time.time()
         tool_steps: list[str] = []
         run_response = None
+        content_streamed = False
         try:
             yield {"event": "thinking", "data": "小护正在思考..."}
             async for chunk in agent.arun(
@@ -592,7 +593,15 @@ async def nurse_chat_stream(req: dict):
                     run_response = chunk
                 elif event == RunEvent.run_content:
                     if chunk.content and isinstance(chunk.content, str):
+                        content_streamed = True
                         yield {"event": "chunk", "data": chunk.content}
+            # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
+            # 结构化输出需从 run_response.content 提取并发送到前端。
+            if not content_streamed and run_response is not None:
+                from ..core.agno_medical_agents import format_structured_output_to_markdown
+                fallback_text = format_structured_output_to_markdown(run_response.content)
+                if fallback_text:
+                    yield {"event": "chunk", "data": fallback_text}
         except Exception as e:
             from loguru import logger
             logger.error("Nurse AI Agent run error: {}", e)
@@ -736,6 +745,29 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
     gest_day = gest_days % 7
     risk_tags = pregnant.risk_tags or []
     current_date = beijing_now().date()
+
+    # 1.5 检查是否有进行中的随访任务（去重：已有 draft 或 in_progress 状态则跳过推荐）
+    active_followup = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == pregnant_id,
+        FollowUpRecord.status.in_(["draft", "in_progress"]),
+    ).first()
+    if active_followup:
+        return {
+            "pregnant_id": pregnant_id,
+            "current_gestational_week": f"{gest_week}+{gest_day}",
+            "recommendations": [],
+            "context_summary": {
+                "days_since_last_followup": (current_date - active_followup.created_at.date()).days if active_followup.created_at else None,
+                "last_followup_date": active_followup.created_at.strftime("%Y-%m-%d") if active_followup.created_at else None,
+                "last_followup_status": active_followup.status,
+                "health_data_frequency": "active",
+                "health_data_count_14d": 0,
+                "active_alert_count": 0,
+                "has_critical_alerts": False,
+                "risk_tags": risk_tags,
+            },
+            "skip_reason": "该孕妇已有进行中的随访任务，请先处理完成后再推荐",
+        }
 
     # 2. 查询最近随访记录
     last_followup = db.query(FollowUpRecord).filter(

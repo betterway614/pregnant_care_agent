@@ -57,6 +57,12 @@ export const followUpApi = {
     client.get<FollowUpPendingResponse>(`/followup/pending/${pregnantId}`),
   respond: (recordId: string, answers: Record<string, any>, totalCount?: number) =>
     client.post('/followup/respond', { record_id: recordId, answers, total_count: totalCount || 0 }),
+  // 流式 AI 分析（SSE）
+  analyzeStream: (
+    recordId: string,
+    callbacks: SSEStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<void> => _sseFetch('/api/v1/followup/respond/analyze/stream', { record_id: recordId }, callbacks, signal),
   aiReview: (recordId: string) =>
     client.get<any>(`/followup/records/${recordId}/ai-review`),
   getDocument: (recordId: string) =>
@@ -311,7 +317,7 @@ async function _sseFetch(
       }
     },
     onmessage(msg) {
-      if (msg.event === 'thinking') callbacks.onThinking?.(msg.data)
+      if (msg.event === 'thinking' || msg.event === 'phase') callbacks.onThinking?.(msg.data)
       else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
       else if (msg.event === 'error') callbacks.onError?.(new Error(msg.data))
       else if (msg.event === 'done') {

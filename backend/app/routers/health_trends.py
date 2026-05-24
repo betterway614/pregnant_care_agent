@@ -19,6 +19,12 @@ router = APIRouter(prefix="/api/v1/pregnant", tags=["健康趋势"])
 # 从统一注册表派生
 METRIC_META = get_metric_meta()
 
+# 指标别名：旧版数据可能使用不同的 metric_code，查询时一并包含
+METRIC_ALIASES: dict[str, list[str]] = {
+    "blood_sugar_fasting": ["blood_sugar_fasting", "blood_sugar"],
+    "blood_sugar_postprandial": ["blood_sugar_postprandial", "blood_sugar"],
+}
+
 # 生化指标元数据: lab_key -> (中文名, 单位, normal_low, normal_high, is_qualitative)
 # qualitative指标用文本显示（如尿蛋白），quantitative指标可绘制趋势图
 LAB_METRIC_META = {
@@ -82,12 +88,13 @@ def get_health_trends(
         for metric_code in valid_codes:
             name, unit, normal_range = METRIC_META[metric_code]
 
-            # 查询数据点
+            # 查询数据点（支持旧版 metric_code 别名兼容）
+            query_codes = METRIC_ALIASES.get(metric_code, [metric_code])
             points = (
                 db.query(HealthDataPoint)
                 .filter(
                     HealthDataPoint.pregnant_id == pregnant_id,
-                    HealthDataPoint.metric_code == metric_code,
+                    HealthDataPoint.metric_code.in_(query_codes),
                     func.date(HealthDataPoint.recorded_at) >= start,
                     func.date(HealthDataPoint.recorded_at) <= end,
                 )

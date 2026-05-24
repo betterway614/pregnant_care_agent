@@ -5,6 +5,7 @@ from sqlalchemy import Column, String, Integer, Text, DateTime, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from ..database import Base
 from ..config import settings
+from ..utils.timezone import beijing_now
 
 
 class KnowledgeChunk(Base):
@@ -18,7 +19,7 @@ class KnowledgeChunk(Base):
     content = Column(Text, nullable=False, comment="文本内容")
     chunk_metadata = Column("metadata", JSONB, default={}, comment="元数据")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
     __table_args__ = (
         Index("idx_kc_category", "doc_category"),

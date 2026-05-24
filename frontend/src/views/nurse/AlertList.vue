@@ -332,7 +332,7 @@ async function handleReview(alert: Alert, action: 'confirm' | 'dismiss' | 'escal
           : `确定升级该预警？\n\n升级后：\n- 预警级别将变为红色高危\n- 将通过实时通知推送给医生端`
         : `确定${text}该预警？\n\n${desc}`,
       `${text}预警`,
-      { confirmButtonText: '确定', cancelButtonText: '取消', type }
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: type as 'warning' | 'error' }
     )
   } catch {
     return

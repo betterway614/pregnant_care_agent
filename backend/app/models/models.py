@@ -6,6 +6,7 @@ from sqlalchemy import (
     Text, ForeignKey, JSON, TypeDecorator, Index
 )
 from ..database import Base
+from ..utils.timezone import beijing_now
 
 
 class _UUID(TypeDecorator):
@@ -52,7 +53,7 @@ class Pregnant(Base):
     edd = Column(Date, nullable=True, comment="预产期")
     risk_tags = Column(JSON, default=list, comment="风险标签列表")
     avatar_url = Column(String(256), nullable=True, comment="头像URL")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class HealthDataPoint(Base):
@@ -64,7 +65,7 @@ class HealthDataPoint(Base):
     metric_code = Column(String(32), nullable=False, comment="指标代码: weight/systolic/diastolic/fetal_movement/...")
     value = Column(Float, nullable=False)
     unit = Column(String(16), nullable=False)
-    recorded_at = Column(DateTime, default=datetime.utcnow)
+    recorded_at = Column(DateTime, default=beijing_now)
     source = Column(String(32), default="PATIENT_REPORT", comment="数据来源")
 
     __table_args__ = (
@@ -97,7 +98,7 @@ class FollowUpRecord(Base):
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
     gestational_week = Column(String(16), comment="孕周")
-    follow_up_date = Column(DateTime, default=datetime.utcnow)
+    follow_up_date = Column(DateTime, default=beijing_now)
     # S: 主观 — 孕妇自报数据 + 主诉
     self_reported_data = Column(JSON, default=dict, comment="自报数据")
     chief_complaint = Column(Text, nullable=True, comment="主诉")
@@ -122,7 +123,7 @@ class FollowUpRecord(Base):
     record_snapshot = Column(JSON, default=dict, comment="确认时冻结的全量字段快照（不可变）")
     record_text = Column(Text, nullable=True, comment="格式化纯文本记录（用于检索、导出、打印）")
     signature_data = Column(JSON, default=dict, comment="签名数据：{image: base64, signer, signed_at}")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class FgrAssessment(Base):
@@ -140,7 +141,7 @@ class FgrAssessment(Base):
     confidence_upper = Column(Float, nullable=True)
     explanation = Column(Text, nullable=True)
     processing_time_ms = Column(Integer, nullable=True)
-    assessed_at = Column(DateTime, default=datetime.utcnow)
+    assessed_at = Column(DateTime, default=beijing_now)
     fgr_probability = Column(Float, nullable=True, comment="集成FGR概率(0-1)")
     predicted_label = Column(String(8), nullable=True, comment="FGR/NOR")
     model_confidence = Column(String(8), nullable=True, comment="High/Medium/Low")
@@ -160,7 +161,7 @@ class Alert(Base):
     status = Column(String(16), default="PENDING", comment="PENDING/ESCALATED/CONFIRMED/DISMISSED")
     reviewed_by = Column(String(64), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class FetalMovementSession(Base):
@@ -191,7 +192,7 @@ class MedicalOrder(Base):
     created_by = Column(String(64), nullable=True, comment="医生ID")
     signed_at = Column(DateTime, nullable=True)
     acknowledged_at = Column(DateTime, nullable=True, comment="孕妇确认阅读时间")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
     # 医嘱签署增强字段
     signature_data = Column(JSON, default=dict, comment="手写签名 {image, signer_name, signed_at}")
     order_snapshot = Column(JSON, default=dict, comment="签署时订单快照")
@@ -210,7 +211,7 @@ class Feedback(Base):
     rating = Column(String(8), nullable=False, comment="thumbs_up/thumbs_down")
     comment = Column(Text, nullable=True, comment="可选评论")
     session_id = Column(String(64), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class MentalHealthScreening(Base):
@@ -223,7 +224,7 @@ class MentalHealthScreening(Base):
     answers = Column(JSON, nullable=False, comment="10题答案，0-3分")
     total_score = Column(Integer, nullable=False, comment="总分0-30")
     risk_level = Column(String(16), nullable=False, comment="low/moderate/high/severe")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class ConversationMessage(Base):
@@ -236,7 +237,7 @@ class ConversationMessage(Base):
     role = Column(String(16), nullable=False, comment="system/user/assistant")
     content = Column(Text, nullable=False, comment="消息内容")
     extra_data = Column(JSON, default=dict, comment="附加元数据：nlu_result等")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class DailyHealthSummary(Base):
@@ -254,7 +255,7 @@ class DailyHealthSummary(Base):
     blood_sugar_postprandial = Column(Float, nullable=True, comment="餐后血糖 mmol/L")
     mood_score = Column(Float, nullable=True, comment="情绪评分 1-3")
     data_source = Column(String(32), nullable=True, comment="主要数据来源")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=beijing_now, onupdate=beijing_now)
 
     __table_args__ = (
         Index('idx_daily_summary_pregnant_date', 'pregnant_id', 'date', unique=True),
@@ -269,7 +270,7 @@ class AiAnalysisResult(Base):
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
     analysis_type = Column(String(32), nullable=False, comment="分析类型: general/followup_summary/risk_assessment")
     result_data = Column(JSON, nullable=False, comment="分析结果数据")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class NurseDoctorIssue(Base):
@@ -287,8 +288,8 @@ class NurseDoctorIssue(Base):
     assigned_to = Column(String(64), nullable=True, comment="处理医生ID")
     resolution = Column(Text, nullable=True, comment="处理结果")
     resolved_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
+    updated_at = Column(DateTime, default=beijing_now, onupdate=beijing_now)
 
 
 class AgentAuditLog(Base):
@@ -314,4 +315,4 @@ class AgentAuditLog(Base):
     llm_latency_ms = Column(Integer, nullable=True, comment="LLM耗时ms")
     guardrail_triggered = Column(Boolean, default=False, comment="安全护栏触发")
     response_preview = Column(String(200), nullable=True, comment="回复预览(前200字)")
-    created_at = Column(DateTime, default=datetime.utcnow, index=True, comment="创建时间")
+    created_at = Column(DateTime, default=beijing_now, index=True, comment="创建时间")

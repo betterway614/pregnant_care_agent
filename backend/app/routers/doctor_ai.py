@@ -627,6 +627,8 @@ async def doctor_chat_stream(req: dict):
 
     async def agno_event_generator():
         tool_steps: list[str] = []
+        run_response = None
+        content_streamed = False
         try:
             yield {"event": "thinking", "data": "Dr.智正在思考..."}
             async for chunk in agent.arun(
@@ -647,9 +649,17 @@ async def doctor_chat_stream(req: dict):
                     step_desc = DOCTOR_TOOL_THINKING_MAP.get(tool_name, "")
                     if step_desc and step_desc not in tool_steps:
                         tool_steps.append(step_desc)
+                elif event == RunEvent.run_completed:
+                    run_response = chunk
                 elif event == RunEvent.run_content:
                     if chunk.content and isinstance(chunk.content, str):
+                        content_streamed = True
                         yield {"event": "chunk", "data": chunk.content}
+            if not content_streamed and run_response is not None:
+                from ..core.agno_medical_agents import format_structured_output_to_markdown
+                fallback_text = format_structured_output_to_markdown(run_response.content)
+                if fallback_text:
+                    yield {"event": "chunk", "data": fallback_text}
         except Exception as e:
             yield {"event": "error", "data": str(e)}
         yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}

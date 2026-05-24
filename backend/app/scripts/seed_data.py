@@ -270,14 +270,15 @@ def _seed_schedules(db):
             node_date = pregnant.lmp_date + timedelta(weeks=gest_week)
             is_fgr = "FGR" in (pregnant.risk_tags or [])
             node_type = "fgr_high_risk" if is_fgr else "routine"
+            is_published_flag = random.random() > 0.3
             node = ScheduleNode(
                 pregnant_id=pregnant.pregnant_id,
                 gest_week=gest_week,
                 scheduled_date=node_date,
                 item=item,
                 node_type=node_type,
-                status="published" if random.random() > 0.3 else "pending",
-                is_published=1 if random.random() > 0.3 else 0,
+                status="published" if is_published_flag else "pending",
+                is_published=1 if is_published_flag else 0,
             )
             # FGR高危增加B超节点（避免与常规排期同一周重叠）
             standard_weeks = {12, 16, 20, 24, 28, 30, 32, 34, 36, 37, 38, 39, 40}

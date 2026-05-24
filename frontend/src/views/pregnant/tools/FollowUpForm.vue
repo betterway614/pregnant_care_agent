@@ -147,7 +147,7 @@
           <p class="completion-subtitle">感谢 {{ pending.patient_name }} 的配合</p>
         </div>
 
-        <!-- LLM 温馨总结 -->
+        <!-- 模板温馨总结 -->
         <div v-if="summary" class="summary-card">
           <div class="summary-card__header">
             <span class="summary-card__avatar">🤖</span>
@@ -156,38 +156,86 @@
           <div class="summary-card__body">{{ summary }}</div>
         </div>
 
-        <!-- 异常指标警告 -->
-        <div v-if="analysisReport?.abnormal_indicators?.length" class="alert-card">
-          <div class="alert-card__header">
-            <span class="alert-card__icon">⚠</span>
-            <span class="alert-card__title">需关注指标</span>
+        <!-- ===== AI 分析选择区 ===== -->
+        <div v-if="!analysisDone && !analyzing" class="analysis-choice-card">
+          <div class="analysis-choice__icon">🔬</div>
+          <h3 class="analysis-choice__title">是否需要 AI 深度分析？</h3>
+          <p class="analysis-choice__desc">AI 将结合您的历史数据，分析健康趋势并给出个性化建议</p>
+          <div class="analysis-choice__actions">
+            <button class="btn btn--primary btn--block" @click="startAnalysis">
+              ✨ AI 智能分析
+            </button>
+            <button class="btn btn--ghost btn--block" @click="skipAnalysis">
+              暂不需要，查看结果
+            </button>
           </div>
-          <ul class="alert-card__list">
-            <li v-for="(item, i) in analysisReport.abnormal_indicators" :key="i">{{ item }}</li>
-          </ul>
         </div>
 
-        <!-- 趋势分析 -->
-        <div v-if="analysisReport?.trend_analysis" class="info-card">
-          <div class="info-card__header">📊 趋势分析</div>
-          <div class="info-card__body">{{ analysisReport.trend_analysis }}</div>
+        <!-- ===== 流式分析中：对话气泡 ===== -->
+        <div v-if="analyzing" class="analysis-stream">
+          <div v-for="(msg, i) in analysisMessages" :key="i" class="stream-message">
+            <div v-if="msg.type === 'phase'" class="stream-phase">
+              <span class="stream-phase__dot" />
+              <span class="stream-phase__text">{{ msg.content }}</span>
+            </div>
+            <div v-else-if="msg.type === 'bubble'" class="stream-bubble">
+              <div class="stream-bubble__avatar">🤖</div>
+              <div class="stream-bubble__content">
+                <div class="stream-bubble__name">小安</div>
+                <div class="stream-bubble__text bubble-markdown" v-html="renderMd(msg.content)" />
+                <span v-if="msg.streaming" class="stream-cursor">|</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 初始加载动画 -->
+          <div v-if="analysisMessages.length === 0" class="stream-loading">
+            <div class="stream-bubble">
+              <div class="stream-bubble__avatar">🤖</div>
+              <div class="stream-bubble__content">
+                <div class="stream-bubble__name">小安</div>
+                <div class="stream-bubble__loading">
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- 个性化建议 -->
-        <div v-if="analysisReport?.personalized_advice" class="advice-card">
-          <div class="advice-card__header">💡 个性化建议</div>
-          <div class="advice-card__body">{{ analysisReport.personalized_advice }}</div>
-        </div>
+        <!-- ===== 分析完成：完整报告卡片 ===== -->
+        <template v-if="analysisDone && analysisReport">
+          <div v-if="analysisReport.abnormal_indicators?.length" class="alert-card">
+            <div class="alert-card__header">
+              <span class="alert-card__icon">⚠</span>
+              <span class="alert-card__title">需关注指标</span>
+            </div>
+            <ul class="alert-card__list">
+              <li v-for="(item, i) in analysisReport.abnormal_indicators" :key="i">{{ item }}</li>
+            </ul>
+          </div>
+
+          <div v-if="analysisReport.trend_analysis" class="info-card">
+            <div class="info-card__header">📊 趋势分析</div>
+            <div class="info-card__body">{{ analysisReport.trend_analysis }}</div>
+          </div>
+
+          <div v-if="analysisReport.personalized_advice" class="advice-card">
+            <div class="advice-card__header">💡 个性化建议</div>
+            <div class="advice-card__body">{{ analysisReport.personalized_advice }}</div>
+          </div>
+        </template>
 
         <!-- 健康教育 -->
-        <div v-if="healthEducation.length" class="education-card">
+        <div v-if="healthEducation.length && !analyzing" class="education-card">
           <div class="education-card__title">健康提示</div>
           <ul class="education-card__list">
             <li v-for="(item, i) in healthEducation" :key="i">{{ item }}</li>
           </ul>
         </div>
 
-        <button class="btn btn--outline btn--block" @click="$router.push('/pregnant/home')">
+        <button v-if="!analyzing" class="btn btn--outline btn--block" @click="$router.push('/pregnant/home')">
           返回首页
         </button>
       </div>
@@ -196,10 +244,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { followUpApi } from '@/api/endpoints'
 import { ElMessage } from 'element-plus'
+import { renderMarkdown } from '@/utils/markdown'
 
 interface FollowUpQuestion {
   key: string
@@ -237,6 +286,10 @@ const analysisReport = ref<{
   personalized_advice: string
   nurse_action_suggestion: string
 } | null>(null)
+const analyzing = ref(false)
+const analysisDone = ref(false)
+const analysisMessages = ref<Array<{ type: 'phase' | 'bubble'; content: string; streaming?: boolean }>>([])
+let abortController: AbortController | null = null
 
 const pending = ref<PendingData>({
   record_id: '',
@@ -379,10 +432,8 @@ async function handleSubmit() {
     if (data.status === 'completed') {
       completed.value = true
       summary.value = data.summary || ''
-      if (data.analysis_report) {
-        analysisReport.value = data.analysis_report
-      }
-      healthEducation.value = pending.value.health_education || []
+      healthEducation.value = data.health_education || []
+      // analysisReport 由流式分析端点返回，此处不设置
       ElMessage.success('随访已完成，护士会尽快审核')
     } else {
       ElMessage.success('已保存')
@@ -396,7 +447,91 @@ async function handleSubmit() {
   }
 }
 
+function renderMd(text: string): string {
+  if (!text) return ''
+  return renderMarkdown(text)
+}
+
+async function startAnalysis() {
+  analyzing.value = true
+  analysisMessages.value = []
+  abortController = new AbortController()
+
+  try {
+    await followUpApi.analyzeStream(
+      pending.value.record_id,
+      {
+        onThinking(msg: string) {
+          analysisMessages.value.push({ type: 'phase', content: msg })
+        },
+        onChunk(text: string) {
+          const last = analysisMessages.value[analysisMessages.value.length - 1]
+          if (last && last.type === 'bubble' && last.streaming) {
+            last.content += text
+          } else {
+            analysisMessages.value.push({ type: 'bubble', content: text, streaming: true })
+          }
+        },
+        onDone(metadata: any) {
+          const last = analysisMessages.value[analysisMessages.value.length - 1]
+          if (last && last.type === 'bubble') {
+            last.streaming = false
+          }
+          if (metadata?.analysis_report) {
+            analysisReport.value = metadata.analysis_report
+          }
+          if (metadata?.health_education?.length) {
+            healthEducation.value = metadata.health_education
+          }
+          analysisDone.value = true
+          analyzing.value = false
+          abortController = null
+        },
+        onError(_err: Error) {
+          analysisDone.value = true
+          analyzing.value = false
+          abortController = null
+          if (!analysisReport.value) {
+            analysisReport.value = {
+              warm_summary: summary.value || '',
+              abnormal_indicators: [],
+              trend_analysis: 'AI 分析暂时不可用，请查看基础总结。',
+              personalized_advice: '请继续保持规律作息和均衡饮食，按时产检。',
+              nurse_action_suggestion: '确认通过',
+            }
+          }
+        },
+      },
+      abortController.signal,
+    )
+  } catch {
+    analysisDone.value = true
+    analyzing.value = false
+    abortController = null
+    if (!analysisReport.value) {
+      analysisReport.value = {
+        warm_summary: summary.value || '',
+        abnormal_indicators: [],
+        trend_analysis: 'AI 分析暂不可用，请稍后重试。',
+        personalized_advice: '请继续保持规律作息和均衡饮食，按时产检。',
+        nurse_action_suggestion: '确认通过',
+      }
+    }
+  }
+}
+
+function skipAnalysis() {
+  analysisDone.value = true
+}
+
 onMounted(loadPending)
+
+onUnmounted(() => {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
+})
 </script>
 
 <style scoped>
@@ -865,6 +1000,144 @@ onMounted(loadPending)
   font-size: 13px;
   line-height: 1.7;
   color: #1B5E20;
+}
+
+/* ===== AI 分析选择卡片 ===== */
+.analysis-choice-card {
+  background: linear-gradient(135deg, #F3E5F5, #FFF);
+  border-radius: 16px;
+  padding: 24px 20px;
+  margin-bottom: 12px;
+  text-align: center;
+  border: 1.5px solid rgba(171, 71, 188, 0.15);
+  box-shadow: 0 2px 12px rgba(171, 71, 188, 0.06);
+}
+.analysis-choice__icon { font-size: 40px; margin-bottom: 12px; }
+.analysis-choice__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--pt-text);
+  margin: 0 0 8px;
+}
+.analysis-choice__desc {
+  font-size: 13px;
+  color: var(--pt-text-muted);
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+.analysis-choice__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn--ghost {
+  background: transparent;
+  border: 1.5px solid #E8E4E0;
+  color: var(--pt-text-secondary);
+}
+
+/* ===== 流式分析区 ===== */
+.analysis-stream { margin-bottom: 16px; }
+.stream-message { margin-bottom: 8px; }
+
+.stream-phase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  margin-bottom: 4px;
+}
+.stream-phase__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pt-primary);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.stream-phase__text {
+  font-size: 12px;
+  color: var(--pt-text-muted);
+  font-weight: 500;
+}
+
+.stream-bubble {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.stream-bubble__avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FCE4EC, #FFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(244, 143, 177, 0.12);
+}
+.stream-bubble__content {
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+  border-radius: 12px 12px 12px 4px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.stream-bubble__name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pt-primary-dark);
+  margin-bottom: 6px;
+}
+.stream-bubble__text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--pt-text);
+}
+.bubble-markdown :deep(p) { margin: 0 0 6px; }
+.bubble-markdown :deep(p:last-child) { margin-bottom: 0; }
+.bubble-markdown :deep(ul), .bubble-markdown :deep(ol) { margin: 4px 0; padding-left: 18px; }
+.bubble-markdown :deep(li) { margin-bottom: 2px; }
+.bubble-markdown :deep(strong) { color: var(--pt-primary-dark); }
+.bubble-markdown :deep(h1), .bubble-markdown :deep(h2), .bubble-markdown :deep(h3) {
+  font-size: 15px; margin: 8px 0 4px;
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  background: var(--pt-primary);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 0.8s step-end infinite;
+}
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.stream-loading { margin-bottom: 8px; }
+.stream-bubble__loading { display: flex; gap: 6px; padding: 4px 0; }
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pt-primary-light);
+  animation: dot-bounce 1.2s ease-in-out infinite;
+}
+.loading-dot:nth-child(2) { animation-delay: 0.2s; }
+.loading-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }
 
 /* ===== 移动端适配 ===== */
