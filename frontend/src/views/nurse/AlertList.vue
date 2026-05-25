@@ -358,7 +358,7 @@ async function handleReview(row: any, action: string) {
 
   submitting.value = true
   try {
-    await alertApi.review(row.id, action, reason, targetLevel)
+    await alertApi.review(row.id, action, reason)
     ElMessage.success('操作成功')
     await fetchAlerts()
   } catch (err: any) {

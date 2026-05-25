@@ -29,7 +29,7 @@ const labelMap: Record<string, string> = {
 const label = computed(() => labelMap[props.level] || props.level)
 
 const prefixLabel = computed(() => {
-  if (!props.showPrefix || props.showPrefix === false) return ''
+  if (!props.showPrefix) return ''
   if (props.action === 'downgrade') return '[医生降级] '
   if (props.action === 'nurse_escalate') return '[护士升级] '
   if (props.action === 'nurse_appeal') return '[复议中] '
