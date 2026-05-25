@@ -115,7 +115,9 @@ async def create_alert(
 
     # 4. 实时推送给医生端
     try:
-        await ws_manager.broadcast_alert(alert_data)
+        alert_data["source_role"] = "system"
+        alert_data["action"] = "created"
+        await ws_manager.route_alert(alert_data)
     except Exception as e:
         logger.warning(f"WebSocket广播失败，预警已创建: {e}")
 
@@ -183,25 +185,73 @@ async def analyze_alert_workflow(alert_id: str, db: Session = Depends(get_db)):
     }
 
 
+def _append_history(alert: Alert, action: str, source_role: str, level: str,
+                   operator: str = None, reason: str = None):
+    """在 alert.details.history 追加一条操作记录"""
+    details = alert.details or {}
+    history = details.get("history", [])
+    history.append({
+        "seq": len(history) + 1,
+        "action": action,
+        "source_role": source_role,
+        "level": level,
+        "operator": operator,
+        "reason": reason,
+        "timestamp": beijing_now().isoformat(),
+    })
+    details["history"] = history
+    details["source_role"] = source_role
+    alert.details = details
+
+
 @router.put("/{alert_id}/review", response_model=AlertResponse)
 async def review_alert(alert_id: str, review: AlertReviewRequest,
                   db: Session = Depends(get_db)):
-    """审核预警"""
+    """审核预警 — 支持医生和护士的全部操作"""
     alert = db.query(Alert).filter(Alert.id == UUID(alert_id)).first()
     if not alert:
         raise HTTPException(404, "预警不存在")
 
     original_level = alert.level
+    operator = None
+    source_role = "doctor"
 
     if review.action == "confirm":
         alert.status = "CONFIRMED"
+        _append_history(alert, "confirm", source_role, alert.level, operator, review.reason)
     elif review.action == "dismiss":
         alert.status = "DISMISSED"
-    elif review.action == "escalate":
-        alert.status = "ESCALATED"
-        # 升级预警级别：非 RED 的升级为 RED
-        if alert.level != "RED":
+        _append_history(alert, "dismiss", source_role, alert.level, operator, review.reason)
+    elif review.action == "downgrade":
+        if not review.target_level:
+            raise HTTPException(400, "降级操作必须指定 target_level")
+        if review.target_level == "GREEN":
+            alert.status = "DISMISSED"
+            _append_history(alert, "downgrade", source_role, "GREEN", operator, review.reason)
+        else:
+            alert.level = review.target_level
+            alert.status = "PENDING"
+            _append_history(alert, "downgrade", source_role, review.target_level, operator, review.reason)
+    elif review.action == "supplement":
+        _append_history(alert, "supplement", source_role, alert.level, operator, review.reason)
+    elif review.action == "nurse_confirm":
+        source_role = "nurse"
+        alert.status = "CONFIRMED"
+        _append_history(alert, "nurse_confirm", source_role, alert.level, operator, review.reason)
+    elif review.action == "nurse_dismiss":
+        source_role = "nurse"
+        alert.status = "DISMISSED"
+        _append_history(alert, "nurse_dismiss", source_role, alert.level, operator, review.reason)
+    elif review.action == "nurse_escalate":
+        source_role = "nurse"
+        if alert.level == "YELLOW":
+            alert.level = "ORANGE"
+        elif alert.level == "ORANGE":
             alert.level = "RED"
+        _append_history(alert, "nurse_escalate", source_role, alert.level, operator, review.reason)
+    elif review.action == "nurse_appeal":
+        source_role = "nurse"
+        _append_history(alert, "nurse_appeal", source_role, alert.level, operator, review.reason)
 
     alert.reviewed_at = beijing_now()
     db.commit()
@@ -209,27 +259,79 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
 
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == alert.pregnant_id).first()
 
-    # escalate 时广播预警给医生端
-    if review.action == "escalate" and pregnant:
-        try:
-            prefix = "[已升级]" if alert.level == "RED" and original_level != "RED" else "[紧急通知]"
-            alert_data = {
-                "id": str(alert.id),
-                "pregnant_id": alert.pregnant_id,
-                "patient_name": pregnant.display_name,
-                "level": alert.level,
-                "message": f"{prefix} {alert.message}",
-                "trigger_source": alert.trigger_source,
-                "status": alert.status,
-                "created_at": alert.created_at.isoformat() if alert.created_at else None,
-                "gestational_age_days": pregnant.gestational_age_days,
-            }
-            await ws_manager.broadcast_alert(alert_data)
-        except Exception as e:
-            logger.warning(f"escalate WebSocket广播失败: {e}")
+    # WebSocket 路由推送
+    try:
+        alert_data = {
+            "id": str(alert.id),
+            "pregnant_id": alert.pregnant_id,
+            "patient_name": pregnant.display_name if pregnant else "未知",
+            "level": alert.level,
+            "message": alert.message,
+            "trigger_source": alert.trigger_source,
+            "status": alert.status,
+            "created_at": alert.created_at.isoformat() if alert.created_at else None,
+            "gestational_age_days": pregnant.gestational_age_days if pregnant else None,
+            "source_role": source_role,
+            "action": review.action,
+            "review_reason": review.reason,
+        }
+
+        if source_role == "nurse" and review.action == "escalate":
+            prefix = "[护士升级]" if alert.level == "RED" else ""
+            if prefix:
+                alert_data["message"] = f"{prefix} {alert.message}"
+
+        if source_role == "doctor" and review.action == "downgrade" and review.target_level != "GREEN":
+            alert_data["message"] = f"[医生降级] {alert.message}"
+
+        if source_role == "nurse" and review.action == "appeal":
+            alert_data["message"] = f"[护士复议] {alert.message}"
+            alert_details = alert.details or {}
+            downgrade_entry = next(
+                (h for h in reversed(alert_details.get("history", [])) if h["action"] == "downgrade"), None
+            )
+            if downgrade_entry:
+                alert_data["target_doctor_id"] = downgrade_entry.get("operator")
+
+        await ws_manager.route_alert(alert_data)
+    except Exception as e:
+        logger.warning(f"WebSocket路由推送失败: {e}")
 
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",
         gestational_age_days=pregnant.gestational_age_days if pregnant else None,
     )
+
+
+@router.post("/auto-dismiss")
+def auto_dismiss_alerts(db: Session = Depends(get_db)):
+    """定时任务: 自动关闭超时 PENDING 预警"""
+    from datetime import timedelta
+
+    now = beijing_now()
+    thresholds = {
+        "RED": now - timedelta(hours=72),
+        "ORANGE": now - timedelta(hours=48),
+        "YELLOW": now - timedelta(hours=24),
+    }
+
+    dismissed_count = 0
+    for level, cutoff in thresholds.items():
+        stale = db.query(Alert).filter(
+            Alert.status == "PENDING",
+            Alert.level == level,
+            Alert.created_at < cutoff,
+        ).all()
+
+        timeout_hours = {"RED": 72, "ORANGE": 48, "YELLOW": 24}.get(level, 24)
+        for alert in stale:
+            _append_history(alert, "auto_dismiss", "system", alert.level,
+                          reason=f"超时{timeout_hours}小时未处理")
+            alert.status = "AUTO_DISMISSED"
+            alert.reviewed_at = now
+            dismissed_count += 1
+
+    db.commit()
+    logger.info(f"自动关闭 {dismissed_count} 条超时预警")
+    return {"message": f"自动关闭了 {dismissed_count} 条超时预警", "count": dismissed_count}
