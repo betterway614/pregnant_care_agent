@@ -173,6 +173,15 @@
               确认高危
             </el-button>
             <el-button
+              type="primary"
+              :icon="DocumentAdd"
+              :loading="orderGenerating"
+              @click="generateOrderFromAlert"
+              :disabled="!isStatusActionable(selectedAlert.status)"
+            >
+              生成医嘱
+            </el-button>
+            <el-button
               type="warning"
               :icon="Edit"
               :loading="submitting"
@@ -833,6 +842,27 @@ async function confirmHighRisk() {
     console.error('确认高危失败:', err)
   } finally {
     submitting.value = false
+  }
+}
+
+/** 从预警直接生成医嘱（不修改预警状态） */
+async function generateOrderFromAlert() {
+  if (!selectedAlert.value) return
+  const alert = selectedAlert.value
+  orderGenerating.value = true
+  try {
+    const res = await orderApi.generate({
+      pregnant_id: alert.pregnant_id,
+      alert_id: alert.id,
+      risk_level: alert.level,
+      gestational_weeks: calcGestationalWeek(alert.gestational_age_days),
+    })
+    router.push({ name: 'OrderSign', params: { orderId: res.data.id } })
+  } catch (err) {
+    console.error('生成医嘱失败:', err)
+    ElNotification.error('生成医嘱失败，请重试')
+  } finally {
+    orderGenerating.value = false
   }
 }
 
