@@ -150,17 +150,24 @@ class RuleEngine:
         self.rules = RULES
 
     def evaluate_all(self, context: dict) -> list[dict]:
-        """评估全部规则，返回命中规则列表"""
-        hits = []
+        """每个领域只返回优先级最高的命中。同领域同优先级合并 triggered_rules。"""
+        domain_hits: dict[str, dict] = {}
         for rule in self.rules:
             if rule.evaluate(context):
-                hits.append({
-                    "rule_id": rule.id,
-                    "level": rule.level,
-                    "message": rule.message,
-                    "action": rule.action,
-                })
-        return hits
+                current = domain_hits.get(rule.domain)
+                if not current or rule.priority > current["priority"]:
+                    domain_hits[rule.domain] = {
+                        "rule_id": rule.id,
+                        "domain": rule.domain,
+                        "priority": rule.priority,
+                        "level": rule.level,
+                        "message": rule.message,
+                        "action": rule.action,
+                        "triggered_rules": [rule.id],
+                    }
+                elif rule.priority == current["priority"]:
+                    current["triggered_rules"].append(rule.id)
+        return list(domain_hits.values())
 
     def evaluate_fgr_risk(self, risk_level: str) -> list[dict]:
         """FGR风险等级触发规则"""
