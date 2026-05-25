@@ -174,6 +174,7 @@ export interface MedicalOrder {
   status: string
   created_at?: string
   signed_at?: string
+  acknowledged_at?: string
   patient_name?: string
   created_by?: string
   signature_data?: { image?: string; signer?: string; signed_at?: string }

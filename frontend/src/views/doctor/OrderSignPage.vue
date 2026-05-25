@@ -132,6 +132,7 @@
           :order-type="order.order_type"
           :source="order.source"
           :signature-image="savedSignature || order.signature_data?.image"
+          :signed-at="order.signed_at"
         />
       </div>
     </template>
@@ -150,7 +151,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Loading, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { orderApi } from '@/api/endpoints'
+import { orderApi, pregnantApi } from '@/api/endpoints'
 import type { MedicalOrder } from '@/types'
 import SignaturePad from '@/components/followup/SignaturePad.vue'
 import OrderDocumentPrint from '@/components/orders/OrderDocumentPrint.vue'
@@ -170,6 +171,7 @@ const originalContent = ref('')
 const doctorNotes = ref('')
 const savedSignature = ref<string | null>(null)
 const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null)
+const gestDays = ref(0)
 
 const contentModified = computed(() => editContent.value !== originalContent.value)
 
@@ -192,8 +194,8 @@ const sourceLabel = computed(() => {
 })
 
 const gestWeek = computed(() => {
-  // 尝试从order中获取孕周信息，暂无则显示未知
-  return '未知'
+  if (gestDays.value <= 0) return '未知'
+  return `${Math.floor(gestDays.value / 7)}+${gestDays.value % 7}`
 })
 
 function onContentChange() {
@@ -284,6 +286,12 @@ onMounted(async () => {
       editContent.value = found.content || ''
       originalContent.value = found.content || ''
       doctorNotes.value = found.doctor_notes || ''
+      // 获取孕周信息
+      if (found.pregnant_id) {
+        pregnantApi.getHome(found.pregnant_id).then((homeRes) => {
+          gestDays.value = homeRes.data?.gestational_day || 0
+        }).catch(() => {})
+      }
     }
   } catch (err) {
     console.error('加载医嘱失败:', err)

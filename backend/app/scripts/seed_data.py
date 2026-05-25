@@ -2,6 +2,7 @@
 import uuid
 import random
 from datetime import datetime, date, timedelta
+from ..utils.timezone import beijing_now
 from sqlalchemy import text
 from loguru import logger
 from ..database import SessionLocal
@@ -615,8 +616,8 @@ def seed_medical_orders(db):
                 source=source,
                 status=order_status,
                 created_by=created_by,
-                signed_at=datetime.now() - timedelta(days=random.randint(1, 30)) if order_status in ["signed", "executed"] else None,
-                created_at=datetime.now() - timedelta(days=random.randint(0, 30)),
+                signed_at=beijing_now() - timedelta(days=random.randint(1, 30)) if order_status in ["signed", "executed"] else None,
+                created_at=beijing_now() - timedelta(days=random.randint(0, 30)),
             )
             db.add(order)
             count += 1

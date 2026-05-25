@@ -1,41 +1,40 @@
 <template>
-  <div class="order-detail">
+  <div class="order-detail-page">
+    <!-- 返回按钮 -->
+    <div class="nav-bar">
+      <el-button text @click="$router.back()">
+        <el-icon><ArrowLeft /></el-icon> 返回
+      </el-button>
+    </div>
+
     <div v-if="loading" class="loading-state">
       <el-icon class="is-loading" :size="32"><Loading /></el-icon>
       <p>加载中...</p>
     </div>
 
     <template v-else-if="order">
-      <div class="order-header">
-        <h3>医嘱详情</h3>
-        <el-tag :type="getStatusType(order.status)">{{ getStatusText(order.status) }}</el-tag>
-      </div>
+      <!-- 使用与医生端一致的医嘱文档样式 -->
+      <OrderDocumentPrint
+        :patient-name="patientName"
+        :gest-week="gestWeek"
+        :content="order.content"
+        :order-type="order.order_type"
+        :source="order.source"
+        :signature-image="signatureImage"
+        :signed-at="order.signed_at"
+      />
 
-      <div class="order-content">
-        <div class="content-label">医嘱内容</div>
-        <div class="content-text">{{ order.content }}</div>
-      </div>
-
-      <div class="order-meta">
-        <div class="meta-item">
-          <span class="meta-label">开具时间</span>
-          <span class="meta-value">{{ formatTime(order.created_at) }}</span>
+      <!-- 已阅读确认区 -->
+      <div class="acknowledge-bar">
+        <div v-if="!order.acknowledged_at" class="acknowledge-action">
+          <el-button type="primary" size="large" @click="handleAcknowledge" :loading="acknowledging">
+            我已阅读
+          </el-button>
         </div>
-        <div class="meta-item" v-if="order.signed_at">
-          <span class="meta-label">签署时间</span>
-          <span class="meta-value">{{ formatTime(order.signed_at) }}</span>
+        <div v-else class="acknowledged-info">
+          <el-icon color="#34D399"><CircleCheck /></el-icon>
+          <span>已于 {{ formatTime(order.acknowledged_at) }} 确认阅读</span>
         </div>
-      </div>
-
-      <div class="order-actions" v-if="!order.acknowledged_at">
-        <el-button type="primary" @click="handleAcknowledge" :loading="acknowledging">
-          我已阅读
-        </el-button>
-      </div>
-
-      <div class="acknowledged-info" v-else>
-        <el-icon><CircleCheck /></el-icon>
-        <span>已于 {{ formatTime(order.acknowledged_at) }} 确认阅读</span>
       </div>
     </template>
 
@@ -47,15 +46,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loading, CircleCheck, Document } from '@element-plus/icons-vue'
-import { orderApi } from '@/api/endpoints'
+import { Loading, CircleCheck, Document, ArrowLeft } from '@element-plus/icons-vue'
+import { orderApi, pregnantApi } from '@/api/endpoints'
+import OrderDocumentPrint from '@/components/orders/OrderDocumentPrint.vue'
 
 const route = useRoute()
 const order = ref<any>(null)
 const loading = ref(true)
 const acknowledging = ref(false)
+const gestDays = ref(0)
+
+const patientName = computed(() => order.value?.patient_name || '未知')
+const gestWeek = computed(() => {
+  if (gestDays.value <= 0) return '未知'
+  return `${Math.floor(gestDays.value / 7)}+${gestDays.value % 7}`
+})
+const signatureImage = computed(() => order.value?.signature_data?.image || null)
 
 onMounted(async () => {
   const orderId = route.params.orderId as string
@@ -67,9 +75,15 @@ onMounted(async () => {
   try {
     const pid = localStorage.getItem('currentPregnantId') || ''
     if (pid) {
-      const res = await orderApi.getPregnantOrders(pid)
-      const orders = res.data || []
+      const [ordersRes, homeRes] = await Promise.all([
+        orderApi.getPregnantOrders(pid),
+        pregnantApi.getHome(pid).catch(() => null)
+      ])
+      const orders = ordersRes.data || []
       order.value = orders.find((o: any) => o.id === orderId) || null
+      if (homeRes) {
+        gestDays.value = homeRes.data?.gestational_day || 0
+      }
     }
   } catch (err) {
     console.error('加载医嘱失败:', err)
@@ -77,24 +91,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-
-function getStatusType(status: string): string {
-  const map: Record<string, string> = {
-    draft: 'info',
-    signed: 'success',
-    executed: 'primary',
-  }
-  return map[status] || 'info'
-}
-
-function getStatusText(status: string): string {
-  const map: Record<string, string> = {
-    draft: '草稿',
-    signed: '已签署',
-    executed: '已执行',
-  }
-  return map[status] || status
-}
 
 function formatTime(t?: string): string {
   if (!t) return ''
@@ -117,10 +113,19 @@ async function handleAcknowledge() {
 </script>
 
 <style scoped>
-.order-detail {
-  padding: 16px;
+.order-detail-page {
   min-height: 100vh;
-  background: var(--el-bg-color);
+  background: #f5f5f5;
+  padding-bottom: 32px;
+}
+
+.nav-bar {
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .loading-state,
@@ -131,66 +136,17 @@ async function handleAcknowledge() {
   justify-content: center;
   min-height: 60vh;
   gap: 12px;
-  color: var(--el-text-color-secondary);
+  color: #94A3B8;
 }
 
-.order-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+.acknowledge-bar {
+  margin: 20px 16px;
+  text-align: center;
 }
 
-.order-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.order-content {
-  margin-bottom: 16px;
-}
-
-.content-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
-}
-
-.content-text {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--el-text-color-primary);
-  background: var(--el-fill-color-light);
-  padding: 12px;
-  border-radius: 8px;
-}
-
-.order-meta {
-  margin-bottom: 16px;
-}
-
-.meta-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--el-border-color-lighter);
-}
-
-.meta-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.meta-value {
-  font-size: 13px;
-  color: var(--el-text-color-primary);
-}
-
-.order-actions {
+.acknowledge-action {
   display: flex;
   justify-content: center;
-  margin-top: 24px;
 }
 
 .acknowledged-info {
@@ -198,8 +154,10 @@ async function handleAcknowledge() {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--el-color-success);
   font-size: 14px;
-  margin-top: 24px;
+  color: #34D399;
+  background: #fff;
+  padding: 16px;
+  border-radius: 12px;
 }
 </style>

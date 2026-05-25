@@ -54,13 +54,32 @@
         <div
           v-if="pendingOrders.length > 0"
           class="compact-notice order-notice interactive-card"
-          @click="goToOrder(pendingOrders[0].id)"
+          :class="{ 'is-expanded': expandedNotice === 'order' }"
         >
-          <div class="c-notice-left">
-            <div class="c-notice-icon"><el-icon><DocumentChecked /></el-icon></div>
-            <span class="c-notice-title">{{ pendingOrders.length }} 条新医嘱待查看</span>
+          <div
+            class="c-notice-header"
+            @click="expandedNotice = expandedNotice === 'order' ? null : 'order'"
+          >
+            <div class="c-notice-left">
+              <div class="c-notice-icon"><el-icon><DocumentChecked /></el-icon></div>
+              <span class="c-notice-title">{{ pendingOrders.length }} 条新医嘱待查看</span>
+            </div>
+            <div class="c-notice-right">
+              <el-icon class="expand-icon" :class="{ 'is-rotated': expandedNotice === 'order' }"><ArrowDown /></el-icon>
+            </div>
           </div>
-          <div class="c-notice-right">去查看 <el-icon><ArrowRight /></el-icon></div>
+          <div class="c-notice-body" v-show="expandedNotice === 'order'">
+            <div
+              v-for="o in pendingOrders"
+              :key="o.id"
+              class="order-list-item"
+              @click="goToOrder(o.id)"
+            >
+              <span class="order-item-type">{{ o.order_type === 'custom' ? '自定义医嘱' : '标准医嘱' }}</span>
+              <span class="order-item-date">{{ formatOrderDate(o.signed_at || o.created_at) }}</span>
+              <el-icon><ArrowRight /></el-icon>
+            </div>
+          </div>
         </div>
 
         <!-- AI 主动问候 -->
@@ -330,7 +349,7 @@ const loadPregnantOrders = async () => {
     const pid = localStorage.getItem('currentPregnantId') || ''
     if (pid) {
       const res = await orderApi.getPregnantOrders(pid)
-      pendingOrders.value = (res.data || []).filter((o: any) => o.status === 'signed')
+      pendingOrders.value = (res.data || []).filter((o: any) => o.status === 'signed' && !o.acknowledged_at)
     }
   } catch {}
 }
@@ -341,6 +360,12 @@ function trendName(metric: string): string {
     fetal_movement: '胎动', blood_sugar: '血糖', heart_rate: '心率'
   }
   return names[metric] || metric
+}
+
+function formatOrderDate(t?: string): string {
+  if (!t) return ''
+  const d = new Date(t)
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function getTrendIcon(metric: string): string {
@@ -401,6 +426,7 @@ onMounted(() => {
 
 onActivated(() => {
   fetchFollowUps()
+  loadPregnantOrders()
 })
 </script>
 
@@ -567,7 +593,7 @@ onActivated(() => {
 .c-notice-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
 
 /* Default flex-row for simple notices */
-.compact-notice:not(.ai-notice) { flex-direction: row; justify-content: space-between; align-items: center; }
+.compact-notice:not(.ai-notice):not(.order-notice) { flex-direction: row; justify-content: space-between; align-items: center; }
 
 .c-notice-left { gap: 10px; }
 .c-notice-icon {
@@ -596,6 +622,22 @@ onActivated(() => {
   margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(0,0,0,0.05);
   font-size: 13px; color: var(--c-slate-600); line-height: 1.5;
 }
+
+.order-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.order-list-item:last-child { margin-bottom: 0; }
+.order-list-item:active { background: rgba(255,255,255,0.9); }
+.order-item-type { flex: 1; font-size: 13px; font-weight: 500; color: var(--c-slate-800); }
+.order-item-date { font-size: 12px; color: var(--c-slate-400); }
 
 /* ========== 导航 (Segmented Control) ========== */
 .segmented-control {

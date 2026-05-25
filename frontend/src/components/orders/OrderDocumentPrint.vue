@@ -58,9 +58,15 @@ const props = defineProps<{
   orderType?: string
   source?: string
   signatureImage?: string | null
+  signedAt?: string | null
 }>()
 
-const signDate = computed(() => new Date().toLocaleDateString('zh-CN'))
+function fmtDate(t?: string | null): string {
+  if (!t) return new Date().toLocaleDateString('zh-CN')
+  return new Date(t).toLocaleDateString('zh-CN')
+}
+
+const signDate = computed(() => fmtDate(props.signedAt))
 const printDate = computed(() => new Date().toLocaleDateString('zh-CN'))
 
 const typeLabel = computed(() => {
