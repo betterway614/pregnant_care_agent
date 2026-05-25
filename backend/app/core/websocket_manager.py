@@ -121,6 +121,75 @@ class WebSocketManager:
         """获取活跃连接数（医生+护士）"""
         return len(self.active_connections) + len(self.nurse_connections)
 
+    # ==================== 路由推送 ====================
+
+    async def route_alert(self, alert_data: dict):
+        """按级别和来源角色路由推送"""
+        level = alert_data.get("level", "YELLOW")
+        source_role = alert_data.get("source_role", "system")
+        action = alert_data.get("action", "")
+
+        if source_role == "doctor" and action == "downgrade":
+            await self._broadcast_to_nurses_only(alert_data)
+        elif source_role == "nurse" and action == "escalate":
+            await self._broadcast_all(alert_data)
+        elif source_role == "nurse" and action == "appeal":
+            target_doctor_id = alert_data.get("target_doctor_id")
+            if target_doctor_id:
+                await self.send_alert_to_doctor(target_doctor_id, alert_data)
+            await self._broadcast_to_nurses_only(alert_data)
+        elif level == "RED":
+            await self._broadcast_all(alert_data)
+        elif level in ("ORANGE", "YELLOW"):
+            await self._broadcast_to_nurses_only(alert_data)
+
+    async def _broadcast_all(self, alert_data: dict):
+        """广播给所有在线的医生和护士"""
+        disconnected_doctors = []
+        for doctor_id, websocket in self.active_connections.items():
+            try:
+                await websocket.send_json({
+                    "type": "NEW_ALERT",
+                    "data": alert_data
+                })
+            except Exception:
+                disconnected_doctors.append(doctor_id)
+
+        for doctor_id in disconnected_doctors:
+            self.disconnect(doctor_id)
+
+        disconnected_nurses = []
+        for nurse_id, websocket in self.nurse_connections.items():
+            try:
+                await websocket.send_json({
+                    "type": "NEW_ALERT",
+                    "data": alert_data
+                })
+            except Exception:
+                disconnected_nurses.append(nurse_id)
+
+        for nurse_id in disconnected_nurses:
+            self.disconnect_nurse(nurse_id)
+
+    async def _broadcast_to_nurses_only(self, alert_data: dict):
+        """仅广播给所有在线的护士"""
+        disconnected_nurses = []
+        for nurse_id, websocket in self.nurse_connections.items():
+            try:
+                await websocket.send_json({
+                    "type": "NEW_ALERT",
+                    "data": alert_data
+                })
+            except Exception:
+                disconnected_nurses.append(nurse_id)
+
+        for nurse_id in disconnected_nurses:
+            self.disconnect_nurse(nurse_id)
+
+    async def broadcast_to_nurses(self, alert_data: dict):
+        """公开的护士广播方法（兼容旧调用）"""
+        await self._broadcast_to_nurses_only(alert_data)
+
 
 # 全局 WebSocket 管理器实例
 ws_manager = WebSocketManager()

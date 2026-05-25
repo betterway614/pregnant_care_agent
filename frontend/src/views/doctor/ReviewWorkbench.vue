@@ -52,28 +52,29 @@
           </div>
           <div class="content-card__body" style="flex: 1; overflow-y: auto; padding: 0" v-loading="loading">
             <div
-              v-for="alert in alertList"
-              :key="alert.id"
+              v-for="group in groupedAlerts"
+              :key="group.key"
               class="alert-list-item"
               :class="{
-                'alert-list-item--active': selectedAlert?.id === alert.id,
-                'alert-list-item--new': isNewAlert(alert.id)
+                'alert-list-item--active': selectedAlert?.id === group.topAlert.id,
+                'alert-list-item--new': isNewAlert(group.topAlert.id)
               }"
-              @click="selectAlert(alert)"
+              @click="selectAlert(group.topAlert)"
             >
               <div class="alert-list-item__header">
-                <span class="alert-list-item__name">{{ alert.patient_name }}</span>
-                <RiskBadge :level="mapRiskLevel(alert.level)" />
+                <span class="alert-list-item__name">{{ group.patient_name }}</span>
+                <RiskBadge :level="mapRiskLevel(group.level)" />
+                <span v-if="group.count > 1" class="group-count">+{{ group.count - 1 }}</span>
               </div>
-              <p class="alert-list-item__msg">{{ alert.message }}</p>
+              <p class="alert-list-item__msg">{{ group.message }}</p>
               <div class="alert-list-item__meta">
                 <span class="text-light">
-                  {{ calcGestationalWeek(alert.gestational_age_days) }}周
+                  {{ calcGestationalWeek(group.topAlert.gestational_age_days) }}周
                 </span>
-                <span class="text-light">{{ formatTime(alert.created_at) }}</span>
+                <span class="text-light">{{ formatTime(group.topAlert.created_at) }}</span>
               </div>
               <!-- 新预警标记 -->
-              <div v-if="isNewAlert(alert.id)" class="new-alert-badge">新</div>
+              <div v-if="isNewAlert(group.topAlert.id)" class="new-alert-badge">新</div>
             </div>
             <div v-if="!alertList.length && !loading" class="empty-state">
               <el-icon :size="40" color="var(--text-light)"><CircleCheck /></el-icon>
@@ -151,6 +152,35 @@
                   </div>
                 </div>
                 <p v-else class="text-light">暂无详细数据</p>
+              </section>
+
+              <!-- 预警处理时间线 -->
+              <section v-if="selectedAlert?.details?.history?.length" class="detail-section">
+                <h4 class="detail-section__title">处理记录</h4>
+                <el-timeline style="margin-top: 8px">
+                  <el-timeline-item
+                    v-for="entry in selectedAlert.details.history"
+                    :key="entry.seq"
+                    :timestamp="entry.timestamp"
+                    :type="entry.action === 'created' ? 'primary' : entry.action.includes('escalate') ? 'danger' : entry.action.includes('downgrade') ? 'warning' : 'info'"
+                  >
+                    <p>
+                      <el-tag size="small" :type="entry.source_role === 'system' ? '' : entry.source_role === 'doctor' ? 'success' : 'warning'">
+                        {{ entry.source_role === 'system' ? '系统' : entry.source_role === 'doctor' ? '医生' : '护士' }}
+                      </el-tag>
+                      {{ entry.action === 'created' ? '创建预警' :
+                         entry.action === 'downgrade' ? `降级为 ${entry.level}` :
+                         entry.action === 'nurse_escalate' ? `升级为 ${entry.level}` :
+                         entry.action === 'nurse_appeal' ? '申请复议' :
+                         entry.action === 'confirm' ? '确认' :
+                         entry.action === 'nurse_confirm' ? '护士确认' :
+                         entry.action === 'dismiss' ? '解除' :
+                         entry.action === 'nurse_dismiss' ? '护士解除' :
+                         entry.action === 'auto_dismiss' ? '自动关闭' : entry.action }}
+                    </p>
+                    <p v-if="entry.reason" class="timeline-reason">{{ entry.reason }}</p>
+                  </el-timeline-item>
+                </el-timeline>
               </section>
             </template>
 
@@ -739,6 +769,34 @@ const hasDetails = computed(() => {
   return selectedAlert.value?.details && Object.keys(selectedAlert.value.details).length > 0
 })
 
+/** 按 pregnant_id + domain 分组的预警列表（折叠同患者同域预警） */
+const groupedAlerts = computed(() => {
+  const groups = new Map<string, any[]>()
+  for (const alert of alertList.value) {
+    const key = `${alert.pregnant_id}-${(alert as any).domain || 'unknown'}`
+    if (!groups.has(key)) {
+      groups.set(key, [])
+    }
+    groups.get(key)!.push(alert)
+  }
+  return Array.from(groups.entries()).map(([key, alerts]) => {
+    const sorted = [...alerts].sort((a, b) => {
+      const order: Record<string, number> = { RED: 3, ORANGE: 2, YELLOW: 1 }
+      return (order[b.level] || 0) - (order[a.level] || 0)
+    })
+    return {
+      key,
+      pregnant_id: sorted[0].pregnant_id,
+      patient_name: sorted[0].patient_name,
+      level: sorted[0].level,
+      message: sorted[0].message,
+      count: alerts.length,
+      children: alerts,
+      topAlert: sorted[0],
+    }
+  })
+})
+
 /** 格式化详情键 */
 function formatDetailKey(key: string): string {
   const map: Record<string, string> = {
@@ -1042,9 +1100,11 @@ function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
   return 'info'
 }
 
-/** WebSocket 预警回调 */
+/** WebSocket 预警回调（仅处理 RED 级别） */
 const handleNewAlert = (alert: Alert) => {
   console.log('审核工作台收到新预警:', alert)
+
+  if (alert.level !== 'RED') return
 
   // 添加到待处理列表
   pendingNewAlerts.value.push(alert)
@@ -1441,6 +1501,25 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* 分组计数 */
+.group-count {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* 时间线理由 */
+.timeline-reason {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 .dialog-body {

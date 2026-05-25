@@ -1,5 +1,4 @@
 """预警服务 - 创建和管理预警记录"""
-from datetime import timedelta
 from uuid import uuid4
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -8,30 +7,19 @@ from ..utils.timezone import beijing_now
 from ..models import Alert
 
 
-# 分级去重时间窗口（小时）：RED 更敏感，窗口更短
-DEDUP_WINDOWS = {
-    "RED": 4,
-    "ORANGE": 12,
-    "YELLOW": 24,
-}
-
-
 class AlertService:
     """预警服务"""
 
     @staticmethod
-    def _find_duplicate(db: Session, pregnant_id: str, rule_id: str, level: str = "YELLOW") -> Alert | None:
-        """查找同级别去重窗口内相同 rule_id 的 PENDING 预警"""
-        if not rule_id:
+    def _find_duplicate(db: Session, pregnant_id: str, domain: str) -> Alert | None:
+        """同一孕妇同一领域已有 PENDING 预警时视为重复"""
+        if not domain:
             return None
-        hours = DEDUP_WINDOWS.get(level, 24)
-        cutoff = beijing_now() - timedelta(hours=hours)
         return db.query(Alert).filter(
             and_(
                 Alert.pregnant_id == pregnant_id,
-                Alert.rule_id == rule_id,
+                Alert.domain == domain,
                 Alert.status == "PENDING",
-                Alert.created_at >= cutoff,
             )
         ).first()
 
@@ -40,26 +28,40 @@ class AlertService:
         db: Session,
         pregnant_id: str,
         rule_id: str,
+        domain: str,
         level: str,
         message: str,
         trigger_source: str = "RULE_ENGINE",
         details: dict = None,
     ) -> Alert:
-        """创建预警记录（自动去重）"""
-        existing = AlertService._find_duplicate(db, pregnant_id, rule_id, level)
+        """创建预警记录（领域级去重）"""
+        existing = AlertService._find_duplicate(db, pregnant_id, domain)
         if existing:
-            logger.info(f"预警去重: {rule_id} for {pregnant_id} 已存在, 跳过创建")
+            logger.info(f"预警去重: domain={domain} for {pregnant_id} 已有 PENDING 预警, 跳过创建")
             return existing
+
+        base_details = details or {}
+        base_details["history"] = [{
+            "seq": 1,
+            "action": "created",
+            "source_role": "system",
+            "level": level,
+            "operator": None,
+            "reason": None,
+            "timestamp": beijing_now().isoformat(),
+        }]
+        base_details["source_role"] = "system"
 
         alert = Alert(
             id=uuid4(),
             pregnant_id=pregnant_id,
             trigger_source=trigger_source,
             rule_id=rule_id,
+            domain=domain,
             level=level,
             message=message,
             status="PENDING",
-            details=details or {},
+            details=base_details,
         )
 
         db.add(alert)
@@ -74,24 +76,25 @@ class AlertService:
         hits: list[dict],
         trigger_source: str = "RULE_ENGINE",
     ) -> list[Alert]:
-        """从规则命中列表批量创建预警（自动去重）"""
+        """从领域分组命中列表批量创建预警（领域级去重）"""
         alerts = []
         for hit in hits:
             alert = AlertService.create_alert(
                 db=db,
                 pregnant_id=pregnant_id,
                 rule_id=hit.get("rule_id", "UNKNOWN"),
+                domain=hit.get("domain", ""),
                 level=hit.get("level", "YELLOW"),
                 message=hit.get("message", ""),
                 trigger_source=trigger_source,
                 details={
                     "action": hit.get("action", "ALERT_NURSE"),
+                    "triggered_rules": hit.get("triggered_rules", []),
                     "created_at": beijing_now().isoformat(),
                 },
             )
             alerts.append(alert)
         return alerts
-
 
     @staticmethod
     async def enrich_alert_with_llm(db: Session, alert: Alert, pregnant):

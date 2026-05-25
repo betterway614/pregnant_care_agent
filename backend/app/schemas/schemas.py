@@ -299,9 +299,11 @@ class AlertResponse(BaseModel):
 
 
 class AlertReviewRequest(BaseModel):
-    action: str = Field(..., pattern="^(confirm|dismiss|escalate|downgrade|supplement)$")
+    action: str = Field(...,
+        pattern="^(confirm|dismiss|escalate|downgrade|supplement|nurse_confirm|nurse_dismiss|nurse_escalate|nurse_appeal)$")
     reason: Optional[str] = None
-    target_level: Optional[str] = Field(None, pattern="^(ORANGE|YELLOW|GREEN)$")
+    target_level: Optional[str] = Field(None,
+        pattern="^(ORANGE|YELLOW|GREEN)$")
 
 
 # === Order ===
