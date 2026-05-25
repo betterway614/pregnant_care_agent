@@ -77,8 +77,8 @@ export const alertApi = {
     client.get<Alert[]>('/alerts', { params }),
   evaluate: (pregnantId: string, data: any) =>
     client.post('/alerts/evaluate', { data }, { params: { pregnant_id: pregnantId } }),
-  review: (alertId: string, action: string, reason?: string) =>
-    client.put(`/alerts/${alertId}/review`, { action, reason }),
+  review: (alertId: string, action: string, reason?: string, targetLevel?: string) =>
+    client.put(`/alerts/${alertId}/review`, { action, reason, target_level: targetLevel }),
 }
 
 // FGR

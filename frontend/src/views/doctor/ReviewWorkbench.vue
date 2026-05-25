@@ -848,10 +848,22 @@ async function confirmDowngrade() {
   if (!selectedAlert.value || !downgradeReason.value.trim()) return
   submitting.value = true
   try {
-    await alertApi.review(selectedAlert.value.id, 'downgrade', downgradeReason.value)
-    selectedAlert.value.status = 'downgraded'
-    alertList.value = alertList.value.filter((a) => a.id !== selectedAlert.value!.id)
+    await alertApi.review(
+      selectedAlert.value.id,
+      'downgrade',
+      downgradeReason.value,
+      downgradeTarget.value
+    )
+    if (downgradeTarget.value === 'GREEN') {
+      // GREEN 降级关闭：从列表移除
+      alertList.value = alertList.value.filter((a) => a.id !== selectedAlert.value!.id)
+    } else {
+      // ORANGE/YELLOW 降级分流：更新列表中等级显示
+      selectedAlert.value.level = downgradeTarget.value
+      selectedAlert.value.status = 'pending'
+    }
     downgradeDialogVisible.value = false
+    if (!alertList.value.length) selectedAlert.value = null
   } catch (err) {
     console.error('降级失败:', err)
   } finally {
