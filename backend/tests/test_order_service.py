@@ -53,12 +53,14 @@ class TestOrderRecommendation:
         assert result is not None
         assert "血糖" in result["content"]
 
-    def test_no_match_returns_none(self):
-        """无风险标签时应返回None"""
+    def test_no_match_returns_general_template(self):
+        """无风险标签时应返回通用保健建议模板"""
         from app.services.order_service import order_service
 
         result = order_service.get_recommendation("low", 20, [])
-        assert result is None
+        assert result is not None
+        assert result["condition"] == "常规产检/保健"
+        assert result["source"] == "孕期保健指南"
 
     def test_get_all_templates(self):
         """获取所有模板应返回字典"""
