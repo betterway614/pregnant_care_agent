@@ -131,3 +131,104 @@ async def test_get_active_connections_count(ws_manager):
 
     ws_manager.disconnect("doctor-1")
     assert ws_manager.get_active_connections_count() == 1
+
+
+class TestRouteAlert:
+    """route_alert 分级路由测试"""
+
+    @pytest.fixture
+    def ws_manager(self):
+        return WebSocketManager()
+
+    @pytest.mark.asyncio
+    async def test_red_alert_broadcasts_to_all(self, ws_manager):
+        """RED 预警广播给医生和护士"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {"level": "RED", "source_role": "system", "message": "血压异常"}
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_called_once()
+        nurse_ws.send_json.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_orange_alert_only_nurses(self, ws_manager):
+        """ORANGE 预警仅推送给护士"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {"level": "ORANGE", "source_role": "system", "message": "血压偏高"}
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_not_called()
+        nurse_ws.send_json.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_yellow_alert_only_nurses(self, ws_manager):
+        """YELLOW 预警仅推送给护士"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {"level": "YELLOW", "source_role": "system", "message": "体重缓慢"}
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_not_called()
+        nurse_ws.send_json.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_doctor_downgrade_only_nurses(self, ws_manager):
+        """医生降级仅推护士"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {
+            "level": "YELLOW", "source_role": "doctor", "action": "downgrade",
+            "message": "[医生降级] 血压偏高",
+        }
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_not_called()
+        nurse_ws.send_json.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_nurse_escalate_broadcasts_all(self, ws_manager):
+        """护士升级推全部"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {
+            "level": "ORANGE", "source_role": "nurse", "action": "escalate",
+            "message": "[护士升级] 血压偏高需要医生关注",
+        }
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_called_once()
+        nurse_ws.send_json.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_nurse_appeal_sends_to_target_doctor(self, ws_manager):
+        """护士复议推给目标医生"""
+        doctor_ws = AsyncMock()
+        nurse_ws = AsyncMock()
+        await ws_manager.connect(doctor_ws, "doctor-1")
+        await ws_manager.connect_nurse(nurse_ws, "nurse-1")
+
+        alert_data = {
+            "level": "YELLOW", "source_role": "nurse", "action": "appeal",
+            "target_doctor_id": "doctor-1", "message": "[复议] 请重新评估",
+        }
+        await ws_manager.route_alert(alert_data)
+
+        doctor_ws.send_json.assert_called_once()
+        nurse_ws.send_json.assert_called_once()
