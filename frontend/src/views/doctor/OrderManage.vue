@@ -3,6 +3,9 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1 class="page-title">医嘱管理</h1>
+      <el-button type="success" :icon="Plus" @click="showCreateOrderDialog">
+        新建医嘱
+      </el-button>
       <el-button type="primary" :icon="Refresh" @click="loadOrders" :loading="loading">
         刷新
       </el-button>
@@ -37,7 +40,7 @@
         <el-table :data="orders" stripe style="width: 100%">
           <el-table-column label="日期" width="90" align="center">
             <template #default="{ row }">
-              <span class="text-light">{{ formatDate(row.created_at) }}</span>
+              <span class="text-light">{{ formatDate(row.signed_at || row.created_at) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="patient_name" label="孕妇" width="100" />
@@ -132,6 +135,10 @@
               <span class="detail-row__label">创建时间</span>
               <span>{{ formatTime(detailOrder.created_at) }}</span>
             </div>
+            <div v-if="detailOrder.signed_at" class="detail-row">
+              <span class="detail-row__label">签署时间</span>
+              <span>{{ formatTime(detailOrder.signed_at) }}</span>
+            </div>
           </div>
 
           <div class="detail-card__divider" />
@@ -192,15 +199,80 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 新建医嘱对话框 -->
+    <el-dialog
+      v-model="createOrderDialogVisible"
+      title="新建医嘱"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form label-width="80px">
+        <el-form-item label="选择孕妇" required>
+          <el-select
+            v-model="createOrderForm.pregnant_id"
+            filterable
+            placeholder="请搜索并选择孕妇"
+            style="width: 100%"
+            @change="onPregnantSelect"
+          >
+            <el-option
+              v-for="p in pregnantList"
+              :key="p.pregnant_id"
+              :label="`${p.display_name} (${calcGestationalWeekText(p.gestational_age_days)})`"
+              :value="p.pregnant_id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="孕周">
+          <el-input-number
+            v-model="createOrderForm.gestational_weeks"
+            :min="1"
+            :max="42"
+            :precision="1"
+            :step="0.5"
+          />
+          <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px">周</span>
+        </el-form-item>
+        <el-form-item label="风险等级">
+          <el-select v-model="createOrderForm.risk_level" style="width: 100%">
+            <el-option label="RED — 红色高危" value="RED" />
+            <el-option label="ORANGE — 橙色预警" value="ORANGE" />
+            <el-option label="YELLOW — 黄色关注" value="YELLOW" />
+            <el-option label="GREEN — 正常/绿色" value="GREEN" />
+            <el-option label="无风险 — 常规保健" value="none" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="createOrderForm.notes"
+            type="textarea"
+            :rows="2"
+            placeholder="可选备注"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createOrderDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="creatingOrder"
+          :disabled="!createOrderForm.pregnant_id"
+          @click="doCreateOrder"
+        >
+          生成医嘱
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Refresh, Document } from '@element-plus/icons-vue'
-import { orderApi } from '@/api/endpoints'
-import type { MedicalOrder } from '@/types'
+import { Search, Refresh, Document, Plus } from '@element-plus/icons-vue'
+import { orderApi, dashboardApi } from '@/api/endpoints'
+import type { MedicalOrder, Pregnant } from '@/types'
 import { useAppStore } from '@/stores/app'
 
 const router = useRouter()
@@ -342,6 +414,64 @@ async function doEditOrder() {
 /** 签署确认弹窗 — 跳转到医嘱签名页 */
 function confirmSignOrder(order: MedicalOrder) {
   router.push({ name: 'OrderSign', params: { orderId: order.id } })
+}
+
+// 新建医嘱
+const createOrderDialogVisible = ref(false)
+const creatingOrder = ref(false)
+const pregnantList = ref<Pregnant[]>([])
+const createOrderForm = ref({
+  pregnant_id: '',
+  gestational_weeks: 28,
+  risk_level: 'none' as string,
+  notes: '',
+})
+
+/** 计算孕周文本 */
+function calcGestationalWeekText(days?: number): string {
+  if (!days) return '未知孕周'
+  const w = Math.floor(days / 7)
+  const d = days % 7
+  return `${w}周+${d}天`
+}
+
+/** 显示新建医嘱对话框 */
+async function showCreateOrderDialog() {
+  createOrderDialogVisible.value = true
+  // 加载孕妇列表
+  try {
+    const res = await dashboardApi.pregnant()
+    pregnantList.value = res.data || []
+  } catch (err) {
+    console.error('加载孕妇列表失败:', err)
+  }
+}
+
+/** 选择孕妇后自动填充孕周 */
+function onPregnantSelect(pregnantId: string) {
+  const p = pregnantList.value.find((item) => item.pregnant_id === pregnantId)
+  if (p?.gestational_age_days) {
+    createOrderForm.value.gestational_weeks = parseFloat((p.gestational_age_days / 7).toFixed(1))
+  }
+}
+
+/** 执行新建医嘱 */
+async function doCreateOrder() {
+  if (!createOrderForm.value.pregnant_id) return
+  creatingOrder.value = true
+  try {
+    const res = await orderApi.generate({
+      pregnant_id: createOrderForm.value.pregnant_id,
+      risk_level: createOrderForm.value.risk_level === 'none' ? 'GREEN' : createOrderForm.value.risk_level,
+      gestational_weeks: createOrderForm.value.gestational_weeks,
+    })
+    createOrderDialogVisible.value = false
+    router.push({ name: 'OrderSign', params: { orderId: res.data.id } })
+  } catch (err) {
+    console.error('创建医嘱失败:', err)
+  } finally {
+    creatingOrder.value = false
+  }
 }
 
 onMounted(loadOrders)
