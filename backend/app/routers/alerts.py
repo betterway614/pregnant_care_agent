@@ -199,9 +199,28 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
         alert.status = "DISMISSED"
     elif review.action == "escalate":
         alert.status = "ESCALATED"
-        # 升级预警级别：非 RED 的升级为 RED
         if alert.level != "RED":
             alert.level = "RED"
+    elif review.action == "downgrade":
+        if not review.target_level:
+            raise HTTPException(400, "降级操作必须指定 target_level")
+        if review.target_level == "GREEN":
+            alert.status = "DISMISSED"
+        else:
+            alert.level = review.target_level
+            alert.status = "PENDING"
+        # 降级理由存入 details
+        if review.reason:
+            details = alert.details or {}
+            details["downgrade_reason"] = review.reason
+            details["downgrade_target"] = review.target_level
+            alert.details = details
+    elif review.action == "supplement":
+        # 补充资料：保持状态不变，记录补充内容到 details
+        if review.reason:
+            details = alert.details or {}
+            details["supplement_notes"] = review.reason
+            alert.details = details
 
     alert.reviewed_at = beijing_now()
     db.commit()
@@ -209,7 +228,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
 
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == alert.pregnant_id).first()
 
-    # escalate 时广播预警给医生端
+    # escalate 时广播预警
     if review.action == "escalate" and pregnant:
         try:
             prefix = "[已升级]" if alert.level == "RED" and original_level != "RED" else "[紧急通知]"
@@ -227,6 +246,25 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
             await ws_manager.broadcast_alert(alert_data)
         except Exception as e:
             logger.warning(f"escalate WebSocket广播失败: {e}")
+
+    # downgrade 到 ORANGE/YELLOW 时广播给护士端
+    if review.action == "downgrade" and review.target_level != "GREEN" and pregnant:
+        try:
+            alert_data = {
+                "id": str(alert.id),
+                "pregnant_id": alert.pregnant_id,
+                "patient_name": pregnant.display_name,
+                "level": alert.level,
+                "message": f"[医生降级] {alert.message}",
+                "trigger_source": alert.trigger_source,
+                "status": alert.status,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "gestational_age_days": pregnant.gestational_age_days,
+                "downgrade_reason": review.reason,
+            }
+            await ws_manager.broadcast_alert(alert_data)
+        except Exception as e:
+            logger.warning(f"downgrade WebSocket广播失败: {e}")
 
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
