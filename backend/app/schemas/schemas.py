@@ -299,8 +299,9 @@ class AlertResponse(BaseModel):
 
 
 class AlertReviewRequest(BaseModel):
-    action: str = Field(..., pattern="^(confirm|dismiss|escalate)$")
+    action: str = Field(..., pattern="^(confirm|dismiss|escalate|downgrade|supplement)$")
     reason: Optional[str] = None
+    target_level: Optional[str] = Field(None, pattern="^(ORANGE|YELLOW|GREEN)$")
 
 
 # === Order ===
@@ -319,8 +320,15 @@ class OrderResponse(BaseModel):
     order_type: str
     source: str
     status: str
+    created_by: Optional[str] = None
     created_at: Optional[datetime] = None
+    signed_at: Optional[datetime] = None
     acknowledged_at: Optional[datetime] = None
+    signature_data: Optional[dict] = None
+    order_snapshot: Optional[dict] = None
+    order_text: Optional[str] = None
+    modified_by_doctor: Optional[bool] = False
+    doctor_notes: Optional[str] = None
     patient_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
