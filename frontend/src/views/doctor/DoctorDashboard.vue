@@ -12,6 +12,9 @@
         >
           {{ wsConnected ? '实时连接' : '连接断开' }}
         </el-tag>
+        <el-button type="success" :icon="Plus" @click="showQuickOrderDialog">
+          快速开医嘱
+        </el-button>
         <el-button type="primary" :icon="Refresh" @click="loadAllData" :loading="loading">
           刷新数据
         </el-button>
@@ -145,16 +148,73 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- 快速开医嘱对话框 -->
+    <el-dialog
+      v-model="quickOrderDialogVisible"
+      title="快速开医嘱"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form label-width="80px">
+        <el-form-item label="选择孕妇" required>
+          <el-select
+            v-model="quickOrderForm.pregnant_id"
+            filterable
+            placeholder="请搜索并选择孕妇"
+            style="width: 100%"
+            @change="onQuickOrderPregnantSelect"
+          >
+            <el-option
+              v-for="p in pregnantList"
+              :key="p.pregnant_id"
+              :label="`${p.display_name} (${calcGestWeekText(p.gestational_age_days)})`"
+              :value="p.pregnant_id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="孕周">
+          <el-input-number
+            v-model="quickOrderForm.gestational_weeks"
+            :min="1"
+            :max="42"
+            :precision="1"
+            :step="0.5"
+          />
+          <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px">周</span>
+        </el-form-item>
+        <el-form-item label="风险等级">
+          <el-select v-model="quickOrderForm.risk_level" style="width: 100%">
+            <el-option label="RED — 红色高危" value="RED" />
+            <el-option label="ORANGE — 橙色预警" value="ORANGE" />
+            <el-option label="YELLOW — 黄色关注" value="YELLOW" />
+            <el-option label="GREEN — 正常/绿色" value="GREEN" />
+            <el-option label="无风险 — 常规保健" value="none" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="quickOrderDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="quickOrderCreating"
+          :disabled="!quickOrderForm.pregnant_id"
+          @click="doQuickOrder"
+        >
+          生成医嘱
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Bell, Document } from '@element-plus/icons-vue'
+import { Refresh, Bell, Document, Plus } from '@element-plus/icons-vue'
 import { dashboardApi, alertApi, orderApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
-import type { Alert, MedicalOrder, DashboardStats } from '@/types'
+import type { Alert, MedicalOrder, DashboardStats, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 import { ElNotification } from 'element-plus'
@@ -361,6 +421,58 @@ function getAlertType(level: string): 'success' | 'warning' | 'info' | 'error' {
  */
 function goToReview(alert: Alert) {
   router.push(`/doctor/review/${alert.id}`)
+}
+
+// 快速开医嘱
+const quickOrderDialogVisible = ref(false)
+const quickOrderCreating = ref(false)
+const pregnantList = ref<Pregnant[]>([])
+const quickOrderForm = ref({
+  pregnant_id: '',
+  gestational_weeks: 28,
+  risk_level: 'none' as string,
+})
+
+function calcGestWeekText(days?: number): string {
+  if (!days) return '未知孕周'
+  const w = Math.floor(days / 7)
+  const d = days % 7
+  return `${w}周+${d}天`
+}
+
+async function showQuickOrderDialog() {
+  quickOrderDialogVisible.value = true
+  try {
+    const res = await dashboardApi.pregnant()
+    pregnantList.value = res.data || []
+  } catch (err) {
+    console.error('加载孕妇列表失败:', err)
+  }
+}
+
+function onQuickOrderPregnantSelect(pregnantId: string) {
+  const p = pregnantList.value.find((item) => item.pregnant_id === pregnantId)
+  if (p?.gestational_age_days) {
+    quickOrderForm.value.gestational_weeks = parseFloat((p.gestational_age_days / 7).toFixed(1))
+  }
+}
+
+async function doQuickOrder() {
+  if (!quickOrderForm.value.pregnant_id) return
+  quickOrderCreating.value = true
+  try {
+    const res = await orderApi.generate({
+      pregnant_id: quickOrderForm.value.pregnant_id,
+      risk_level: quickOrderForm.value.risk_level === 'none' ? 'GREEN' : quickOrderForm.value.risk_level,
+      gestational_weeks: quickOrderForm.value.gestational_weeks,
+    })
+    quickOrderDialogVisible.value = false
+    router.push({ name: 'OrderSign', params: { orderId: res.data.id } })
+  } catch (err) {
+    console.error('创建医嘱失败:', err)
+  } finally {
+    quickOrderCreating.value = false
+  }
 }
 
 onMounted(() => {
