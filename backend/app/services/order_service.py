@@ -48,6 +48,11 @@ ORDER_TEMPLATES = {
         "condition": "情绪心理关注",
         "content": "建议心理科会诊评估。必要时启动心理咨询/认知行为治疗。建议家人加强陪伴与沟通。建议2周后复评。以上为医疗建议，具体方案需经主治医生评估后确定。",
         "source": "围产期心理健康管理指南"
+    },
+    "general": {
+        "condition": "常规产检/保健",
+        "content": "建议定期产检，注意均衡饮食，适度运动（每日散步30分钟），保证充足睡眠。每日自数胎动，如有腹痛、阴道出血、破水等异常情况请立即就诊。以上为常规孕期保健建议，具体方案需经主治医生评估后确定。",
+        "source": "孕期保健指南"
     }
 }
 
@@ -81,7 +86,8 @@ class OrderService:
             if "情绪" in tag or "焦虑" in tag:
                 return dict(ORDER_TEMPLATES["emotion_concern"])
 
-        return None
+        # 无风险或未匹配到特定模板时，返回通用保健建议
+        return dict(ORDER_TEMPLATES["general"])
 
     def get_all_templates(self) -> dict:
         """获取所有医嘱模板"""
