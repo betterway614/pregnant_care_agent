@@ -76,21 +76,26 @@
                   孕妇详情
                 </el-button>
                 <template v-if="isAlertPending(row.status)">
-                  <el-tooltip content="确认收到，不通知医生" placement="top">
-                    <el-button type="success" size="small" @click.stop="handleReview(row, 'confirm')">
-                      确认
-                    </el-button>
-                  </el-tooltip>
-                  <el-tooltip :content="row.level === 'RED' ? '通知医生紧急处理' : '升级为高危并通知医生'" placement="top">
-                    <el-button :type="row.level === 'RED' ? 'danger' : 'warning'" size="small" @click.stop="handleReview(row, 'escalate')">
-                      {{ row.level === 'RED' ? '通知医生' : '升级给医生' }}
-                    </el-button>
-                  </el-tooltip>
-                  <el-tooltip content="驳回此预警" placement="top">
-                    <el-button type="info" size="small" @click.stop="handleReview(row, 'dismiss')">
-                      驳回
-                    </el-button>
-                  </el-tooltip>
+                  <el-button size="small" type="primary" @click.stop="handleReview(row, 'nurse_confirm')">
+                    确认
+                  </el-button>
+                  <el-button
+                    v-if="row.level === 'YELLOW' || row.level === 'ORANGE'"
+                    size="small" type="warning"
+                    @click.stop="handleReview(row, 'nurse_escalate')"
+                  >
+                    {{ row.level === 'YELLOW' ? '升级' : '升级为红色' }}
+                  </el-button>
+                  <el-button
+                    v-if="hasBeenDowngraded(row)"
+                    size="small" type="danger"
+                    @click.stop="handleReview(row, 'nurse_appeal')"
+                  >
+                    复议
+                  </el-button>
+                  <el-button size="small" @click.stop="handleReview(row, 'nurse_dismiss')">
+                    解除
+                  </el-button>
                 </template>
                 <el-tag v-else size="small" effect="plain" :type="statusTagType(row.status)">
                   {{ statusLabel(row.status) }}
@@ -197,17 +202,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Refresh, Bell, MagicStick } from '@element-plus/icons-vue'
 import { alertApi } from '@/api/endpoints'
+import { getNurseWebSocketClient } from '@/utils/websocket'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { Alert } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
 const router = useRouter()
+const nurseId = ref('nurse-default')
+let wsClient: any = null
+
 const loading = ref(false)
 const error = ref('')
+const submitting = ref(false)
 const alerts = ref<Alert[]>([])
 const filterLevel = ref('')
 const filterStatus = ref('')
@@ -309,47 +319,69 @@ async function fetchAlerts() {
   }
 }
 
-/** 处理预警（确认/驳回/升级），action 与后端 AlertReviewRequest 一致 */
-async function handleReview(alert: Alert, action: 'confirm' | 'dismiss' | 'escalate') {
-  const isAlreadyRed = alert.level === 'RED'
-  const actionMap: Record<string, { text: string; desc: string; type: string }> = {
-    confirm: { text: '确认', desc: '确认收到此预警（不会通知医生）', type: 'success' },
-    dismiss: { text: '驳回', desc: '驳回此预警，标记为无效', type: 'warning' },
-    escalate: {
-      text: isAlreadyRed ? '通知医生' : '升级给医生',
-      desc: isAlreadyRed
-        ? '将此红色高危预警通过实时通知推送给医生'
-        : '升级为红色高危预警并通过实时通知推送给医生',
-      type: isAlreadyRed ? 'danger' : 'warning',
-    },
-  }
-  const { text, desc, type } = actionMap[action]
-  try {
-    await ElMessageBox.confirm(
-      action === 'escalate'
-        ? isAlreadyRed
-          ? `确定通知医生处理此红色高危预警？\n\n操作后：\n- 预警状态变为"已升级"\n- 将通过实时通知推送给医生端`
-          : `确定升级该预警？\n\n升级后：\n- 预警级别将变为红色高危\n- 将通过实时通知推送给医生端`
-        : `确定${text}该预警？\n\n${desc}`,
-      `${text}预警`,
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: type as 'warning' | 'error' }
-    )
-  } catch {
-    return
+/** 检查预警是否曾被医生降级过 */
+function hasBeenDowngraded(row: any): boolean {
+  return row.details?.history?.some((h: any) => h.action === 'downgrade') ?? false
+}
+
+/** 处理预警（确认/解除/升级/复议），action 与后端 AlertReviewRequest 一致 */
+async function handleReview(row: any, action: string) {
+  const actionsNeedReason = ['nurse_dismiss', 'nurse_escalate', 'nurse_appeal', 'dismiss']
+  let reason = ''
+  let targetLevel: string | undefined
+
+  if (actionsNeedReason.includes(action)) {
+    try {
+      const { value } = await ElMessageBox.prompt(
+        action === 'nurse_escalate' ? '请填写升级理由' :
+        action === 'nurse_appeal' ? '请填写复议理由' : '请填写理由',
+        '操作确认'
+      )
+      reason = value
+    } catch {
+      return
+    }
   }
 
+  if (action === 'nurse_escalate') {
+    const newLevel = row.level === 'YELLOW' ? 'ORANGE' : 'RED'
+    try {
+      await ElMessageBox.confirm(
+        `确认将预警从 ${row.level} 升级为 ${newLevel}？`,
+        '升级确认',
+        { confirmButtonText: '确认升级', type: 'warning' }
+      )
+    } catch {
+      return
+    }
+  }
+
+  submitting.value = true
   try {
-    await alertApi.review(alert.id, action)
-    ElMessage.success(`${text}成功`)
+    await alertApi.review(row.id, action, reason, targetLevel)
+    ElMessage.success('操作成功')
     await fetchAlerts()
   } catch (err: any) {
-    const msg = err.response?.data?.detail || err.message || `${text}失败`
-    ElMessage.error(msg)
-    console.error(`${text}预警失败:`, err)
+    ElMessage.error(err?.response?.data?.detail || '操作失败')
+  } finally {
+    submitting.value = false
   }
 }
 
-onMounted(fetchAlerts)
+onMounted(() => {
+  fetchAlerts()
+  wsClient = getNurseWebSocketClient(nurseId.value)
+  wsClient.onAlert(() => {
+    fetchAlerts()
+  })
+  wsClient.connect()
+})
+
+onUnmounted(() => {
+  if (wsClient) {
+    wsClient.disconnect()
+  }
+})
 </script>
 
 <style scoped>
