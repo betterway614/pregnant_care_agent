@@ -16,6 +16,14 @@
         <el-tag v-if="selectedAlert" type="danger" effect="plain" size="default">
           审核中: {{ selectedAlert.patient_name }}
         </el-tag>
+        <el-switch
+          v-model="showHistorical"
+          active-text="历史预警"
+          inactive-text="活跃预警"
+          inline-prompt
+          size="small"
+          @change="loadAlerts"
+        />
         <el-button text type="primary" :icon="Refresh" @click="loadAlerts" :loading="loading">
           刷新
         </el-button>
@@ -652,6 +660,7 @@ const router = useRouter()
 
 // 数据状态
 const loading = ref(false)
+const showHistorical = ref(false)
 const detailLoading = ref(false)
 const pregnantInfoLoading = ref(false)
 const submitting = ref(false)
@@ -865,7 +874,11 @@ async function selectAlert(alert: Alert) {
 async function loadAlerts() {
   loading.value = true
   try {
-    const res = await alertApi.list({ status: 'pending,escalated' })
+    const params: any = {}
+    if (!showHistorical.value) {
+      params.status = 'pending,escalated'
+    }
+    const res = await alertApi.list(params)
     alertList.value = res.data || []
   } catch (err) {
     console.error('加载预警列表失败:', err)
