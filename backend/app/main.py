@@ -43,6 +43,27 @@ def _ensure_fgr_columns():
         logger.warning("FGR 列迁移跳过: {}", e)
 
 
+def _ensure_alert_columns():
+    """为已有 SQLite 数据库添加 Alert 新列（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("alerts")]
+        new_cols = [
+            ("domain", "VARCHAR(32)"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_cols:
+                if col_name not in columns:
+                    conn.execute(sa.text(
+                        f"ALTER TABLE alerts ADD COLUMN {col_name} {col_type}"
+                    ))
+                    logger.info("alerts.{} 列已添加", col_name)
+            conn.commit()
+    except Exception as e:
+        logger.warning("Alert 列迁移跳过: {}", e)
+
+
 def _ensure_followup_columns():
     """为已有 SQLite 数据库添加 FollowUpRecord 归档新列（幂等）
 
@@ -197,6 +218,8 @@ async def lifespan(app: FastAPI):
     _ensure_followup_columns()
     # 对已有 SQLite 数据库添加 MedicalOrder 签署增强新列
     _ensure_order_columns()
+    # 对已有 SQLite 数据库添加 Alert 新列
+    _ensure_alert_columns()
     _ensure_audit_log_table()
 
     # FGR 模式：加载真实预测模型
