@@ -8,13 +8,14 @@ from uuid import uuid4
 # ==================== 去重机制测试 ====================
 
 class TestAlertDeduplication:
-    """测试预警去重逻辑"""
+    """测试预警去重逻辑 — domain-based"""
 
     def _make_alert(self, **kwargs):
         alert = MagicMock()
         alert.id = kwargs.get("id", uuid4())
         alert.pregnant_id = kwargs.get("pregnant_id", "P001")
         alert.rule_id = kwargs.get("rule_id", "RULE_BP_HIGH")
+        alert.domain = kwargs.get("domain", "vital")
         alert.level = kwargs.get("level", "RED")
         alert.message = kwargs.get("message", "血压异常升高")
         alert.status = kwargs.get("status", "PENDING")
@@ -23,7 +24,7 @@ class TestAlertDeduplication:
         alert.created_at = kwargs.get("created_at", datetime.utcnow())
         return alert
 
-    def test_find_duplicate_returns_existing(self):
+    def test_find_duplicate_by_domain_returns_existing(self):
         from app.services.alert_service import AlertService
         existing_alert = self._make_alert()
         db = MagicMock()
@@ -31,34 +32,34 @@ class TestAlertDeduplication:
         db.query.return_value = query_mock
         query_mock.filter.return_value = query_mock
         query_mock.first.return_value = existing_alert
-        result = AlertService._find_duplicate(db, "P001", "RULE_BP_HIGH")
+        result = AlertService._find_duplicate(db, "P001", "vital")
         assert result == existing_alert
 
-    def test_find_duplicate_returns_none_for_different_rule(self):
+    def test_find_duplicate_different_domain_returns_none(self):
         from app.services.alert_service import AlertService
         db = MagicMock()
         query_mock = MagicMock()
         db.query.return_value = query_mock
         query_mock.filter.return_value = query_mock
         query_mock.first.return_value = None
-        result = AlertService._find_duplicate(db, "P001", "RULE_FETAL_DROP")
+        result = AlertService._find_duplicate(db, "P001", "fetal")
         assert result is None
 
-    def test_find_duplicate_returns_none_for_no_rule_id(self):
+    def test_find_duplicate_returns_none_for_no_domain(self):
         from app.services.alert_service import AlertService
         db = MagicMock()
         result = AlertService._find_duplicate(db, "P001", None)
         assert result is None
         db.query.assert_not_called()
 
-    def test_create_alert_skips_duplicate(self):
+    def test_create_alert_skips_domain_duplicate(self):
         from app.services.alert_service import AlertService
         existing_alert = self._make_alert(id=uuid4())
         db = MagicMock()
         with patch.object(AlertService, '_find_duplicate', return_value=existing_alert):
             result = AlertService.create_alert(
                 db=db, pregnant_id="P001", rule_id="RULE_BP_HIGH",
-                level="RED", message="血压异常升高",
+                domain="vital", level="RED", message="血压异常升高",
             )
             assert result == existing_alert
             db.add.assert_not_called()
@@ -69,24 +70,42 @@ class TestAlertDeduplication:
         with patch.object(AlertService, '_find_duplicate', return_value=None):
             result = AlertService.create_alert(
                 db=db, pregnant_id="P001", rule_id="RULE_BP_HIGH",
-                level="RED", message="血压异常升高",
+                domain="vital", level="RED", message="血压异常升高",
             )
             db.add.assert_called_once()
             db.commit.assert_called_once()
             assert result.pregnant_id == "P001"
             assert result.level == "RED"
 
-    def test_create_alerts_from_hits_deduplicates(self):
+    def test_create_alert_initializes_history(self):
+        """创建预警时初始化 history 时间线"""
+        from app.services.alert_service import AlertService
+        db = MagicMock()
+        with patch.object(AlertService, '_find_duplicate', return_value=None):
+            result = AlertService.create_alert(
+                db=db, pregnant_id="P001", rule_id="RULE_BP_HIGH",
+                domain="vital", level="RED", message="血压异常升高",
+            )
+            assert "history" in result.details
+            assert result.details["history"][0]["action"] == "created"
+            assert result.details["history"][0]["source_role"] == "system"
+            assert result.details["source_role"] == "system"
+
+    def test_create_alerts_from_hits_uses_domain(self):
         from app.services.alert_service import AlertService
         hits = [
-            {"rule_id": "RULE_BP_HIGH", "level": "RED", "message": "血压异常", "action": "ALERT_NURSE"},
-            {"rule_id": "RULE_FETAL_DROP", "level": "RED", "message": "胎动减少", "action": "ALERT_NURSE"},
+            {"rule_id": "RULE_BP_HIGH", "domain": "vital", "level": "RED",
+             "message": "血压异常", "action": "ALERT_NURSE_AND_DOCTOR",
+             "triggered_rules": ["RULE_BP_HIGH"], "priority": 3},
+            {"rule_id": "RULE_FETAL_DROP", "domain": "fetal", "level": "RED",
+             "message": "胎动减少", "action": "ALERT_NURSE_AND_DOCTOR",
+             "triggered_rules": ["RULE_FETAL_DROP"], "priority": 3},
         ]
         db = MagicMock()
         existing = self._make_alert()
 
-        def mock_find_dup(db, pid, rule_id):
-            return existing if rule_id == "RULE_BP_HIGH" else None
+        def mock_find_dup(db, pid, domain):
+            return existing if domain == "vital" else None
 
         with patch.object(AlertService, '_find_duplicate', side_effect=mock_find_dup):
             results = AlertService.create_alerts_from_hits(db, "P001", hits)
