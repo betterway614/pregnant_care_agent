@@ -117,7 +117,7 @@ class ONNXFGRPredictor:
             raise RuntimeError("onnxruntime 未安装，无法加载 FGR ONNX 模型") from exc
 
         if not os.path.isdir(ONNX_DIR):
-            raise FileNotFoundError(f"ONNX 模型目录不存在: {ONNX_DIR}，请先运行 python -m fgr_compete.export_onnx")
+            raise FileNotFoundError(f"ONNX 模型目录不存在: {ONNX_DIR}，请先运行 python -m fgr_compete.scripts.rocm.export_onnx 或兼容入口 python -m fgr_compete.export_onnx")
 
         provider_chain = self._provider_chain()
         if not provider_chain:

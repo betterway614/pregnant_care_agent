@@ -80,11 +80,13 @@ class Settings(BaseSettings):
 
     # FGR配置
     fgr_mode: bool = True
-    # FGR_BACKEND:
-    # - pytorch/cuda: 保留现有 PyTorch 权重路径，torch.cuda 可用时走 CUDA
-    # - rocm/onnx_igpu: ONNX Runtime MIGraphX/ROCm provider，面向 AMD iGPU
-    # - onnx_npu: ONNX Runtime VitisAIExecutionProvider，自动回退 ROCm/CPU
-    # - mock: 与 FGR_MODE=false 的 mock 场景配套使用
+    # FGR_BACKEND 控制 FGR 分类模型后端；nnU-Net 分割由 segmentation_service 单独调用。
+    # - pytorch: 默认旧路径，加载 .pth 权重；torch.cuda 可用时自动走 GPU，否则走 CPU
+    # - cuda: pytorch 的显式别名，用于保留现有 CUDA 部署写法
+    # - rocm / onnx_igpu: ONNX Runtime + AMD MIGraphX/ROCm，加载 onnx_resnet/*.onnx
+    # - onnx_npu: 优先 VitisAI/NPU；不可用时依次回退到 ROCm/MIGraphX、ONNX CPU
+    # - onnx_cpu: ONNX Runtime CPU，主要用于本地调试或硬件回退
+    # - mock: 不加载模型；API 使用 mock 评估时请同时设置 FGR_MODE=false
     fgr_backend: Literal["pytorch", "cuda", "rocm", "onnx_npu", "onnx_igpu", "onnx_cpu", "mock"] = "pytorch"
 
     # nnU-Net 分割配置

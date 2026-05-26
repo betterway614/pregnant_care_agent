@@ -7,7 +7,7 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 模型权重目录
 MODEL_DIR = os.path.join(MODULE_DIR, "0.701_515pth")
 
-# ONNX 模型目录（由 export_onnx.py / quantize_onnx.py 生成）
+# ONNX 模型目录（由 scripts/rocm/export_onnx.py / scripts/ryzen_ai/quantize_onnx.py 生成）
 ONNX_DIR = os.path.join(MODULE_DIR, "onnx_resnet")
 
 # SVM 训练数据
