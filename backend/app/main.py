@@ -222,18 +222,23 @@ async def lifespan(app: FastAPI):
     _ensure_alert_columns()
     _ensure_audit_log_table()
 
-    # FGR 模式：加载真实预测模型
+    # FGR 模式：按 .env 的 FGR_BACKEND 加载真实预测模型
     if settings.fgr_mode:
         try:
-            from fgr_compete import initialize_predictor
-            initialize_predictor()
-            logger.info("FGR 预测模型加载完成")
+            from fgr_compete.predictor import initialize_predictor_for_backend
+            predictor = initialize_predictor_for_backend(settings.fgr_backend)
+            if predictor is not None:
+                logger.info(
+                    "FGR 预测模型加载完成 backend={} hardware={}",
+                    settings.fgr_backend, getattr(predictor, "hardware", "unknown"),
+                )
         except Exception as e:
             logger.error("FGR 模型初始化失败，回退到 mock 模式: {}", e)
 
     logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
     logger.info("  LLM模式: {}", settings.llm_mode)
     logger.info("  FGR模式: {}", settings.fgr_mode)
+    logger.info("  FGR后端: {}", settings.fgr_backend)
     logger.info("  数据库: {}:{}/{}", settings.db_host, settings.db_port, settings.db_name)
 
     if settings.seed_data:

@@ -23,9 +23,16 @@ opencv-python>=4.8.0
 scikit-image>=0.21.0
 scikit-learn>=1.3.0
 scipy>=1.11.0
-torch>=2.0.0
-torchvision>=0.15.0
+# PyTorch 按硬件平台二选一安装，避免 pip 默认拉 CUDA wheel 覆盖 ROCm:
+# - CUDA/CPU: torch>=2.0.0, torchvision>=0.15.0
+# - ROCm 7.2: 使用 AMD repo.radeon 的 torch/torchvision/triton wheel
 nnunetv2>=2.0
+onnx>=1.16.0
+# ONNX Runtime 二选一，避免 CPU 包覆盖 ROCm/MIGraphX provider:
+# - CPU: onnxruntime>=1.18.0
+# - ROCm 7.2: onnxruntime-migraphx==1.23.2（需从 AMD repo.radeon wheel 安装）
+# AMD Quark 量化工具需按 Ryzen AI SDK 文档安装
+# onnxruntime-vitisai 需从 Ryzen AI SDK 获取
 
 # TTS (本地模式)
 edge-tts>=6.1.0

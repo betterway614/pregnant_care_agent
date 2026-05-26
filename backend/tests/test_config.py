@@ -22,3 +22,21 @@ def test_agno_config_from_env(monkeypatch):
     s = Settings(_env_file=None)
     assert s.agno_enabled is False
     assert s.llm_model == "deepseek-chat"
+
+
+def test_fgr_backend_config_defaults(monkeypatch):
+    monkeypatch.delenv("FGR_BACKEND", raising=False)
+    s = Settings(_env_file=None)
+    assert s.fgr_backend == "pytorch"
+
+
+def test_fgr_backend_config_from_env(monkeypatch):
+    monkeypatch.setenv("FGR_BACKEND", "rocm")
+    s = Settings(_env_file=None)
+    assert s.fgr_backend == "rocm"
+
+
+def test_debug_release_env_is_false(monkeypatch):
+    monkeypatch.setenv("DEBUG", "release")
+    s = Settings(_env_file=None)
+    assert s.debug is False

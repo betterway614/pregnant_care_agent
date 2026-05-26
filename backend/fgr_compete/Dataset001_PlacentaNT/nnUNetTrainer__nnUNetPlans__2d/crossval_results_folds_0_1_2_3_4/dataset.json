@@ -1,0 +1,11 @@
+{
+    "channel_names": {
+        "0": "B-mode ultrasound"
+    },
+    "labels": {
+        "background": 0,
+        "placenta": 1
+    },
+    "numTraining": 40,
+    "file_ending": ".png"
+}

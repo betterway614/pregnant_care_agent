@@ -1,5 +1,6 @@
 """应用配置管理"""
 import os
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import Literal, Optional
 
@@ -11,6 +12,17 @@ class Settings(BaseSettings):
     app_name: str = "AI-Care 孕期智能管理平台"
     app_version: str = "1.0.0"
     debug: bool = True
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
+        return value
 
     # LLM配置 - 全局默认（本地部署 Qwen3.6-35B-A3B，开发阶段可切 cloud）
     llm_mode: Literal["cloud", "local", "mock", "mixed"] = "cloud"
@@ -38,7 +50,7 @@ class Settings(BaseSettings):
     llm_nurse_max_tokens: int = 8192
     llm_doctor_max_tokens: int = 8192
 
-    # ASR配置 - 全局默认（cloud 使用 DashScope Paraformer 专用 ASR 服务，local 使用 Whisper）
+    # ASR配置 - 全局默认（cloud 使用 DashScope，local 默认调用本地 FunASR HTTP API）
     asr_mode: Literal["cloud", "local"] = "cloud"
     asr_pregnant_mode: Literal["cloud", "local", ""] = ""
     asr_nurse_mode: Literal["cloud", "local", ""] = ""
@@ -46,6 +58,13 @@ class Settings(BaseSettings):
     asr_cloud_api_key: str = "sk-54b8481fe3a648ccb3bb8d20126420c2"
     asr_cloud_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     asr_cloud_model: str = "paraformer-v1"
+    asr_local_backend: Literal["funasr", "whisper"] = "funasr"
+    asr_local_base_url: str = "http://127.0.0.1:10096"
+    asr_local_endpoint: str = "/v1/audio/transcriptions"
+    asr_local_funasr_model: str = "local-funasr"
+    asr_local_api_key: str = ""
+    asr_local_hotword: str = ""
+    asr_local_timeout: float = 60.0
     asr_local_model: str = "base"
 
     # TTS配置 - 全局默认
@@ -61,6 +80,12 @@ class Settings(BaseSettings):
 
     # FGR配置
     fgr_mode: bool = True
+    # FGR_BACKEND:
+    # - pytorch/cuda: 保留现有 PyTorch 权重路径，torch.cuda 可用时走 CUDA
+    # - rocm/onnx_igpu: ONNX Runtime MIGraphX/ROCm provider，面向 AMD iGPU
+    # - onnx_npu: ONNX Runtime VitisAIExecutionProvider，自动回退 ROCm/CPU
+    # - mock: 与 FGR_MODE=false 的 mock 场景配套使用
+    fgr_backend: Literal["pytorch", "cuda", "rocm", "onnx_npu", "onnx_igpu", "onnx_cpu", "mock"] = "pytorch"
 
     # nnU-Net 分割配置
     nnunet_model_dir: str = "fgr_compete/Dataset001_PlacentaNT"
