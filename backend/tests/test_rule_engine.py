@@ -45,9 +45,9 @@ class TestDomainGrouping:
         context = {
             "sbp": 150, "dbp": 100, "weight": 65,
             "fetal_movement": 2, "fetal_movement_avg": 10,
-            "weight_gain_weekly": 0.5, "emotion_score_avg_7d": 9,
+            "weight_gain_weekly": 0.5, "emotion_score_avg_7d": 1.2,
             "blood_sugar_fasting": 4.5, "blood_sugar_postprandial": 6.0,
-            "sleep_hours": 7, "gest_week": 25,
+            "sleep_hours": 3, "gest_week": 25,
         }
         hits = engine.evaluate_all(context)
         domains = set(h["domain"] for h in hits)
@@ -55,7 +55,7 @@ class TestDomainGrouping:
         domain_map = {h["domain"]: h for h in hits}
         assert domain_map["vital"]["level"] == "RED"    # 血压150
         assert domain_map["fetal"]["level"] == "RED"    # 胎动2
-        assert domain_map["mental"]["level"] == "ORANGE" # 情绪9
+        assert domain_map["mental"]["level"] == "ORANGE" # 情绪1.2触发EMOTION_HIGH
 
     def test_no_hits_returns_empty(self):
         """所有指标正常时不产生预警"""

@@ -125,7 +125,7 @@ RULES = [
          "空腹血糖偏高（>5.3mmol/L），建议复查", "ALERT_NURSE"),
     Rule("RULE_WEIGHT_GAIN_FAST", "vital", 2, "weight_gain_weekly > 2.0", "ORANGE",
          "体重周增长过快（>2kg/周）", "ALERT_NURSE"),
-    Rule("RULE_WEIGHT_GAIN_SLOW", "vital", 1, "weight_gain_weekly < 0.1 and gest_week > 12", "YELLOW",
+    Rule("RULE_WEIGHT_GAIN_SLOW", "vital", 1, "weight_gain_weekly < 0.1 and gest_week > 16", "YELLOW",
          "体重增长过慢，需关注营养摄入", "NOTE_NURSE"),
 
     # === 胎儿 (fetal) ===
@@ -135,12 +135,12 @@ RULES = [
          "胎动极少（<3次/小时），请立即就医", "ALERT_NURSE_AND_DOCTOR"),
 
     # === 心理行为 (mental) ===
-    Rule("RULE_EMOTION_CRITICAL", "mental", 2, "emotion_score_avg_7d <= 1.5", "ORANGE",
+    Rule("RULE_EMOTION_CRITICAL", "mental", 3, "emotion_score_avg_7d <= 1.0", "RED",
+         "近7日情绪评分持续极低（平均≤1.0分），需立即心理干预", "ALERT_NURSE_AND_DOCTOR"),
+    Rule("RULE_EMOTION_HIGH", "mental", 2, "emotion_score_avg_7d <= 1.5", "ORANGE",
          "近7日情绪评分持续偏低（平均≤1.5分），建议心理干预", "ALERT_NURSE"),
-    Rule("RULE_EMOTION_HIGH", "mental", 1, "emotion_score_avg_7d <= 2.0", "YELLOW",
-         "近7日情绪评分偏低（平均≤2.0分），需关注心理状态", "NOTE_NURSE"),
-    Rule("RULE_SLEEP_SHORT", "mental", 1, "sleep_hours < 5", "YELLOW",
-         "睡眠不足5小时，建议改善睡眠", "NOTE_NURSE"),
+    Rule("RULE_SLEEP_SHORT", "mental", 1, "sleep_hours < 4", "YELLOW",
+         "睡眠严重不足（<4小时），建议改善睡眠", "NOTE_NURSE"),
 ]
 
 
