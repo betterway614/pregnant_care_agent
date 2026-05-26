@@ -204,8 +204,14 @@
                 <div
                   v-else
                   class="bubble-text bubble-markdown"
-                  v-html="renderMarkdown(msg.content)"
-                />
+                >
+                  <StructuredAnalysisCard
+                    v-if="isStructuredAnalysis(msg.content)"
+                    :data="parseStructuredAnalysis(msg.content)!"
+                    role="pregnant"
+                  />
+                  <div v-else v-html="renderMarkdown(msg.content)" />
+                </div>
                 <!-- 流式打字光标 -->
                 <span v-if="msg.role === 'assistant' && isStreamingMessage(msg)" class="typing-cursor" />
               </div>
@@ -440,10 +446,11 @@ import type { ChatRequest } from '@/types'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { useChatStore } from '@/stores/chat'
 import type { ChatMessage } from '@/stores/chat'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useScroll } from '@vueuse/core'
 import { useTTS } from '@/composables/useTTS'
+import { StructuredAnalysisCard } from '@/components/agent-fab'
 
 /* ==================== 类型 ==================== */
 interface PregnantContext {

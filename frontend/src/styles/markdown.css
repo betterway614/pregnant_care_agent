@@ -313,3 +313,24 @@
 .analysis-markdown th { background: #F8FAFC; font-weight: 600; }
 .analysis-markdown img { max-width: 100%; border-radius: 8px; margin: 6px 0; }
 .analysis-markdown a { color: var(--primary, #2E7D32); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ============================================================
+   结构化分析卡片 — 在各聊天气泡/报告容器内的适配
+   ============================================================ */
+
+/* 卡片在聊天气泡内的间距 */
+.doctor-chat__text .structured-card,
+.nurse-chat__text .structured-card,
+.bubble-markdown .structured-card {
+  margin: -4px 0;
+}
+
+/* 卡片在报告 section body 内的间距 */
+.report-section-body .structured-card {
+  margin: 0;
+}
+
+/* 确保卡片内的图标颜色不继承父级 */
+.structured-card .el-icon {
+  flex-shrink: 0;
+}

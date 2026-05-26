@@ -115,13 +115,17 @@
                     class="diagnosis-row"
                   >
                     <span class="diagnosis-row__condition">{{ dx.condition }}</span>
-                    <span
-                      class="diagnosis-row__confidence"
-                      :class="confidenceClass(dx.confidence)"
-                    >
-                      {{ (dx.confidence * 100).toFixed(0) }}%
-                    </span>
-                    <p v-if="dx.reasoning" class="diagnosis-row__reasoning">{{ dx.reasoning }}</p>
+                    <div class="diagnosis-row__details">
+                      <p v-if="dx.supported_by" class="diagnosis-row__detail">
+                        <strong>支持证据：</strong>{{ Array.isArray(dx.supported_by) ? dx.supported_by.join('；') : dx.supported_by }}
+                      </p>
+                      <p v-if="dx.against" class="diagnosis-row__detail">
+                        <strong>排除依据：</strong>{{ Array.isArray(dx.against) ? dx.against.join('；') : dx.against }}
+                      </p>
+                      <p v-if="dx.tests_needed" class="diagnosis-row__detail">
+                        <strong>建议检查：</strong>{{ Array.isArray(dx.tests_needed) ? dx.tests_needed.join('；') : dx.tests_needed }}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </AnalysisResultCard>
@@ -307,12 +311,6 @@ async function loadIssues() {
   } catch { /* ignore */ }
 }
 
-function confidenceClass(confidence: number) {
-  if (confidence >= 0.7) return 'diagnosis-row__confidence--high'
-  if (confidence >= 0.4) return 'diagnosis-row__confidence--medium'
-  return 'diagnosis-row__confidence--low'
-}
-
 function formatTime(t?: string): string {
   if (!t) return ''
   const d = new Date(t)
@@ -485,37 +483,26 @@ onMounted(() => {
   font-weight: 600;
   font-size: 13px;
   color: var(--text-primary);
+  display: block;
+  margin-bottom: 4px;
 }
 
-.diagnosis-row__confidence {
-  float: right;
-  padding: 2px 10px;
-  border-radius: var(--capsule-radius);
-  font-size: 11px;
-  font-weight: 700;
+.diagnosis-row__details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.diagnosis-row__confidence--high {
-  background: var(--danger-light);
-  color: var(--danger);
-}
-
-.diagnosis-row__confidence--medium {
-  background: var(--warning-light);
-  color: var(--warning);
-}
-
-.diagnosis-row__confidence--low {
-  background: var(--info-light);
-  color: var(--info);
-}
-
-.diagnosis-row__reasoning {
-  clear: both;
-  margin: 6px 0 0;
+.diagnosis-row__detail {
+  margin: 0;
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.diagnosis-row__detail strong {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .evidence-chips {

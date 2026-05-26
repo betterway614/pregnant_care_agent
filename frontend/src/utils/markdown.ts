@@ -72,3 +72,156 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 }
+
+// ==================== 结构化分析检测与解析 ====================
+
+export interface DifferentialDiagnosisItem {
+  condition: string
+  supported_by: string
+  against: string
+  tests_needed: string
+}
+
+export interface StructuredAnalysis {
+  analysis?: string
+  evidence_references?: string[]
+  suggested_orders?: string
+  risk_summary?: string
+  differential_diagnosis?: DifferentialDiagnosisItem[]
+  reasoning_chain?: string[]
+}
+
+/** 结构化分析特征关键词（用于检测） */
+const STRUCTURED_KEYWORDS = [
+  'risk_summary', 'differential_diagnosis', 'reasoning_chain',
+  'evidence_references', 'suggested_orders',
+]
+
+/**
+ * 检测内容是否包含 AI 结构化分析数据
+ * 支持 JSON 字符串和 Markdown 两种格式
+ */
+export function isStructuredAnalysis(content: string): boolean {
+  if (!content) return false
+  // JSON 格式检测
+  if (/^\s*\{/.test(content)) {
+    try {
+      const obj = JSON.parse(content)
+      return STRUCTURED_KEYWORDS.some(k => k in obj)
+    } catch { /* fall through to markdown check */ }
+  }
+  // Markdown 格式检测：同时包含"风险摘要"和"鉴别诊断"等标记
+  const mdCount = STRUCTURED_KEYWORDS.filter(k => content.includes(k)).length
+  const cnCount = ['风险摘要', '鉴别诊断', '推理链', '建议医嘱', '综合分析', '证据引用']
+    .filter(k => content.includes(k)).length
+  return mdCount >= 2 || cnCount >= 3
+}
+
+/**
+ * 从文本中解析结构化分析数据
+ * 优先尝试 JSON 解析，失败后从 Markdown 中提取
+ */
+export function parseStructuredAnalysis(content: string): StructuredAnalysis | null {
+  if (!content) return null
+
+  // 尝试 JSON 解析
+  if (/^\s*\{/.test(content)) {
+    try {
+      const obj = JSON.parse(content)
+      if (STRUCTURED_KEYWORDS.some(k => k in obj)) {
+        return normalizeAnalysis(obj)
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 从 Markdown 中提取
+  return parseMarkdownAnalysis(content)
+}
+
+function normalizeAnalysis(raw: Record<string, any>): StructuredAnalysis {
+  const result: StructuredAnalysis = {}
+  if (typeof raw.analysis === 'string') result.analysis = raw.analysis
+  if (typeof raw.risk_summary === 'string') result.risk_summary = raw.risk_summary
+  if (typeof raw.suggested_orders === 'string') result.suggested_orders = raw.suggested_orders
+  if (Array.isArray(raw.evidence_references)) result.evidence_references = raw.evidence_references
+  if (Array.isArray(raw.reasoning_chain)) result.reasoning_chain = raw.reasoning_chain
+  if (Array.isArray(raw.differential_diagnosis)) {
+    result.differential_diagnosis = raw.differential_diagnosis.map((d: any) => ({
+      condition: d.condition || '',
+      supported_by: Array.isArray(d.supported_by) ? d.supported_by.join('；') : (d.supported_by || ''),
+      against: Array.isArray(d.against) ? d.against.join('；') : (d.against || ''),
+      tests_needed: Array.isArray(d.tests_needed) ? d.tests_needed.join('；') : (d.tests_needed || ''),
+    }))
+  }
+  return result
+}
+
+/** 从 ## 标题 到下一个 ## 标题之间提取内容 */
+function extractSection(text: string, heading: string): string | undefined {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`^#{1,3}\\s*${escaped}\\s*\\n([\\s\\S]*?)(?=\\n#{1,3}\\s|$)`, 'im')
+  const match = text.match(regex)
+  return match ? match[1].trim() : undefined
+}
+
+function parseMarkdownAnalysis(content: string): StructuredAnalysis | null {
+  const result: StructuredAnalysis = {}
+
+  const analysis = extractSection(content, '综合分析')
+  const evidence = extractSection(content, '证据引用')
+  const orders = extractSection(content, '建议医嘱')
+  const risk = extractSection(content, '风险摘要')
+  const dxSection = extractSection(content, '鉴别诊断')
+  const reasoning = extractSection(content, '推理链')
+
+  if (analysis) result.analysis = analysis
+  if (orders) result.suggested_orders = orders
+  if (risk) result.risk_summary = risk
+
+  if (evidence) {
+    result.evidence_references = evidence
+      .split(/\n- /)
+      .map(s => s.replace(/^-\s*/, '').trim())
+      .filter(Boolean)
+  }
+
+  if (reasoning) {
+    result.reasoning_chain = reasoning
+      .split(/\n\d+\.\s*/)
+      .map(s => s.trim())
+      .filter(Boolean)
+  }
+
+  if (dxSection) {
+    result.differential_diagnosis = parseDifferentialDiagnosis(dxSection)
+  }
+
+  // 如果什么都没解析到，返回 null
+  if (Object.keys(result).length === 0) return null
+  return result
+}
+
+function parseDifferentialDiagnosis(section: string): DifferentialDiagnosisItem[] {
+  const items: DifferentialDiagnosisItem[] = []
+  // 匹配 **疾病名**: 支持依据: ...; 排除依据: ...; 需检查: ...
+  const entryRegex = /-\s*\*\*(.+?)\*\*\s*[:：]\s*([\s\S]*?)(?=\n-\s*\*\*|$)/g
+  let match: RegExpExecArray | null
+
+  while ((match = entryRegex.exec(section)) !== null) {
+    const condition = match[1].trim()
+    const details = match[2].trim()
+
+    const supportedMatch = details.match(/支持依据\s*[:：]\s*(.+?)(?:;\s*排除依据|$)/)
+    const againstMatch = details.match(/排除依据\s*[:：]\s*(.+?)(?:;\s*需检查|$)/)
+    const testsMatch = details.match(/需检查\s*[:：]\s*(.+?)$/)
+
+    items.push({
+      condition,
+      supported_by: supportedMatch ? supportedMatch[1].trim() : '',
+      against: againstMatch ? againstMatch[1].trim() : '',
+      tests_needed: testsMatch ? testsMatch[1].trim() : '',
+    })
+  }
+
+  return items
+}
