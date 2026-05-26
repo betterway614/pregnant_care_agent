@@ -16,22 +16,24 @@ class TestASRServiceCloudMode:
         from app.services.asr_service import ASRService
 
         service = ASRService()
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        mock_submit_response = MagicMock()
+        mock_submit_response.json.return_value = {"output": {"task_id": "task-123"}}
+        mock_submit_response.raise_for_status = MagicMock()
+
+        mock_query_response = MagicMock()
+        mock_query_response.json.return_value = {
             "output": {
-                "results": [{"transcription_url": "https://example.com/result"}]
+                "task_status": "SUCCEEDED",
+                "results": [{"text": "你好医生"}],
             }
         }
-        mock_response.raise_for_status = MagicMock()
+        mock_query_response.raise_for_status = MagicMock()
 
-        mock_t_response = MagicMock()
-        mock_t_response.json.return_value = {
-            "transcripts": [{"text": "你好医生"}]
-        }
-
-        with patch("app.services.asr_service.get_asr_mode", return_value="cloud"), \
-             patch("app.services.asr_service.settings") as mock_settings:
+        with (
+            patch("app.services.asr_service.get_asr_mode", return_value="cloud"),
+            patch("app.services.asr_service.settings") as mock_settings,
+            patch("app.services.asr_service.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_settings.asr_cloud_api_key = "test-key"
             mock_settings.asr_cloud_base_url = "https://dashscope.aliyuncs.com/api/v1"
             mock_settings.asr_cloud_model = "paraformer-v2"
@@ -39,8 +41,8 @@ class TestASRServiceCloudMode:
 
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_client = AsyncMock()
-                mock_client.post.return_value = mock_response
-                mock_client.get.return_value = mock_t_response
+                mock_client.post.return_value = mock_submit_response
+                mock_client.get.return_value = mock_query_response
                 mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -53,13 +55,93 @@ class TestASRServiceCloudMode:
         from app.services.asr_service import ASRService
 
         service = ASRService()
-        with patch("app.services.asr_service.get_asr_mode", return_value="cloud"), \
-             patch("app.services.asr_service.settings") as mock_settings:
+        with (
+            patch("app.services.asr_service.get_asr_mode", return_value="cloud"),
+            patch("app.services.asr_service.settings") as mock_settings,
+        ):
             mock_settings.asr_cloud_api_key = ""
             mock_settings.llm_api_key = ""
 
             result = await service.transcribe("dGVzdA==", "webm", "pregnant")
             assert result is None
+
+
+class TestASRServiceLocalFunASR:
+    """ASR local FunASR API 模式测试"""
+
+    @pytest.mark.asyncio
+    async def test_local_calls_funasr_openai_endpoint(self):
+        """local 模式默认调用 FunASR OpenAI 风格转录接口"""
+        from app.services.asr_service import ASRService
+
+        service = ASRService()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"text": "本地识别结果"}
+        mock_response.raise_for_status = MagicMock()
+
+        with (
+            patch("app.services.asr_service.get_asr_mode", return_value="local"),
+            patch("app.services.asr_service.settings") as mock_settings,
+        ):
+            mock_settings.asr_local_backend = "funasr"
+            mock_settings.asr_local_base_url = "http://127.0.0.1:10096"
+            mock_settings.asr_local_endpoint = "/v1/audio/transcriptions"
+            mock_settings.asr_local_funasr_model = "local-funasr"
+            mock_settings.asr_local_api_key = ""
+            mock_settings.asr_local_hotword = ""
+            mock_settings.asr_local_timeout = 60.0
+
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = AsyncMock()
+                mock_client.post.return_value = mock_response
+                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                result = await service.transcribe("dGVzdA==", "webm", "pregnant")
+
+        assert result == "本地识别结果"
+        _, kwargs = mock_client.post.call_args
+        assert kwargs["data"]["model"] == "local-funasr"
+        assert "file" in kwargs["files"]
+        filename, content, mime_type = kwargs["files"]["file"]
+        assert filename == "audio.webm"
+        assert content == b"test"
+        assert mime_type == "audio/webm"
+
+    @pytest.mark.asyncio
+    async def test_local_calls_funasr_recognition_endpoint(self):
+        """local 模式也兼容 FunASR /recognition 接口"""
+        from app.services.asr_service import ASRService
+
+        service = ASRService()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"code": 0, "text": "识别成功"}
+        mock_response.raise_for_status = MagicMock()
+
+        with (
+            patch("app.services.asr_service.get_asr_mode", return_value="local"),
+            patch("app.services.asr_service.settings") as mock_settings,
+        ):
+            mock_settings.asr_local_backend = "funasr"
+            mock_settings.asr_local_base_url = "http://127.0.0.1:10096"
+            mock_settings.asr_local_endpoint = "/recognition"
+            mock_settings.asr_local_funasr_model = "local-funasr"
+            mock_settings.asr_local_api_key = ""
+            mock_settings.asr_local_hotword = "产检"
+            mock_settings.asr_local_timeout = 60.0
+
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = AsyncMock()
+                mock_client.post.return_value = mock_response
+                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                result = await service.transcribe("dGVzdA==", "wav", "pregnant")
+
+        assert result == "识别成功"
+        _, kwargs = mock_client.post.call_args
+        assert kwargs["data"]["hotword"] == "产检"
+        assert "audio" in kwargs["files"]
 
 
 class TestASRServiceUnknownMode:
@@ -81,7 +163,7 @@ class TestASRModeResolver:
 
     def test_role_specific_mode_takes_priority(self):
         """角色专属模式优先于全局模式"""
-        from app.config import Settings, get_asr_mode
+        from app.config import get_asr_mode
 
         with patch("app.config.settings") as mock_settings:
             mock_settings.asr_mode = "cloud"
@@ -91,7 +173,7 @@ class TestASRModeResolver:
 
     def test_empty_role_mode_falls_back_to_global(self):
         """空角色模式降级到全局模式"""
-        from app.config import Settings, get_asr_mode
+        from app.config import get_asr_mode
 
         with patch("app.config.settings") as mock_settings:
             mock_settings.asr_mode = "cloud"
@@ -105,3 +187,5 @@ class TestASRModeResolver:
 
         s = Settings(_env_file=None)
         assert s.asr_mode == "cloud"
+        assert s.asr_local_backend == "funasr"
+        assert s.asr_local_base_url == "http://127.0.0.1:10096"

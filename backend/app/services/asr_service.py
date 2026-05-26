@@ -3,7 +3,7 @@ import asyncio
 import base64
 import os
 import tempfile
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from loguru import logger
@@ -15,10 +15,9 @@ class ASRService:
     """统一 ASR 服务
 
     模式：
-    - cloud: DashScope 兼容 REST API，通过 asr_cloud_base_url 切换云端 / 本地部署
-             - dashscope.aliyuncs.com → 异步提交 + 轮询（Transcription API 要求）
-             - 其他地址 → multipart 同步上传（本地兼容框架）
-    - local: Whisper 本地推理
+    - cloud: DashScope 兼容 REST API。
+    - local: 默认调用本地 FunASR HTTP API；也可通过 ASR_LOCAL_BACKEND=whisper
+             切回 openai-whisper 本地推理。
     """
 
     async def transcribe(
@@ -92,6 +91,9 @@ class ASRService:
 
                 task_id = data.get("output", {}).get("task_id")
                 if not task_id:
+                    parsed = self._parse_asr_response(data)
+                    if parsed:
+                        return parsed
                     logger.error("[ASR] DashScope 未返回 task_id: {}", data)
                     return None
 
@@ -123,7 +125,7 @@ class ASRService:
     async def _transcribe_local_server(
         self, audio_base64: str, audio_format: str
     ) -> Optional[str]:
-        """本地 ASR 服务：multipart 文件上传。"""
+        """本地 DashScope 兼容 ASR 服务：multipart 文件上传。"""
         url = f"{settings.asr_cloud_base_url}/services/audio/asr/transcription"
         fmt_map = {"ogg": "ogg", "webm": "wav", "wav": "wav", "mp3": "mp3", "mp4": "mp4"}
         fmt = fmt_map.get(audio_format, "wav")
@@ -133,7 +135,7 @@ class ASRService:
         }
 
         try:
-            audio_bytes = base64.b64decode(audio_base64)
+            audio_bytes = self._decode_audio(audio_base64)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
@@ -181,20 +183,83 @@ class ASRService:
 
         return None
 
-    # ---- local: Whisper ----
+    # ---- local: FunASR HTTP API / Whisper ----
 
     async def _transcribe_local(
+        self, audio_base64: str, audio_format: str
+    ) -> Optional[str]:
+        backend = getattr(settings, "asr_local_backend", "funasr")
+        if backend == "funasr":
+            return await self._transcribe_funasr(audio_base64, audio_format)
+        if backend == "whisper":
+            return await self._transcribe_whisper(audio_base64, audio_format)
+
+        logger.warning("[ASR] 未知 local backend '{}'", backend)
+        return None
+
+    async def _transcribe_funasr(
+        self, audio_base64: str, audio_format: str
+    ) -> Optional[str]:
+        """本地 FunASR API：支持 /recognition 与 OpenAI 风格 /v1/audio/transcriptions。"""
+        base_url = settings.asr_local_base_url.rstrip("/")
+        endpoint = settings.asr_local_endpoint or "/v1/audio/transcriptions"
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+        url = f"{base_url}{endpoint}"
+
+        try:
+            audio_bytes = self._decode_audio(audio_base64)
+            fmt = self._normalize_audio_format(audio_format)
+            field_name = "audio" if endpoint.rstrip("/").endswith("/recognition") else "file"
+            data: dict[str, str] = {}
+            if field_name == "file":
+                data["model"] = settings.asr_local_funasr_model or "local-funasr"
+                data["response_format"] = "json"
+                if settings.asr_local_hotword:
+                    data["prompt"] = settings.asr_local_hotword
+            elif settings.asr_local_hotword:
+                data["hotword"] = settings.asr_local_hotword
+
+            headers = {}
+            if settings.asr_local_api_key:
+                headers["Authorization"] = f"Bearer {settings.asr_local_api_key}"
+
+            async with httpx.AsyncClient(timeout=settings.asr_local_timeout) as client:
+                resp = await client.post(
+                    url,
+                    files={
+                        field_name: (
+                            f"audio.{fmt}",
+                            audio_bytes,
+                            self._audio_mime_type(fmt),
+                        )
+                    },
+                    data=data,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                text = self._parse_funasr_response(self._response_payload(resp))
+                if text:
+                    logger.info("[ASR] FunASR 转录成功: {}字", len(text))
+                else:
+                    logger.warning("[ASR] FunASR 响应无转录文本: {}", getattr(resp, "text", ""))
+                return text
+        except Exception as e:
+            logger.error("[ASR] FunASR 本地 API 调用失败: {}", e)
+            return None
+
+    async def _transcribe_whisper(
         self, audio_base64: str, audio_format: str
     ) -> Optional[str]:
         try:
             import whisper
         except ImportError:
-            logger.error("[ASR] local 模式需要安装 openai-whisper: pip install openai-whisper")
+            logger.error("[ASR] whisper backend 需要安装 openai-whisper: pip install openai-whisper")
             return None
 
         def _run_whisper() -> Optional[str]:
             try:
-                audio_bytes = base64.b64decode(audio_base64)
+                audio_bytes = self._decode_audio(audio_base64)
                 suffix = f".{audio_format}" if audio_format else ".webm"
                 with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
                     f.write(audio_bytes)
@@ -204,16 +269,89 @@ class ASRService:
                     model = whisper.load_model(settings.asr_local_model)
                     result = model.transcribe(tmp_path, language="zh")
                     text = result.get("text", "").strip()
-                    logger.info("[ASR] local 转录成功: {}字", len(text))
+                    logger.info("[ASR] whisper 转录成功: {}字", len(text))
                     return text
                 finally:
                     os.unlink(tmp_path)
             except Exception as e:
-                logger.error("[ASR] local 转录失败: {}", e)
+                logger.error("[ASR] whisper 转录失败: {}", e)
                 return None
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _run_whisper)
+
+    @staticmethod
+    def _decode_audio(audio_base64: str) -> bytes:
+        payload = audio_base64.strip()
+        if payload.startswith("data:") and "," in payload:
+            payload = payload.split(",", 1)[1]
+        return base64.b64decode(payload)
+
+    @staticmethod
+    def _normalize_audio_format(audio_format: str) -> str:
+        fmt = (audio_format or "webm").lower().strip().lstrip(".")
+        if ";" in fmt:
+            fmt = fmt.split(";", 1)[0]
+        if "/" in fmt:
+            fmt = fmt.rsplit("/", 1)[-1]
+        aliases = {
+            "x-wav": "wav",
+            "mpeg": "mp3",
+            "quicktime": "mp4",
+            "m4a": "mp4",
+        }
+        return aliases.get(fmt, fmt or "webm")
+
+    @staticmethod
+    def _audio_mime_type(fmt: str) -> str:
+        mime_map = {
+            "mp3": "audio/mpeg",
+            "mp4": "audio/mp4",
+            "wav": "audio/wav",
+            "webm": "audio/webm",
+            "ogg": "audio/ogg",
+        }
+        return mime_map.get(fmt, f"audio/{fmt}")
+
+    @staticmethod
+    def _response_payload(resp: httpx.Response) -> Any:
+        try:
+            return resp.json()
+        except Exception:
+            return getattr(resp, "text", "")
+
+    @classmethod
+    def _parse_funasr_response(cls, data: Any) -> Optional[str]:
+        if isinstance(data, str):
+            text = data.strip()
+            return text or None
+
+        if isinstance(data, list):
+            texts = [cls._parse_funasr_response(item) for item in data]
+            joined = "".join(text for text in texts if text)
+            return joined or None
+
+        if not isinstance(data, dict):
+            return None
+
+        for key in ("text", "transcript", "transcription", "result"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        for key in ("data", "output"):
+            value = data.get(key)
+            text = cls._parse_funasr_response(value)
+            if text:
+                return text
+
+        for key in ("results", "transcripts"):
+            value = data.get(key)
+            text = cls._parse_funasr_response(value)
+            if text:
+                return text
+
+        return None
 
 
 asr_service = ASRService()

@@ -34,3 +34,9 @@ def test_fgr_backend_config_from_env(monkeypatch):
     monkeypatch.setenv("FGR_BACKEND", "rocm")
     s = Settings(_env_file=None)
     assert s.fgr_backend == "rocm"
+
+
+def test_debug_release_env_is_false(monkeypatch):
+    monkeypatch.setenv("DEBUG", "release")
+    s = Settings(_env_file=None)
+    assert s.debug is False
