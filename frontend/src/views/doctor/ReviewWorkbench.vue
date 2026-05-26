@@ -140,9 +140,10 @@
                 <div class="rule-card">
                   <div class="rule-card__header">
                     <el-icon color="var(--danger)"><WarningFilled /></el-icon>
-                    <span>规则 ID: {{ selectedAlert.rule_id || 'N/A' }}</span>
+                    <span>{{ ruleNameMap(selectedAlert.rule_id || '') }}</span>
                   </div>
-                  <p class="rule-card__desc">{{ selectedAlert.message }}</p>
+                  <p class="rule-card__desc">规则 ID: {{ selectedAlert.rule_id || 'N/A' }}</p>
+                  <p class="rule-card__desc" style="margin-top: 6px">{{ selectedAlert.message }}</p>
                 </div>
               </section>
 
@@ -344,8 +345,9 @@
                     class="diagnosis-item"
                   >
                     <div class="diagnosis-item__header">
-                      <span class="diagnosis-item__condition">{{ dx.condition }}</span>
+                      <span class="diagnosis-item__condition">{{ diagnosisConditionLabel(dx.condition) }}</span>
                       <el-tag
+                        v-if="isValidNumber(dx.confidence)"
                         :type="confidenceType(dx.confidence)"
                         size="small"
                         effect="plain"
@@ -562,7 +564,7 @@
                 <h5 class="soap-section__title soap-s">S 主观数据</h5>
                 <div v-if="followupDoc.snapshot.self_reported_data" class="soap-grid">
                   <div v-for="(v, k) in followupDoc.snapshot.self_reported_data" :key="k" class="soap-item">
-                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__key">{{ fieldLabel(String(k)) }}：</span>
                     <span class="soap-item__value">{{ v }}</span>
                   </div>
                 </div>
@@ -576,13 +578,13 @@
                 <h5 class="soap-section__title soap-o">O 客观检查</h5>
                 <div v-if="followupDoc.snapshot.obstetric_exam" class="soap-grid">
                   <div v-for="(v, k) in followupDoc.snapshot.obstetric_exam" :key="k" class="soap-item">
-                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__key">{{ examLabel(String(k)) }}：</span>
                     <span class="soap-item__value">{{ v }}</span>
                   </div>
                 </div>
                 <div v-if="followupDoc.snapshot.lab_results" class="soap-grid">
                   <div v-for="(v, k) in followupDoc.snapshot.lab_results" :key="k" class="soap-item">
-                    <span class="soap-item__key">{{ k }}：</span>
+                    <span class="soap-item__key">{{ labLabel(String(k)) }}：</span>
                     <span class="soap-item__value">{{ v }}</span>
                   </div>
                 </div>
@@ -1091,6 +1093,40 @@ function classificationLabel(classification: string): string {
   return map[classification] || classification
 }
 
+/** S 主观数据字段中文映射 */
+function fieldLabel(key: string): string {
+  const map: Record<string, string> = {
+    weight: '体重(kg)', bp: '血压', fetal_movement: '胎动', diet: '饮食',
+    mood: '情绪', sleep: '睡眠', stress: '压力', medication: '用药',
+    nausea: '孕吐', feeling: '感受', blood_sugar_fasting: '空腹血糖',
+    blood_sugar_2h: '餐后血糖', sleep_quality: '睡眠质量', blood_pressure: '血压',
+  }
+  return map[key] || key
+}
+
+/** O 客观检查字段中文映射 */
+function examLabel(key: string): string {
+  const map: Record<string, string> = {
+    fundal_height_cm: '宫高(cm)', abdominal_circumference_cm: '腹围(cm)',
+    fetal_position: '胎位', fetal_heart_rate_bpm: '胎心率(bpm)',
+    blood_pressure: '血压(mmHg)',
+  }
+  return map[key] || key
+}
+
+/** 实验室检查字段中文映射 */
+function labLabel(key: string): string {
+  const map: Record<string, string> = {
+    hemoglobin_g_L: '血红蛋白(g/L)', urine_protein: '尿蛋白',
+    blood_sugar_fasting: '空腹血糖(mmol/L)', blood_sugar_2h: '餐后血糖(mmol/L)',
+    alt: '谷丙转氨酶(U/L)', ast: '谷草转氨酶(U/L)',
+    creatinine: '肌酐(μmol/L)', uric_acid: '尿酸(μmol/L)', albumin: '白蛋白(g/L)',
+    wbc: '白细胞(×10⁹/L)', platelet: '血小板(×10⁹/L)', hct: '红细胞压积(%)',
+    bilirubin_total: '总胆红素(μmol/L)',
+  }
+  return map[key] || key
+}
+
 /** 触发AI分析 */
 async function runDoctorAiAnalysis() {
   if (!selectedAlert.value) return
@@ -1108,9 +1144,56 @@ async function runDoctorAiAnalysis() {
 
 /** 鉴别诊断置信度颜色 */
 function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
+  if (!isValidNumber(confidence)) return 'info'
   if (confidence >= 0.7) return 'danger'
   if (confidence >= 0.4) return 'warning'
   return 'info'
+}
+
+/** 判断是否为有效数值 */
+function isValidNumber(v: any): boolean {
+  return typeof v === 'number' && !isNaN(v) && isFinite(v)
+}
+
+/** 规则ID中文名称映射 */
+function ruleNameMap(ruleId: string): string {
+  const map: Record<string, string> = {
+    RULE_BP_HIGH: '血压异常升高',
+    RULE_BP_HIGH_ORANGE: '血压偏高关注',
+    RULE_BP_LOW: '血压偏低',
+    RULE_LATE_PREGNANCY_BP: '孕晚期血压偏高',
+    RULE_BS_POSTPRANDIAL_HIGH: '餐后血糖异常',
+    RULE_BS_FASTING_HIGH: '空腹血糖偏高',
+    RULE_WEIGHT_GAIN_FAST: '体重增长过快',
+    RULE_WEIGHT_GAIN_SLOW: '体重增长过慢',
+    RULE_FETAL_DROP: '胎动显著减少',
+    RULE_FETAL_VERY_LOW: '胎动极少',
+    RULE_EMOTION_CRITICAL: '情绪评分严重偏高',
+    RULE_EMOTION_HIGH: '情绪评分偏高',
+    RULE_SLEEP_SHORT: '睡眠不足',
+    FGR_HIGH_RISK: 'FGR高风险',
+    FGR_MEDIUM_RISK: 'FGR中风险',
+  }
+  return map[ruleId] || ruleId
+}
+
+/** 鉴别诊断条件名称中文映射（处理LLM返回英文的情况） */
+function diagnosisConditionLabel(condition: string): string {
+  const map: Record<string, string> = {
+    'Gestational Diabetes Mellitus (GDM)': '妊娠期糖尿病（GDM）',
+    'Gestational Diabetes Mellitus': '妊娠期糖尿病（GDM）',
+    'GDM': '妊娠期糖尿病（GDM）',
+    'Fetal Growth Restriction (FGR)': '胎儿生长受限（FGR）',
+    'Fetal Growth Restriction': '胎儿生长受限（FGR）',
+    'FGR': '胎儿生长受限（FGR）',
+    'Preeclampsia': '子痫前期',
+    'Gestational Hypertension': '妊娠期高血压',
+    'Hypertensive Disorders of Pregnancy': '妊娠期高血压疾病',
+    'Preterm Labor': '早产',
+    'Anemia in Pregnancy': '妊娠期贫血',
+    'Normal Pregnancy': '正常妊娠',
+  }
+  return map[condition] || condition
 }
 
 /** WebSocket 预警回调（仅处理 RED 级别） */

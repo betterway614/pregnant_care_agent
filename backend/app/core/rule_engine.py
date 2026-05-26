@@ -191,3 +191,16 @@ class RuleEngine:
 
 # 全局单例
 rule_engine = RuleEngine()
+
+# 规则ID → 消息映射（用于数据修复）
+RULE_MESSAGE_MAP: dict[str, str] = {rule.id: rule.message for rule in RULES}
+# 补充 FGR 相关规则
+RULE_MESSAGE_MAP.update({
+    "FGR_HIGH_RISK": "FGR评估结果: 高风险",
+    "FGR_MEDIUM_RISK": "FGR评估结果: 中风险",
+})
+
+
+def get_rule_message(rule_id: str) -> str | None:
+    """根据规则ID获取正确的消息文本"""
+    return RULE_MESSAGE_MAP.get(rule_id)

@@ -342,3 +342,11 @@ def auto_dismiss_alerts(db: Session = Depends(get_db)):
     db.commit()
     logger.info(f"自动关闭 {dismissed_count} 条超时预警")
     return {"message": f"自动关闭了 {dismissed_count} 条超时预警", "count": dismissed_count}
+
+
+@router.post("/repair-mismatched")
+def repair_mismatched_alerts(db: Session = Depends(get_db)):
+    """修复 rule_id 与 message 不匹配的预警记录（数据修复工具）"""
+    from ..services.alert_service import alert_service
+    repaired = alert_service.repair_mismatched_alerts(db)
+    return {"message": f"修复了 {repaired} 条不匹配的预警记录", "repaired": repaired}

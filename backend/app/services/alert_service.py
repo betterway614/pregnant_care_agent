@@ -118,4 +118,27 @@ class AlertService:
         logger.info("Agno预警分析完成: alert_id={}", alert.id)
 
 
+    @staticmethod
+    def repair_mismatched_alerts(db: Session) -> int:
+        """修复 rule_id 与 message 不匹配的预警记录，返回修复条数"""
+        from ..core.rule_engine import get_rule_message
+
+        repaired = 0
+        alerts = db.query(Alert).all()
+        for alert in alerts:
+            correct_message = get_rule_message(alert.rule_id)
+            if correct_message and alert.message != correct_message:
+                alert.message = correct_message
+                repaired += 1
+                logger.info(
+                    f"修复预警 {alert.id}: rule_id={alert.rule_id}, "
+                    f"旧消息='{alert.message}', 新消息='{correct_message}'"
+                )
+
+        if repaired:
+            db.commit()
+            logger.info(f"共修复 {repaired} 条不匹配的预警记录")
+        return repaired
+
+
 alert_service = AlertService()

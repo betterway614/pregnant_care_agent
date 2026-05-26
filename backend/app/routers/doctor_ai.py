@@ -476,21 +476,24 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
     differential_diagnosis = []
     if "FGR高危" in risk_tags:
         differential_diagnosis.append({
-            "condition": "胎儿生长受限(FGR)",
+            "condition": "胎儿生长受限（FGR）",
+            "confidence": 0.75 if fgr_list else 0.4,
             "supported_by": ["胎儿估重低于同孕周第10百分位" if fgr_list else "需进一步超声评估", "脐动脉血流异常可能"],
             "against": ["需排除孕周计算误差", "需排除遗传性小体格"],
             "tests_needed": ["胎儿超声生物物理评分", "脐动脉及大脑中动脉血流多普勒", "胎心监护(NST)"],
         })
     if "GDM" in risk_tags:
         differential_diagnosis.append({
-            "condition": "妊娠期糖尿病(GDM)",
+            "condition": "妊娠期糖尿病（GDM）",
+            "confidence": 0.7 if health_summary.get("blood_sugar") else 0.35,
             "supported_by": ["血糖监测异常" if health_summary.get("blood_sugar") else "需完善糖耐量检测"],
             "against": ["需排除饮食因素影响", "需排除应激性高血糖"],
             "tests_needed": ["75g OGTT", "糖化血红蛋白(HbA1c)", "空腹+餐后血糖监测"],
         })
     if "高血压" in risk_tags:
         differential_diagnosis.append({
-            "condition": "妊娠期高血压/子痫前期",
+            "condition": "妊娠期高血压疾病",
+            "confidence": 0.7 if health_summary.get("systolic") else 0.4,
             "supported_by": ["血压监测偏高" if health_summary.get("systolic") else "需动态血压监测"],
             "against": ["需排除白大衣高血压", "需排除慢性高血压合并妊娠"],
             "tests_needed": ["24小时动态血压", "尿蛋白定量", "肝肾功能", "血小板计数"],
@@ -498,6 +501,7 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
     if not differential_diagnosis:
         differential_diagnosis.append({
             "condition": "正常妊娠",
+            "confidence": 0.85,
             "supported_by": ["当前未发现明显异常指标"] if not risk_tags else ["需结合风险因素进一步评估"],
             "against": ["需持续监测各项指标"],
             "tests_needed": ["定期产检", "常规实验室检查"],

@@ -70,7 +70,8 @@ def _create_doctor_db():
 
 class DifferentialDiagnosis(BaseModel):
     """鉴别诊断条目"""
-    condition: str = Field(description="疑似疾病/情况名称")
+    condition: str = Field(description="疑似疾病/情况名称（请使用中文）")
+    confidence: float | None = Field(default=None, description="置信度（0-1之间的浮点数，可选）")
     supported_by: list[str] = Field(description="支持该考虑的依据")
     against: list[str] = Field(description="不支持/排除的依据")
     tests_needed: list[str] = Field(description="需要进一步完善的检查")

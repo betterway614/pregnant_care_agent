@@ -248,6 +248,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("Mock数据注入失败: {}", e)
 
+    # 修复可能存在 rule_id 与 message 不匹配的预警数据
+    try:
+        from .services.alert_service import alert_service
+        from .database import SessionLocal
+        db = SessionLocal()
+        repaired = alert_service.repair_mismatched_alerts(db)
+        if repaired:
+            logger.info(f"预警数据修复: 已修正 {repaired} 条不匹配记录")
+        db.close()
+    except Exception as e:
+        logger.warning(f"预警数据修复检查跳过: {e}")
+
     yield
     # 应用关闭
     if settings.fgr_mode:
