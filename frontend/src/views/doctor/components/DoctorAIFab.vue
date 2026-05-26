@@ -63,7 +63,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'risk_summary'"
               >
-                <p>{{ aiResult.risk_summary }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.risk_summary)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -75,7 +75,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'analysis'"
               >
-                <p>{{ aiResult.analysis }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.analysis)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -135,7 +135,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'suggested_orders'"
               >
-                <p>{{ aiResult.suggested_orders }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.suggested_orders)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -223,6 +223,7 @@ import {
   ISSUE_FILTER_OPTIONS,
 } from '@/config/agentFabTools'
 import { dashboardApi, doctorAiApi, collaborationApi } from '@/api/endpoints'
+import { renderMarkdown } from '@/utils/markdown'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)

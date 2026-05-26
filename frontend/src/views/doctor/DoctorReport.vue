@@ -53,7 +53,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Document, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
+import { renderMarkdown } from '@/utils/markdown'
 import {
   ToolActionBar,
   AnalysisResultCard,
@@ -93,10 +93,6 @@ const reportSections = computed((): ReportSection[] => {
     return { title, html: renderMarkdown(body.trim()) }
   })
 })
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text, { async: false }) as string
-}
 
 async function loadPatientList() {
   if (props.patients?.length) return

@@ -10,6 +10,7 @@ import router from './router'
 import './echarts' // 注册 ECharts 渲染器和组件
 import './styles/global.css'
 import './styles/patient-theme.css'
+import './styles/markdown.css'
 
 const app = createApp(App)
 

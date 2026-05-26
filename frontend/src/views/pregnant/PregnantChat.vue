@@ -142,9 +142,9 @@
                 <span class="thinking-text">{{ msg.thinkingMessage || '小安正在思考...' }}</span>
               </div>
               
-              <!-- 加载中 -->
+              <!-- 加载中（仅内容为空时显示） -->
               <div
-                v-else-if="msg.loading"
+                v-else-if="msg.loading && !msg.content"
                 class="message-bubble message-bubble--assistant message-bubble--loading"
               >
                 <span class="loading-dot" />
@@ -257,6 +257,16 @@
         <div ref="scrollAnchorRef" class="scroll-anchor" />
       </div>
     </div>
+
+    <!-- ==================== 工具调用步骤指示器 ==================== -->
+    <transition name="tool-slide">
+      <div v-if="activeToolStep" class="tool-step-indicator">
+        <div class="tool-step-indicator__icon">
+          <span class="tool-step-spinner"></span>
+        </div>
+        <span class="tool-step-indicator__text">{{ activeToolStep }}</span>
+      </div>
+    </transition>
 
     <!-- ==================== 3. 底部输入区 (灵动岛) ==================== -->
     <div class="input-container">
@@ -539,6 +549,18 @@ const fetusData = computed(() => {
 
 const fetusSize = computed(() => fetusData.value.size)
 
+/** 当前活跃的工具调用步骤（取最后一条正在加载的助手消息的 currentStep） */
+const activeToolStep = computed(() => {
+  if (!chatStore.streaming && !chatStore.loading) return null
+  const msgs = chatStore.messages
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant' && msgs[i].currentStep) {
+      return msgs[i].currentStep
+    }
+  }
+  return null
+})
+
 /* ==================== 工具函数 ==================== */
 function formatTime(ts: string): string {
   const d = new Date(ts)
@@ -720,7 +742,13 @@ async function handleSend() {
       })
     }
   } else {
-    chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
+    // 初始化消息为思考状态，等待 SSE 流返回
+    chatStore.updateMessage(loadingMsg.id, {
+      loading: true,
+      thinking: true,
+      thinkingMessage: '小安正在思考...',
+      content: '',
+    })
     chatStore.streaming = true
 
     const controller = new AbortController()
@@ -729,13 +757,18 @@ async function handleSend() {
     try {
       await postChatStream(req, {
         onThinking(message: string) {
-          chatStore.updateMessage(loadingMsg.id, { thinking: true, thinkingMessage: message })
+          chatStore.updateMessage(loadingMsg.id, {
+            thinking: true,
+            thinkingMessage: message,
+            currentStep: message !== '小安正在思考...' ? message : undefined,
+          })
         },
         onChunk(chunk: string) {
           const msg = chatStore.messages.find((m) => m.id === loadingMsg.id)
           if (msg) {
             msg.content += chunk
             msg.thinking = false
+            msg.currentStep = undefined
             chatStore.persist?.()
           }
           if (isAtBottom) scrollToBottom()
@@ -743,13 +776,21 @@ async function handleSend() {
         onDone(metadata: any) {
           chatStore.sessionId = metadata.session_id
           chatStore.updateMessage(loadingMsg.id, {
+            loading: false,
+            thinking: false,
+            currentStep: undefined,
+            toolSteps: metadata?.tool_steps || [],
             timestamp: new Date().toISOString(),
           })
         },
         onError(err: Error) {
           console.error('SSE error:', err)
           if (!loadingMsg.content) {
-            chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
+            chatStore.updateMessage(loadingMsg.id, {
+              loading: false,
+              thinking: false,
+              content: '抱歉，我暂时无法回复。请稍后再试。',
+            })
           }
         },
       }, controller.signal)
@@ -760,10 +801,16 @@ async function handleSend() {
           const data = res.data
           chatStore.sessionId = data.session_id
           chatStore.updateMessage(loadingMsg.id, {
+            loading: false,
+            thinking: false,
             content: data.content || '抱歉，我暂时无法回复，请稍后再试。',
           })
         } catch {
-          chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
+          chatStore.updateMessage(loadingMsg.id, {
+            loading: false,
+            thinking: false,
+            content: '抱歉，我暂时无法回复。请稍后再试。',
+          })
         }
       }
     } finally {
@@ -772,7 +819,11 @@ async function handleSend() {
     }
 
     if (!loadingMsg.content) {
-      chatStore.updateMessage(loadingMsg.id, { content: '抱歉，我暂时无法回复。请稍后再试。' })
+      chatStore.updateMessage(loadingMsg.id, {
+        loading: false,
+        thinking: false,
+        content: '抱歉，我暂时无法回复。请稍后再试。',
+      })
     }
   }
 
@@ -1000,7 +1051,12 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
     ...(followupRecordId.value ? { record_id: followupRecordId.value } : {}),
   }
 
-  chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
+  chatStore.updateMessage(loadingMsg.id, {
+    loading: true,
+    thinking: true,
+    thinkingMessage: '小安正在听取语音...',
+    content: '',
+  })
   chatStore.streaming = true
 
   const controller = new AbortController()
@@ -1028,6 +1084,8 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
       onDone(metadata: any) {
         chatStore.sessionId = metadata.session_id
         chatStore.updateMessage(loadingMsg.id, {
+          loading: false,
+          thinking: false,
           timestamp: new Date().toISOString(),
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
@@ -1054,6 +1112,8 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
   } catch {
     if (!loadingMsg.content) {
       chatStore.updateMessage(loadingMsg.id, {
+        loading: false,
+        thinking: false,
         content: '抱歉，语音处理失败，请稍后重试或使用文字输入。',
       })
     }
@@ -1135,7 +1195,12 @@ async function sendImageMessage(base64: string, imageFormat: string, fileName: s
     ...(followupRecordId.value ? { record_id: followupRecordId.value } : {}),
   }
 
-  chatStore.updateMessage(loadingMsg.id, { loading: false, content: '' })
+  chatStore.updateMessage(loadingMsg.id, {
+    loading: true,
+    thinking: true,
+    thinkingMessage: '小安正在听取语音...',
+    content: '',
+  })
   chatStore.streaming = true
 
   const controller = new AbortController()
@@ -1163,6 +1228,8 @@ async function sendImageMessage(base64: string, imageFormat: string, fileName: s
       onDone(metadata: any) {
         chatStore.sessionId = metadata.session_id
         chatStore.updateMessage(loadingMsg.id, {
+          loading: false,
+          thinking: false,
           timestamp: new Date().toISOString(),
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
@@ -1180,6 +1247,8 @@ async function sendImageMessage(base64: string, imageFormat: string, fileName: s
   } catch {
     if (!loadingMsg.content) {
       chatStore.updateMessage(loadingMsg.id, {
+        loading: false,
+        thinking: false,
         content: '抱歉，图片处理失败，请稍后重试。',
       })
     }
@@ -1589,6 +1658,49 @@ onMounted(async () => {
 }
 .thinking-text { font-size: 14px; font-weight: 600; color: #FB7185; }
 
+/* ---- 工具调用步骤指示器 ---- */
+.tool-step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  margin: 0 16px 8px;
+  background: rgba(251, 113, 133, 0.06);
+  border-radius: 14px;
+  border: 1px solid rgba(251, 113, 133, 0.12);
+  z-index: 8;
+}
+.tool-step-indicator__icon {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tool-step-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(251, 113, 133, 0.2);
+  border-top-color: #FB7185;
+  border-radius: 50%;
+  animation: tool-spin 0.8s linear infinite;
+}
+@keyframes tool-spin {
+  to { transform: rotate(360deg); }
+}
+.tool-step-indicator__text {
+  font-size: 13px;
+  color: #E11D48;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.tool-slide-enter-active,
+.tool-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tool-slide-enter-from,
+.tool-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
 /* 操作栏与时间 */
 .message-footer { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .message-footer--user { flex-direction: row-reverse; }
@@ -1982,6 +2094,330 @@ onMounted(async () => {
 }
 .image-source-item:active {
   background: #FFE4E6;
+}
+
+/* ==================== 紧急/随访横幅 ==================== */
+.emergency-banner {
+  grid-row: 1; grid-column: 1;
+  z-index: 20;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top, 10px));
+  background: linear-gradient(135deg, #FEF2F2 0%, #FECACA 100%);
+  color: #991B1B;
+  font-size: 13px; font-weight: 500;
+  border-bottom: 1px solid #FECACA;
+}
+.emergency-banner .banner-close {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.followup-banner {
+  grid-row: 2; grid-column: 1;
+  z-index: 19;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  border-bottom: 1px solid #C7D2FE;
+}
+.followup-banner__inner {
+  display: flex; flex-direction: column; gap: 8px;
+  font-size: 13px; font-weight: 500; color: #3730A3;
+}
+.followup-banner__header {
+  display: flex; align-items: center; gap: 8px;
+}
+.followup-banner__icon {
+  color: #6366F1;
+}
+.followup-banner__progress {
+  display: flex; align-items: center; gap: 10px;
+}
+.followup-banner__bar {
+  flex: 1;
+  height: 6px;
+  background: #C7D2FE;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.followup-banner__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366F1, #818CF8);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.followup-banner__count {
+  font-size: 11px; color: #6366F1; font-weight: 600;
+  white-space: nowrap;
+}
+.banner-slide-enter-active,
+.banner-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.banner-slide-enter-from,
+.banner-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+/* ==================== 📱 移动端响应式适配 ==================== */
+
+/* ---- 平板 / 小屏设备 (≤768px) ---- */
+@media (max-width: 768px) {
+  /* 导航栏 */
+  .chat-navbar {
+    padding: 8px 12px;
+    padding-top: max(8px, env(safe-area-inset-top, 8px));
+  }
+  .navbar-title { font-size: 15px; }
+  .navbar-btn { width: 40px; height: 40px; }
+
+  /* 用户信息栏 */
+  .user-info-bar {
+    padding: 6px 14px;
+    gap: 8px;
+  }
+  .user-name { font-size: 12px; }
+  .switch-btn { font-size: 10px; padding: 3px 8px; }
+
+  /* 消息容器：减少横向 padding，释放更多阅读空间 */
+  .messages-container {
+    padding: 12px 8px 6px;
+  }
+  .messages-inner {
+    gap: 18px;
+  }
+
+  /* 消息行：取消两侧强制留白 */
+  .message-row--assistant {
+    padding-right: 4px;
+  }
+  .message-row--user {
+    padding-left: 4px;
+  }
+  .message-row {
+    gap: 8px;
+  }
+  .assistant-avatar {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+  }
+
+  /* 消息气泡 */
+  .message-bubble { font-size: 14px; }
+  .message-bubble--user {
+    padding: 10px 14px;
+    border-radius: 16px 16px 4px 16px;
+  }
+  .bubble-markdown { font-size: 14px; }
+
+  /* 欢迎区域 */
+  .welcome-section { padding: 24px 8px 12px; }
+  .welcome-title { font-size: 18px; }
+  .welcome-desc { font-size: 13px; max-width: 260px; }
+
+  /* 孕周卡片 */
+  .week-card { padding: 12px 16px; }
+  .week-number { font-size: 14px; }
+  .days-remaining { font-size: 11px; }
+  .fetus-size { font-size: 12px; }
+  .fetus-mini { padding: 4px 10px; gap: 4px; }
+
+  /* 提示词 chips */
+  .prompt-chips {
+    gap: 6px;
+    padding-bottom: 10px;
+  }
+  .prompt-chip {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 16px;
+  }
+
+  /* 输入胶囊岛 */
+  .input-container {
+    padding: 0 10px 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+  }
+  .input-pill {
+    padding: 4px;
+    border-radius: 24px;
+    gap: 4px;
+  }
+  .toolbar-btn {
+    width: 36px; height: 36px;
+  }
+  .send-btn {
+    width: 36px; height: 36px;
+  }
+  .chat-input :deep(.el-textarea__inner) {
+    font-size: 14px;
+    padding: 8px 4px;
+  }
+  .input-hint { font-size: 10px; }
+
+  /* 图片气泡 */
+  .image-bubble { max-width: 200px; }
+
+  /* 消息操作栏：触摸设备始终可见 */
+  .message-actions { opacity: 0.6; }
+  .msg-action-btn { width: 32px; height: 32px; }
+
+  /* 横幅：移动端紧凑 */
+  .emergency-banner { padding: 8px 12px; font-size: 12px; }
+  .followup-banner { padding: 8px 12px; }
+  .followup-banner__inner { font-size: 12px; }
+  .followup-banner__bar { height: 5px; }
+
+  /* 编辑弹窗 */
+  .el-dialog { width: 95% !important; }
+}
+
+/* ---- 小屏手机 (≤480px) ---- */
+@media (max-width: 480px) {
+  .chat-navbar {
+    padding: 6px 10px;
+    padding-top: max(6px, env(safe-area-inset-top, 6px));
+  }
+  .navbar-title { font-size: 14px; }
+  .navbar-btn { width: 36px; height: 36px; }
+
+  /* 用户信息栏：更紧凑 */
+  .user-info-bar { padding: 4px 10px; gap: 6px; }
+  .user-action-btn { width: 32px; height: 32px; }
+
+  /* 消息容器 */
+  .messages-container {
+    padding: 10px 4px 4px;
+  }
+  .messages-inner { gap: 14px; }
+
+  .message-row { gap: 6px; }
+  .message-row--assistant { padding-right: 0; }
+  .message-row--user { padding-left: 0; }
+
+  .message-bubble { font-size: 13px; line-height: 1.55; }
+  .message-bubble--user {
+    padding: 8px 12px;
+    border-radius: 14px 14px 4px 14px;
+  }
+  .bubble-markdown { font-size: 13px; line-height: 1.55; }
+  .bubble-markdown :deep(ul),
+  .bubble-markdown :deep(ol) { padding-left: 16px; }
+
+  /* 欢迎区域 */
+  .welcome-section { padding: 16px 4px 8px; }
+  .welcome-title { font-size: 16px; }
+  .welcome-desc { font-size: 12px; max-width: 240px; }
+  .ai-avatar-wrapper { margin-bottom: 16px; }
+  .ai-halo { width: 100%; height: 100%; }
+
+  /* 孕周卡片 */
+  .week-card { padding: 10px 12px; border-radius: 16px; }
+  .week-number { font-size: 13px; }
+  .fetus-mini { padding: 3px 8px; border-radius: 10px; }
+
+  /* 提示词 chips */
+  .prompt-chip {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 14px;
+  }
+
+  /* 输入胶囊岛 */
+  .input-container {
+    padding: 0 6px 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+  }
+  .input-pill {
+    padding: 3px;
+    border-radius: 22px;
+    gap: 2px;
+  }
+  .toolbar-btn {
+    width: 32px; height: 32px;
+  }
+  .send-btn {
+    width: 32px; height: 32px;
+  }
+  .chat-input :deep(.el-textarea__inner) {
+    font-size: 13px;
+    padding: 7px 2px;
+  }
+  .input-hint { font-size: 10px; }
+
+  /* 图片气泡：全宽适配 */
+  .image-bubble { max-width: 180px; }
+
+  /* 消息操作按钮：更小 tap target */
+  .msg-action-btn { width: 28px; height: 28px; }
+
+  /* 思考中状态 */
+  .thinking-text { font-size: 12px; }
+
+  /* 消息时间 */
+  .message-time { font-size: 10px; }
+
+  /* 录音浮层：适配小屏高度 */
+  .record-overlay {
+    padding-bottom: 80px;
+  }
+  .cancel-zone {
+    padding: 12px 24px;
+    margin-bottom: 24px;
+  }
+  .cancel-zone__icon {
+    width: 40px; height: 40px;
+  }
+  .record-center__ring {
+    width: 72px; height: 72px;
+  }
+  .record-center__icon {
+    width: 52px; height: 52px;
+  }
+  .record-bar {
+    padding: 14px 28px;
+    min-width: 160px;
+  }
+  .record-bar__time { font-size: 16px; }
+
+  /* 音频气泡 */
+  .audio-bubble { gap: 6px; min-width: 130px; }
+  .audio-bubble__btn { width: 32px; height: 32px; }
+  .audio-bubble__dur { font-size: 11px; min-width: 30px; }
+  .audio-bubble__waveform { height: 30px; }
+  .audio-bubble__transcribe-btn { width: 24px; height: 24px; }
+
+  /* 语音转录文本 */
+  .audio-transcription {
+    margin-top: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  /* 横幅：小屏最紧凑 */
+  .emergency-banner { padding: 6px 10px; font-size: 11px; }
+  .followup-banner { padding: 6px 10px; }
+  .followup-banner__inner { font-size: 11px; }
+  .followup-banner__bar { height: 4px; }
+  .followup-banner__count { font-size: 10px; }
+}
+
+/* ---- 横屏手机 / 小屏设备高度优化 ---- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .chat-wrapper {
+    grid-template-rows: auto 1fr auto; /* 隐藏用户信息栏 */
+  }
+  .user-info-bar { display: none; }
+  .welcome-section { padding: 8px 16px 4px; }
+  .welcome-header { display: none; } /* 隐藏大头像以节省空间 */
+  .welcome-title { font-size: 14px; margin-bottom: 2px; }
+  .welcome-desc { font-size: 11px; margin-bottom: 0; }
+  .pregnancy-guide { display: none; } /* 隐藏孕周卡片 */
+  .messages-container { padding: 4px 8px 2px; }
+  .messages-inner { gap: 10px; }
+  .prompt-chips { padding-bottom: 6px; }
+  .prompt-chip { padding: 4px 10px; font-size: 11px; }
+  .input-container { padding: 0 8px 4px; }
 }
 
 </style>

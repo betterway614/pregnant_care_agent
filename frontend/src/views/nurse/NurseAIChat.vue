@@ -61,7 +61,7 @@
 
     <!-- 已完成的工具步骤 -->
     <transition name="fade">
-      <div v-if="completedToolSteps.length > 0 && isStreaming" class="nurse-chat__tool-steps">
+      <div v-if="completedToolSteps.length > 0" class="nurse-chat__tool-steps">
         <div
           v-for="(step, idx) in completedToolSteps"
           :key="idx"
