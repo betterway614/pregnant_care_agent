@@ -143,7 +143,16 @@
                     <span>{{ ruleNameMap(selectedAlert.rule_id || '') }}</span>
                   </div>
                   <p class="rule-card__desc">规则 ID: {{ selectedAlert.rule_id || 'N/A' }}</p>
-                  <p class="rule-card__desc" style="margin-top: 6px">{{ selectedAlert.message }}</p>
+                  <p class="rule-card__desc" style="margin-top: 6px">
+                    {{ ruleStandardMessage(selectedAlert.rule_id || '') || selectedAlert.message }}
+                  </p>
+                  <p
+                    v-if="ruleStandardMessage(selectedAlert.rule_id || '') && ruleStandardMessage(selectedAlert.rule_id || '') !== selectedAlert.message"
+                    class="rule-card__desc"
+                    style="margin-top: 4px; color: var(--warning); font-size: 12px"
+                  >
+                    ⚠ 数据库记录消息与规则不一致: "{{ selectedAlert.message }}"
+                  </p>
                 </div>
               </section>
 
@@ -152,7 +161,7 @@
                 <h4 class="detail-section__title">相关数据</h4>
                 <div class="data-table" v-if="hasDetails">
                   <div
-                    v-for="(value, key) in selectedAlert.details"
+                    v-for="[key, value] in detailEntries"
                     :key="key"
                     class="data-row"
                   >
@@ -329,33 +338,6 @@
                   >
                     <span class="chain-step__num">{{ idx + 1 }}</span>
                     <span class="chain-step__text">{{ step }}</span>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 鉴别诊断 -->
-              <section v-if="aiAnalysisResult.differential_diagnosis?.length" class="detail-section">
-                <h4 class="detail-section__title">
-                  <el-icon><FirstAidKit /></el-icon> 鉴别诊断
-                </h4>
-                <div class="diagnosis-list">
-                  <div
-                    v-for="(dx, idx) in aiAnalysisResult.differential_diagnosis"
-                    :key="idx"
-                    class="diagnosis-item"
-                  >
-                    <div class="diagnosis-item__header">
-                      <span class="diagnosis-item__condition">{{ diagnosisConditionLabel(dx.condition) }}</span>
-                      <el-tag
-                        v-if="isValidNumber(dx.confidence)"
-                        :type="confidenceType(dx.confidence)"
-                        size="small"
-                        effect="plain"
-                      >
-                        {{ (dx.confidence * 100).toFixed(0) }}%
-                      </el-tag>
-                    </div>
-                    <p v-if="dx.reasoning" class="diagnosis-item__reasoning">{{ dx.reasoning }}</p>
                   </div>
                 </div>
               </section>
@@ -648,7 +630,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Refresh, WarningFilled, Edit, FolderAdd,
   Select, ChatDotSquare, User, CircleCheck,
-  MagicStick, Guide, FirstAidKit, DocumentAdd,
+  MagicStick, Guide, DocumentAdd,
 } from '@element-plus/icons-vue'
 import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
@@ -735,11 +717,11 @@ function formatTime(t?: string): string {
 /** 预警来源文本 */
 function getTriggerSourceText(source: string): string {
   const map: Record<string, string> = {
-    fgr_assessment: 'FGR评估',
-    vital_signs: '生命体征',
-    lab_result: '检验结果',
-    symptom_check: '症状筛查',
-    followup: '随访',
+    RULE_ENGINE: '规则引擎',
+    FGR_ALGORITHM: 'FGR评估',
+    MANUAL: '人工创建',
+    EPDS_SCREENING: 'EPDS心理筛查',
+    FOLLOWUP: '随访',
   }
   return map[source] || source
 }
@@ -750,9 +732,8 @@ function getAlertStatusTag(status: string): 'danger' | 'warning' | 'success' | '
     pending: 'danger',
     escalated: 'danger',
     confirmed: 'warning',
-    downgraded: 'warning',
-    resolved: 'success',
     dismissed: 'info',
+    auto_dismissed: 'info',
   }
   return map[status.toLowerCase()] || 'info'
 }
@@ -763,9 +744,8 @@ function getAlertStatusText(status: string): string {
     pending: '待审核',
     escalated: '已升级(紧急)',
     confirmed: '已确认',
-    downgraded: '已降级',
-    resolved: '已解决',
     dismissed: '已忽略',
+    auto_dismissed: '已自动关闭',
   }
   return map[status.toLowerCase()] || status
 }
@@ -775,9 +755,19 @@ function isStatusActionable(status: string): boolean {
   return ['pending', 'escalated'].includes(status.toLowerCase())
 }
 
+/** 需要在"相关数据"区域隐藏的字段（已有独立展示区域或为内部字段） */
+const DETAIL_HIDDEN_KEYS = new Set(['history', 'source_role'])
+
 /** 是否有详情数据 */
 const hasDetails = computed(() => {
-  return selectedAlert.value?.details && Object.keys(selectedAlert.value.details).length > 0
+  if (!selectedAlert.value?.details) return false
+  return Object.keys(selectedAlert.value.details).some((k) => !DETAIL_HIDDEN_KEYS.has(k))
+})
+
+/** 过滤后的详情条目（排除已有独立展示区域的字段） */
+const detailEntries = computed(() => {
+  if (!selectedAlert.value?.details) return []
+  return Object.entries(selectedAlert.value.details).filter(([key]) => !DETAIL_HIDDEN_KEYS.has(key))
 })
 
 /** 按 pregnant_id + domain 分组的预警列表（折叠同患者同域预警） */
@@ -811,6 +801,9 @@ const groupedAlerts = computed(() => {
 /** 格式化详情键 */
 function formatDetailKey(key: string): string {
   const map: Record<string, string> = {
+    case_id: '病例编号',
+    risk_level: '风险等级',
+    risk_assessment: '风险评估',
     value: '测量值',
     threshold: '阈值',
     metric_code: '指标代码',
@@ -820,6 +813,12 @@ function formatDetailKey(key: string): string {
     confidence_interval: '置信区间',
     gestational_weeks: '孕周',
     risk_score: '风险评分',
+    action: '处理动作',
+    created_at: '创建时间',
+    triggered_rules: '触发规则列表',
+    source_role: '来源角色',
+    history: '处理记录',
+    llm_analysis: 'AI分析结果',
   }
   return map[key] || key
 }
@@ -832,7 +831,20 @@ function formatDetailValue(value: any): string {
     }
     return JSON.stringify(value)
   }
-  return String(value)
+  const str = String(value)
+  const actionMap: Record<string, string> = {
+    ALERT_NURSE: '通知护士',
+    ALERT_NURSE_AND_DOCTOR: '通知护士和医生',
+    ALERT_DOCTOR: '通知医生',
+    NOTE_NURSE: '记录备注',
+  }
+  const riskLevelMap: Record<string, string> = {
+    critical: '极高风险',
+    high: '高风险',
+    medium: '中风险',
+    low: '低风险',
+  }
+  return actionMap[str] || riskLevelMap[str] || str
 }
 
 /** 最近主诉 */
@@ -1142,19 +1154,6 @@ async function runDoctorAiAnalysis() {
   }
 }
 
-/** 鉴别诊断置信度颜色 */
-function confidenceType(confidence: number): 'danger' | 'warning' | 'info' {
-  if (!isValidNumber(confidence)) return 'info'
-  if (confidence >= 0.7) return 'danger'
-  if (confidence >= 0.4) return 'warning'
-  return 'info'
-}
-
-/** 判断是否为有效数值 */
-function isValidNumber(v: any): boolean {
-  return typeof v === 'number' && !isNaN(v) && isFinite(v)
-}
-
 /** 规则ID中文名称映射 */
 function ruleNameMap(ruleId: string): string {
   const map: Record<string, string> = {
@@ -1168,32 +1167,41 @@ function ruleNameMap(ruleId: string): string {
     RULE_WEIGHT_GAIN_SLOW: '体重增长过慢',
     RULE_FETAL_DROP: '胎动显著减少',
     RULE_FETAL_VERY_LOW: '胎动极少',
-    RULE_EMOTION_CRITICAL: '情绪评分严重偏高',
-    RULE_EMOTION_HIGH: '情绪评分偏高',
+    RULE_EMOTION_CRITICAL: '情绪评分严重偏低',
+    RULE_EMOTION_HIGH: '情绪评分偏低',
     RULE_SLEEP_SHORT: '睡眠不足',
+    FGR_CRITICAL_RISK: 'FGR极高风险',
     FGR_HIGH_RISK: 'FGR高风险',
     FGR_MEDIUM_RISK: 'FGR中风险',
+    EPDS_HIGH_RISK: 'EPDS心理筛查高风险',
+    NURSE_AI_ALERT: '护士AI分析预警',
   }
   return map[ruleId] || ruleId
 }
 
-/** 鉴别诊断条件名称中文映射（处理LLM返回英文的情况） */
-function diagnosisConditionLabel(condition: string): string {
+/** 规则ID对应的标准消息（与后端规则引擎保持一致） */
+function ruleStandardMessage(ruleId: string): string {
   const map: Record<string, string> = {
-    'Gestational Diabetes Mellitus (GDM)': '妊娠期糖尿病（GDM）',
-    'Gestational Diabetes Mellitus': '妊娠期糖尿病（GDM）',
-    'GDM': '妊娠期糖尿病（GDM）',
-    'Fetal Growth Restriction (FGR)': '胎儿生长受限（FGR）',
-    'Fetal Growth Restriction': '胎儿生长受限（FGR）',
-    'FGR': '胎儿生长受限（FGR）',
-    'Preeclampsia': '子痫前期',
-    'Gestational Hypertension': '妊娠期高血压',
-    'Hypertensive Disorders of Pregnancy': '妊娠期高血压疾病',
-    'Preterm Labor': '早产',
-    'Anemia in Pregnancy': '妊娠期贫血',
-    'Normal Pregnancy': '正常妊娠',
+    RULE_BP_HIGH: '血压异常升高（≥140/90mmHg）',
+    RULE_BP_HIGH_ORANGE: '血压偏高（≥135/85mmHg），需要关注',
+    RULE_BP_LOW: '血压偏低，需关注',
+    RULE_LATE_PREGNANCY_BP: '孕晚期血压偏高，子痫前期风险',
+    RULE_BS_POSTPRANDIAL_HIGH: '餐后血糖异常（>7.0mmol/L）',
+    RULE_BS_FASTING_HIGH: '空腹血糖偏高（>5.3mmol/L），建议复查',
+    RULE_WEIGHT_GAIN_FAST: '体重周增长过快（>2kg/周）',
+    RULE_WEIGHT_GAIN_SLOW: '体重增长过慢，需关注营养摄入',
+    RULE_FETAL_DROP: '胎动显著减少（低于平均50%）',
+    RULE_FETAL_VERY_LOW: '胎动极少（<3次/小时），请立即就医',
+    RULE_EMOTION_CRITICAL: '近7日情绪评分持续偏低（平均≤1.5分），建议心理干预',
+    RULE_EMOTION_HIGH: '近7日情绪评分偏低（平均≤2.0分），需关注心理状态',
+    RULE_SLEEP_SHORT: '睡眠不足5小时，建议改善睡眠',
+    FGR_CRITICAL_RISK: 'FGR评估结果: 极高风险',
+    FGR_HIGH_RISK: 'FGR评估结果: 高风险',
+    FGR_MEDIUM_RISK: 'FGR评估结果: 中风险',
+    EPDS_HIGH_RISK: 'EPDS心理健康筛查高风险，建议心理干预',
+    NURSE_AI_ALERT: '护士AI分析预警',
   }
-  return map[condition] || condition
+  return map[ruleId] || ''
 }
 
 /** WebSocket 预警回调（仅处理 RED 级别） */
@@ -1651,48 +1659,6 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(46, 125, 50, 0.25);
-}
-
-/* 鉴别诊断 */
-.diagnosis-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.diagnosis-item {
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  border: 1px solid var(--glass-border);
-  transition: all var(--transition-fast);
-}
-
-.diagnosis-item:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: rgba(255, 255, 255, 0.55);
-}
-
-.diagnosis-item__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.diagnosis-item__condition {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.diagnosis-item__reasoning {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.6;
-  margin: 0;
 }
 
 /* 建议医嘱 */

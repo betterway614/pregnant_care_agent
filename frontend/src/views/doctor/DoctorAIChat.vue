@@ -378,7 +378,7 @@ onMounted(() => {
   messages.value.push({
     id: genId(),
     role: 'assistant',
-    content: '您好！我是 **Dr.智**，您的AI临床助手。\n\n可以向我咨询：\n- 鉴别诊断\n- 治疗方案\n- 指南解读\n- 病例分析\n- 用药参考',
+    content: '您好！我是 **Dr.智**，您的AI临床助手。\n\n可以向我咨询：\n- 风险评估\n- 治疗方案参考\n- 指南解读\n- 病例分析\n- 用药参考',
   })
 })
 </script>

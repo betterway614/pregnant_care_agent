@@ -284,14 +284,14 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
             prefix = "[已升级]" if alert.level == "RED" and original_level != "RED" else "[紧急通知]"
             alert_data["message"] = f"{prefix} {alert.message}"
 
-        if source_role == "nurse" and review.action == "escalate":
+        if source_role == "nurse" and review.action == "nurse_escalate":
             if alert.level == "RED":
                 alert_data["message"] = f"[护士升级] {alert.message}"
 
         if source_role == "doctor" and review.action == "downgrade" and review.target_level != "GREEN":
             alert_data["message"] = f"[医生降级] {alert.message}"
 
-        if source_role == "nurse" and review.action == "appeal":
+        if source_role == "nurse" and review.action == "nurse_appeal":
             alert_data["message"] = f"[护士复议] {alert.message}"
             alert_details = alert.details or {}
             downgrade_entry = next(
@@ -350,3 +350,11 @@ def repair_mismatched_alerts(db: Session = Depends(get_db)):
     from ..services.alert_service import alert_service
     repaired = alert_service.repair_mismatched_alerts(db)
     return {"message": f"修复了 {repaired} 条不匹配的预警记录", "repaired": repaired}
+
+
+@router.post("/repair-details")
+def repair_alert_details(db: Session = Depends(get_db)):
+    """修复 details 字段格式，统一所有预警的 details 结构（数据修复工具）"""
+    from ..services.alert_service import alert_service
+    repaired = alert_service.repair_details(db)
+    return {"message": f"修复了 {repaired} 条预警的 details 字段", "repaired": repaired}

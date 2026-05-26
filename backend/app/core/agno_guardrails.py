@@ -75,6 +75,7 @@ class MedicalSafetyGuardrail:
         "诊断为", "诊断是", "确诊",
         "建议用药", "建议服用", "处方",
         "可以吃药", "应该吃药", "用药方案",
+        "治疗方案如下", "请按以下方案",
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:

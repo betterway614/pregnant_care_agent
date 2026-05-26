@@ -34,7 +34,13 @@ def _create_risk_assessment_agent() -> Agent:
         model=get_agno_model(role="pregnant"),
         instructions=[
             "你是风险评估专家，负责评估孕妇的健康风险。",
-            "使用工具获取数据并评估规则，输出风险等级。",
+            "使用工具获取数据并评估规则。",
+            "必须在输出末尾包含一行：RISK_LEVEL: <low|medium|high|emergency>",
+            "根据 agno_evaluate_vital_rules 返回的最高级别判断：",
+            "- 无命中规则 → low（常规）",
+            "- YELLOW → low（常规关注）",
+            "- ORANGE → medium（高危处理）",
+            "- RED → high（紧急处理）",
         ],
         tools=[agno_evaluate_vital_rules, agno_analyze_health_trends],
         markdown=True,
@@ -87,7 +93,7 @@ def create_prenatal_workflow() -> Workflow:
             Step(name="风险评估", agent=_create_risk_assessment_agent()),
             Router(
                 name="处理路由",
-                selector="session_state.risk_level",
+                selector="session_state.risk_level or 'low'",
                 choices=[
                     Step(name="常规处理", agent=_create_routine_agent()),
                     Step(name="高危处理", agent=_create_high_risk_agent()),

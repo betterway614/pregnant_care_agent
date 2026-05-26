@@ -288,7 +288,7 @@ def _analyze_health_trends_sync(pregnant_id: str) -> dict:
         ).first()
         gest_week = (pregnant.gestational_age_days // 7) if pregnant and pregnant.gestational_age_days else 0
 
-        two_weeks_ago = datetime.now() - timedelta(days=14)
+        two_weeks_ago = beijing_now() - timedelta(days=14)
         records = db.query(HealthDataPoint).filter(
             HealthDataPoint.pregnant_id == pregnant_id,
             HealthDataPoint.recorded_at >= two_weeks_ago,
@@ -337,11 +337,9 @@ async def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
     try:
         from ..core.agno_rag import agno_rag_engine
 
-        async def _search():
-            result = await agno_rag_engine.search(query, top_k=top_k)
-            return {"results": result, "count": len(result)}
-
-        return await _search()
+        # agno_rag_engine.search 是同步方法，直接调用
+        result = agno_rag_engine.search(query, top_k=top_k)
+        return {"results": result, "count": len(result)}
     except Exception as e:
         return {"results": [], "error": str(e)}
 
@@ -728,7 +726,11 @@ def agno_handle_issue(
 
     db = SessionLocal()
     try:
-        issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == UUID(issue_id)).first()
+        try:
+            issue_id_uuid = UUID(issue_id)
+        except (ValueError, AttributeError):
+            return {"error": "无效的问题ID"}
+        issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == issue_id_uuid).first()
         if not issue:
             return {"error": "问题不存在"}
 
@@ -760,7 +762,7 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             matched.append(guideline)
 
     if not matched:
-        matched = list(guidelines.values())[:3]
+        return {"topic": topic, "guidelines": [], "message": f"未找到与'{topic}'匹配的临床指南，建议查阅相关专业文献"}
 
     return {"topic": topic, "guidelines": matched}
 
@@ -812,9 +814,19 @@ TOOL_GROUPS: dict[str, list] = {
 }
 
 # 意图 → 工具组路由映射
+# NLU 返回的意图 → TOOL_GROUPS 的组名
 INTENT_TO_GROUP: dict[str, str] = {
-    "chat": "chat",
+    # NLU 引擎意图映射
+    "health_data_report": "record",
+    "emotion_express": "chat",
+    "knowledge_query": "qa",
+    "schedule_inquiry": "complex",
+    "emergency": "emergency",
+    "suicide_risk": "emergency",
     "greeting": "chat",
+    "unknown": "complex",
+    # 保留旧的直接映射（向后兼容）
+    "chat": "chat",
     "emotion": "chat",
     "record_weight": "record",
     "record_bp": "record",
@@ -823,7 +835,6 @@ INTENT_TO_GROUP: dict[str, str] = {
     "ask_knowledge": "qa",
     "ask_symptom": "qa",
     "ask_exam": "qa",
-    "emergency": "emergency",
 }
 
 

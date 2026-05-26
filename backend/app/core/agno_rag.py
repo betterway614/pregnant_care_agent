@@ -1,7 +1,9 @@
 """RAG 检索增强生成引擎（Agno 生产路径唯一实现）"""
+import logging
 from typing import Optional
 from sqlalchemy import text
 
+logger = logging.getLogger(__name__)
 
 class RAGEngine:
     """RAG引擎 - 向量检索 + LLM生成"""
@@ -61,7 +63,7 @@ class RAGEngine:
                 ]
             return self._keyword_search(db, query, top_k, category)
         except Exception as e:
-            print(f"Warning: vector search failed: {e}")
+            logger.warning("Vector search failed: %s", e)
             return []
         finally:
             db.close()

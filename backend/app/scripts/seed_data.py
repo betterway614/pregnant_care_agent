@@ -706,10 +706,12 @@ def seed_mental_health_screenings(db):
         else:
             answers = [3] * 10
 
-        # EPDS反向计分：Q3（自我责备）和Q10（自伤念头）为反向题（3→0, 2→1, 1→2, 0→3）
+        # EPDS反向计分：Q1、Q2为正向题，Q3-Q10为反向题（3→0, 2→1, 1→2, 0→3）
         reversed_answers = list(answers)
-        for rev_q in [2, 9]:  # 0-indexed: Q3→index 2, Q10→index 9
-            reversed_answers[rev_q] = 3 - answers[rev_q]
+        for q_idx in range(10):
+            q_id = q_idx + 1  # 1-indexed
+            if q_id not in (1, 2):
+                reversed_answers[q_idx] = 3 - answers[q_idx]
         total_score = sum(reversed_answers)
 
         # 风险等级（中国人群临界值9/10）

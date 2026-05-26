@@ -68,15 +68,6 @@ def _create_doctor_db():
 # ==================== 结构化输出子模型 ====================
 
 
-class DifferentialDiagnosis(BaseModel):
-    """鉴别诊断条目"""
-    condition: str = Field(description="疑似疾病/情况名称（请使用中文）")
-    confidence: float | None = Field(default=None, description="置信度（0-1之间的浮点数，可选）")
-    supported_by: list[str] = Field(description="支持该考虑的依据")
-    against: list[str] = Field(description="不支持/排除的依据")
-    tests_needed: list[str] = Field(description="需要进一步完善的检查")
-
-
 class FollowUpQuestion(BaseModel):
     """随访问题条目"""
     question: str = Field(description="问题文本")
@@ -90,6 +81,7 @@ class NurseAnalysisOutput(BaseModel):
     """护士分析结果 — 结构化输出"""
     summary: str = Field(description="综合概述（100-200字），概括孕妇当前整体状况")
     risk_assessment: str = Field(description="风险评估（100-200字），分析当前主要风险因素")
+    alert_level: str = Field(description="预警级别：RED（红色高危）、ORANGE（橙色预警）、YELLOW（黄色关注）或 NONE（无需预警）")
     nursing_suggestions: str = Field(description="护理建议（150-300字），具体的护理措施和健康教育要点")
     followup_focus: list[str] = Field(description="随访重点（3-5个项目），列出随访时需要特别关注的内容")
 
@@ -100,7 +92,6 @@ class DoctorAnalysisOutput(BaseModel):
     evidence_references: list[str] = Field(description="证据引用（3-5条），引用相关临床指南")
     suggested_orders: str = Field(description="建议医嘱（100-300字），具体的下一步处理建议")
     risk_summary: str = Field(description="风险摘要（50-100字），一句话总结当前核心风险和建议")
-    differential_diagnosis: list[DifferentialDiagnosis] = Field(description="鉴别诊断考虑（至少2-3项）")
     reasoning_chain: list[str] = Field(description="推理链，展示从数据到结论的逐步推理过程")
 
 
@@ -154,6 +145,8 @@ def format_structured_output_to_markdown(content: object) -> str | None:
             parts.append(f"## 综合概述\n\n{content.summary}")
         if content.risk_assessment:
             parts.append(f"## 风险评估\n\n{content.risk_assessment}")
+        if content.alert_level and content.alert_level != "NONE":
+            parts.append(f"## 预警级别\n\n{content.alert_level}")
         if content.nursing_suggestions:
             parts.append(f"## 护理建议\n\n{content.nursing_suggestions}")
         if content.followup_focus:
@@ -173,12 +166,6 @@ def format_structured_output_to_markdown(content: object) -> str | None:
             parts.append(f"## 建议医嘱\n\n{content.suggested_orders}")
         if content.risk_summary:
             parts.append(f"## 风险摘要\n\n{content.risk_summary}")
-        if content.differential_diagnosis:
-            items = "\n".join(
-                f"- **{d.condition}**: 支持依据: {', '.join(d.supported_by) if d.supported_by else '无'}; 排除依据: {', '.join(d.against) if d.against else '无'}; 需检查: {', '.join(d.tests_needed) if d.tests_needed else '无'}"
-                for d in content.differential_diagnosis
-            )
-            parts.append(f"## 鉴别诊断\n\n{items}")
         if content.reasoning_chain:
             items = "\n".join(f"- {step}" for step in content.reasoning_chain)
             parts.append(f"## 推理链\n\n{items}")

@@ -100,37 +100,6 @@
               </AnalysisResultCard>
 
               <AnalysisResultCard
-                v-if="aiResult.differential_diagnosis?.length"
-                id="section-differential_diagnosis"
-                title="鉴别诊断"
-                icon="FirstAidKit"
-                severity="warning"
-                role="doctor"
-                :default-expanded="firstSectionKey === 'differential_diagnosis'"
-              >
-                <div class="diagnosis-list">
-                  <div
-                    v-for="(dx, idx) in aiResult.differential_diagnosis"
-                    :key="idx"
-                    class="diagnosis-row"
-                  >
-                    <span class="diagnosis-row__condition">{{ dx.condition }}</span>
-                    <div class="diagnosis-row__details">
-                      <p v-if="dx.supported_by" class="diagnosis-row__detail">
-                        <strong>支持证据：</strong>{{ Array.isArray(dx.supported_by) ? dx.supported_by.join('；') : dx.supported_by }}
-                      </p>
-                      <p v-if="dx.against" class="diagnosis-row__detail">
-                        <strong>排除依据：</strong>{{ Array.isArray(dx.against) ? dx.against.join('；') : dx.against }}
-                      </p>
-                      <p v-if="dx.tests_needed" class="diagnosis-row__detail">
-                        <strong>建议检查：</strong>{{ Array.isArray(dx.tests_needed) ? dx.tests_needed.join('；') : dx.tests_needed }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </AnalysisResultCard>
-
-              <AnalysisResultCard
                 v-if="aiResult.suggested_orders"
                 id="section-suggested_orders"
                 title="建议医嘱"
@@ -165,7 +134,7 @@
               v-else
               :icon="MagicStick"
               role="doctor"
-              message="选择孕妇后点击「开始分析」，Dr.智将提供鉴别诊断、治疗建议等临床分析"
+              message="选择孕妇后点击「开始分析」，Dr.智将提供风险评估、治疗建议等临床分析"
             />
           </div>
 
@@ -465,44 +434,6 @@ onMounted(() => {
   line-height: 1.5;
   color: var(--text-secondary);
   padding-top: 2px;
-}
-
-.diagnosis-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diagnosis-row {
-  padding: 8px 10px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-}
-
-.diagnosis-row__condition {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-primary);
-  display: block;
-  margin-bottom: 4px;
-}
-
-.diagnosis-row__details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.diagnosis-row__detail {
-  margin: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.diagnosis-row__detail strong {
-  color: var(--text-secondary);
-  font-weight: 600;
 }
 
 .evidence-chips {

@@ -12,41 +12,6 @@
       </div>
     </div>
 
-    <!-- 鉴别诊断 -->
-    <div v-if="data.differential_diagnosis?.length" class="structured-card__section">
-      <div class="structured-card__section-label">
-        <el-icon :size="14"><FirstAidKit /></el-icon>
-        鉴别诊断
-      </div>
-      <div class="dx-list">
-        <details
-          v-for="(dx, idx) in data.differential_diagnosis"
-          :key="idx"
-          class="dx-item"
-          :open="idx === 0"
-        >
-          <summary class="dx-item__header">
-            <span class="dx-item__dot" />
-            <span class="dx-item__condition">{{ dx.condition }}</span>
-          </summary>
-          <div class="dx-item__body">
-            <div v-if="dx.supported_by" class="dx-item__row dx-item__row--support">
-              <span class="dx-item__tag">支持</span>
-              <span>{{ dx.supported_by }}</span>
-            </div>
-            <div v-if="dx.against" class="dx-item__row dx-item__row--against">
-              <span class="dx-item__tag">排除</span>
-              <span>{{ dx.against }}</span>
-            </div>
-            <div v-if="dx.tests_needed" class="dx-item__row dx-item__row--tests">
-              <span class="dx-item__tag">检查</span>
-              <span>{{ dx.tests_needed }}</span>
-            </div>
-          </div>
-        </details>
-      </div>
-    </div>
-
     <!-- 综合分析 -->
     <div v-if="data.analysis" class="structured-card__section">
       <div class="structured-card__section-label">
@@ -172,87 +137,6 @@ defineProps<{
   font-weight: 600;
   color: #991b1b;
   line-height: 1.5;
-}
-
-/* ---- 鉴别诊断 ---- */
-.dx-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dx-item {
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.dx-item__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-}
-
-.dx-item__header::-webkit-details-marker {
-  display: none;
-}
-
-.dx-item__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f59e0b;
-  flex-shrink: 0;
-}
-
-.dx-item__condition {
-  font-weight: 600;
-  font-size: 13px;
-  color: #1e293b;
-}
-
-.dx-item__body {
-  padding: 0 12px 10px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dx-item__row {
-  display: flex;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #475569;
-}
-
-.dx-item__tag {
-  flex-shrink: 0;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 18px;
-  text-transform: uppercase;
-}
-
-.dx-item__row--support .dx-item__tag {
-  background: rgba(34, 197, 94, 0.12);
-  color: #16a34a;
-}
-
-.dx-item__row--against .dx-item__tag {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-}
-
-.dx-item__row--tests .dx-item__tag {
-  background: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
 }
 
 /* ---- 推理链 ---- */

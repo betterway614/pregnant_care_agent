@@ -83,8 +83,9 @@ def _save_doctor_audit_log(
             db.rollback()
         finally:
             db.close()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("审计日志写入失败: %s", e)
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
@@ -236,11 +237,28 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
         from ..core.agno_structured import extract_structured_content
 
         risk_text = "、".join(risk_tags) if risk_tags else "无特殊风险"
+
+        # 提取活跃预警信息，传递给 LLM
+        active_alerts = [a for a in context.get("alerts_history", []) if a.get("status") == "PENDING"]
+        alert_context = ""
+        if active_alerts:
+            alert_lines = [
+                f"- [{a['level']}] {a['message']}（来源: {a.get('trigger_source', 'N/A')}）"
+                for a in active_alerts[:5]
+            ]
+            alert_context = (
+                f"\n\n【重要】该孕妇当前有 {len(active_alerts)} 条活跃预警：\n"
+                + "\n".join(alert_lines)
+                + "\n请在分析时重点关注这些预警涉及的指标。如果健康数据显示正常但与预警矛盾，"
+                  "请明确指出数据与预警的不一致之处，帮助医生判断预警是否仍然有效。"
+            )
+
         extra = f"\n\n医生关注点：{query}" if query else ""
         prompt = (
             f"请为孕妇 {pregnant.display_name}（孕{gest_week}周+{gest_day}天，风险：{risk_text}）"
             f"提供综合分析。请先调用工具获取数据，再输出结构化结果。"
-            f"注意：鉴别诊断(differential_diagnosis)和推理链(reasoning_chain)为必填字段，请基于数据认真分析。{extra}"
+            f"注意：本系统不提供诊断意见，无需输出鉴别诊断。请基于数据提供风险分析和建议。"
+            f"{alert_context}{extra}"
         )
 
         agent = get_doctor_analyze_agent()
@@ -268,7 +286,6 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             evidence_references=data.get("evidence_references", []),
             suggested_orders=data.get("suggested_orders", ""),
             risk_summary=data.get("risk_summary", ""),
-            differential_diagnosis=data.get("differential_diagnosis", []),
             reasoning_chain=data.get("reasoning_chain", []),
             source="llm",
         )
@@ -419,15 +436,22 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
             items = [f"{LAB_KEY_NAMES.get(k, k)}={v}" for k, v in lr.items()]
             analysis_parts.append(f"- 孕{gw}周：{', '.join(items)}")
 
-    # 预警总结
+    # 预警总结 — 与健康数据交叉对比
     alerts = context.get("alerts_history", [])
     if alerts:
-        analysis_parts.append("## 预警记录概要")
+        analysis_parts.append("## 预警与健康数据交叉分析")
         pending = [a for a in alerts if a["status"] == "PENDING"]
         if pending:
-            analysis_parts.append(f"- 当前活跃预警 {len(pending)} 条，需优先处理")
-            for a in pending[:3]:
-                analysis_parts.append(f"  - {a['level']}级：{a['message']}")
+            analysis_parts.append(f"- 当前活跃预警 {len(pending)} 条：")
+            for a in pending[:5]:
+                analysis_parts.append(f"  - [{a['level']}] {a['message']}")
+            # 检查是否存在健康数据与预警的矛盾
+            high_alerts = [a for a in pending if a.get("level") in ("RED", "ORANGE")]
+            if high_alerts and not risk_tags:
+                analysis_parts.append(
+                    "- ⚠️ 注意：存在高级别预警但无对应风险标签，建议医生复核预警的有效性，"
+                    "确认是否需要更新预警状态或重新评估风险等级"
+                )
 
     analysis = "\n\n".join(analysis_parts)
 
@@ -461,51 +485,21 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
     suggested_orders = "\n".join(order_items)
 
     # 风险摘要
+    # 提取活跃预警（在推理链中也会用到，提前定义）
+    pending_alerts = [a for a in alerts if a.get("status") == "PENDING"]
+    high_alerts = [a for a in pending_alerts if a.get("level") in ("RED", "ORANGE")]
+
     risk_summary_parts = [f"风险标签：{risk_text}"]
-    if alerts:
-        pending_alerts = [a for a in alerts if a["status"] == "PENDING"]
-        if pending_alerts:
-            risk_summary_parts.append(f"；活跃预警 {len(pending_alerts)} 条")
+    if pending_alerts:
+        risk_summary_parts.append(f"；活跃预警 {len(pending_alerts)} 条（其中高级别 {len(high_alerts)} 条）")
     if fgr_list:
         latest_fgr = fgr_list[0]
         if latest_fgr["risk_level"] in ("high", "critical"):
             risk_summary_parts.append("；FGR评估结果需紧急关注")
-    risk_summary = "".join(risk_summary_parts) + "。建议严格按医嘱随访，关注异常体征变化。"
-
-    # 鉴别诊断 — 基于风险标签和数据生成
-    differential_diagnosis = []
-    if "FGR高危" in risk_tags:
-        differential_diagnosis.append({
-            "condition": "胎儿生长受限（FGR）",
-            "confidence": 0.75 if fgr_list else 0.4,
-            "supported_by": ["胎儿估重低于同孕周第10百分位" if fgr_list else "需进一步超声评估", "脐动脉血流异常可能"],
-            "against": ["需排除孕周计算误差", "需排除遗传性小体格"],
-            "tests_needed": ["胎儿超声生物物理评分", "脐动脉及大脑中动脉血流多普勒", "胎心监护(NST)"],
-        })
-    if "GDM" in risk_tags:
-        differential_diagnosis.append({
-            "condition": "妊娠期糖尿病（GDM）",
-            "confidence": 0.7 if health_summary.get("blood_sugar") else 0.35,
-            "supported_by": ["血糖监测异常" if health_summary.get("blood_sugar") else "需完善糖耐量检测"],
-            "against": ["需排除饮食因素影响", "需排除应激性高血糖"],
-            "tests_needed": ["75g OGTT", "糖化血红蛋白(HbA1c)", "空腹+餐后血糖监测"],
-        })
-    if "高血压" in risk_tags:
-        differential_diagnosis.append({
-            "condition": "妊娠期高血压疾病",
-            "confidence": 0.7 if health_summary.get("systolic") else 0.4,
-            "supported_by": ["血压监测偏高" if health_summary.get("systolic") else "需动态血压监测"],
-            "against": ["需排除白大衣高血压", "需排除慢性高血压合并妊娠"],
-            "tests_needed": ["24小时动态血压", "尿蛋白定量", "肝肾功能", "血小板计数"],
-        })
-    if not differential_diagnosis:
-        differential_diagnosis.append({
-            "condition": "正常妊娠",
-            "confidence": 0.85,
-            "supported_by": ["当前未发现明显异常指标"] if not risk_tags else ["需结合风险因素进一步评估"],
-            "against": ["需持续监测各项指标"],
-            "tests_needed": ["定期产检", "常规实验室检查"],
-        })
+    if not risk_tags and not high_alerts:
+        risk_summary = "".join(risk_summary_parts) + "。建议常规产检随访。"
+    else:
+        risk_summary = "".join(risk_summary_parts) + "。建议严格按医嘱随访，关注异常体征变化。"
 
     # 推理链
     reasoning_chain = [
@@ -515,10 +509,30 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
     if fgr_list:
         latest_fgr = fgr_list[0]
         reasoning_chain.append(f"3. FGR评估显示{risk_level_map.get(latest_fgr['risk_level'], latest_fgr['risk_level'])}，需关注胎儿生长趋势")
-    if alerts:
-        pending_count = len([a for a in alerts if a["status"] == "PENDING"])
-        reasoning_chain.append(f"4. 存在{len(alerts)}条预警记录（{pending_count}条待处理），需结合临床综合判断")
-    reasoning_chain.append(f"5. 综合以上信息，给出鉴别诊断和诊疗建议供医生参考")
+
+    # 活跃预警检查 — 与健康数据交叉验证
+    if high_alerts:
+        alert_summary = "；".join(f"{a['level']}级: {a['message']}" for a in high_alerts[:3])
+        reasoning_chain.append(
+            f"4. 存在 {len(high_alerts)} 条高级别活跃预警：{alert_summary}"
+        )
+        reasoning_chain.append(
+            "5. 综合判断：请医生结合预警信息和当前健康数据进行复核。"
+            "若健康数据正常但预警仍存在，需评估预警是否已失效或需重新评估风险等级"
+        )
+    elif pending_alerts:
+        reasoning_chain.append(
+            f"4. 存在 {len(pending_alerts)} 条活跃预警（均为低级别），需持续关注"
+        )
+        if not risk_tags:
+            reasoning_chain.append("5. 综合以上信息，无高风险标签，建议常规产检随访，并关注预警变化")
+        else:
+            reasoning_chain.append("5. 综合以上信息，存在风险因素需关注，请结合临床综合判断")
+    else:
+        if not risk_tags:
+            reasoning_chain.append("5. 综合以上信息，孕妇当前各项指标在正常范围内，无特殊风险，建议常规产检随访")
+        else:
+            reasoning_chain.append("5. 综合以上信息，存在风险因素需关注，请结合临床综合判断")
 
     return DoctorAnalyzeResponse(
         pregnant_id=pregnant.pregnant_id,
@@ -526,7 +540,6 @@ def _fallback_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
         evidence_references=evidence_references[:5],
         suggested_orders=suggested_orders,
         risk_summary=risk_summary,
-        differential_diagnosis=differential_diagnosis,
         reasoning_chain=reasoning_chain,
         source="template",
     )
@@ -665,7 +678,8 @@ async def doctor_chat_stream(req: dict):
                 if fallback_text:
                     yield {"event": "chunk", "data": fallback_text}
         except Exception as e:
-            yield {"event": "error", "data": str(e)}
+            logger.error("Doctor chat stream error: {}", e)
+            yield {"event": "error", "data": "服务内部错误，请稍后重试"}
         yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}
 
     return EventSourceResponse(agno_event_generator())

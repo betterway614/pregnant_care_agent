@@ -11,15 +11,16 @@ export interface Pregnant {
   lmp_date?: string
   edd?: string
   risk_tags: string[]
+  avatar_url?: string
   created_at?: string
 }
 
-// 主页响应
+// 主页响应（对应后端 PregnantHomeData）
 export interface HomeResponse {
   pregnant: Pregnant
-  gestational_week: number
+  gestational_week: string       // 后端返回字符串如 "24+3"
   gestational_day: number
-  baby_info: string
+  baby_info: Record<string, any> // 后端返回dict: {size, weight, milestone, ...}
   today_tasks: TaskItem[]
   upcoming_checks: CheckItem[]
   recommendations: Recommendations
@@ -27,21 +28,16 @@ export interface HomeResponse {
 }
 
 export interface TaskItem {
-  id: string
   type: string
   title: string
-  description: string
-  is_completed: boolean
-  is_urgent?: boolean
+  time?: string
+  status?: string
 }
 
 export interface CheckItem {
-  id: string
   date: string
-  item_name: string
-  check_type?: string
-  status: string
-  notes?: string
+  item: string
+  type?: string
 }
 
 export interface Recommendations {
@@ -51,20 +47,24 @@ export interface Recommendations {
   warning_signs: string
 }
 
+// 对应后端 _get_health_summary 返回的字段
 export interface HealthSummary {
-  latest_weight?: number
-  latest_blood_pressure?: string
-  latest_fetal_movement?: number
-  weight_trend?: string
+  weight_kg?: number
+  bp?: string
+  fetal_movement?: number
+  last_record_date?: string
 }
 
-// 推荐响应
+// 推荐响应（对应后端 RecommendResponse）
 export interface RecommendResponse {
-  id: string
-  content: string
-  categories: string[]
-  created_at?: string
-  source?: string
+  pregnant_id: string
+  gestational_week: string
+  weekly_tips: string
+  diet_advice: string
+  exercise_advice: string
+  warning_signs: string
+  baby_development: string
+  source: string
 }
 
 // 健康数据点
@@ -124,6 +124,7 @@ export interface Alert {
   pregnant_id: string
   trigger_source: string
   rule_id?: string
+  domain?: string
   level: string
   message: string
   details: Record<string, any>

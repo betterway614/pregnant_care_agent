@@ -89,13 +89,14 @@ class Rule:
         """评估规则是否命中（安全版本，不使用eval）"""
         try:
             variables = {
-                "sbp": context.get("sbp", 0) or 0,
-                "dbp": context.get("dbp", 0) or 0,
+                "sbp": context.get("sbp"),  # None if not measured
+                "dbp": context.get("dbp"),  # None if not measured
                 "weight": context.get("weight", 0) or 0,
                 "fetal_movement": context.get("fetal_movement", 0) or 0,
                 "fetal_movement_avg": context.get("fetal_movement_avg", context.get("fetal_movement", 0)) or context.get("fetal_movement", 0),
-                "weight_gain_weekly": context.get("weight_gain_weekly", 0) or 0,
-                "emotion_score": context.get("emotion_score_avg_7d", 0) or 0,
+                "fetal_drop_threshold": (context.get("fetal_movement_avg", context.get("fetal_movement", 0)) or context.get("fetal_movement", 0)) * 0.5,
+                "weight_gain_weekly": context.get("weight_gain_weekly"),  # None if not computed
+                "emotion_score": context.get("emotion_score_avg_7d"),  # None if not available
                 "emotion_score_avg_7d": context.get("emotion_score_avg_7d", 0) or 0,
                 "blood_sugar_fasting": context.get("blood_sugar_fasting", 0) or 0,
                 "blood_sugar_postprandial": context.get("blood_sugar_postprandial", 0) or 0,
@@ -128,16 +129,16 @@ RULES = [
          "体重增长过慢，需关注营养摄入", "NOTE_NURSE"),
 
     # === 胎儿 (fetal) ===
-    Rule("RULE_FETAL_DROP", "fetal", 3, "fetal_movement < fetal_movement_avg * 0.5", "RED",
+    Rule("RULE_FETAL_DROP", "fetal", 3, "fetal_movement < fetal_drop_threshold", "RED",
          "胎动显著减少（低于平均50%）", "ALERT_NURSE_AND_DOCTOR"),
     Rule("RULE_FETAL_VERY_LOW", "fetal", 3, "fetal_movement < 3", "RED",
          "胎动极少（<3次/小时），请立即就医", "ALERT_NURSE_AND_DOCTOR"),
 
     # === 心理行为 (mental) ===
-    Rule("RULE_EMOTION_CRITICAL", "mental", 2, "emotion_score_avg_7d >= 9", "ORANGE",
-         "情绪评分严重偏高，建议心理干预", "ALERT_NURSE"),
-    Rule("RULE_EMOTION_HIGH", "mental", 1, "emotion_score_avg_7d >= 7", "YELLOW",
-         "近7日情绪评分偏高，需关注心理状态", "NOTE_NURSE"),
+    Rule("RULE_EMOTION_CRITICAL", "mental", 2, "emotion_score_avg_7d <= 1.5", "ORANGE",
+         "近7日情绪评分持续偏低（平均≤1.5分），建议心理干预", "ALERT_NURSE"),
+    Rule("RULE_EMOTION_HIGH", "mental", 1, "emotion_score_avg_7d <= 2.0", "YELLOW",
+         "近7日情绪评分偏低（平均≤2.0分），需关注心理状态", "NOTE_NURSE"),
     Rule("RULE_SLEEP_SHORT", "mental", 1, "sleep_hours < 5", "YELLOW",
          "睡眠不足5小时，建议改善睡眠", "NOTE_NURSE"),
 ]
@@ -172,16 +173,26 @@ class RuleEngine:
     def evaluate_fgr_risk(self, risk_level: str) -> list[dict]:
         """FGR风险等级触发规则"""
         alerts = []
-        if risk_level in ("high", "critical"):
+        if risk_level == "critical":
+            alerts.append({
+                "rule_id": "FGR_CRITICAL_RISK",
+                "domain": "fetal",
+                "level": "RED",
+                "message": "FGR评估结果: 极高风险",
+                "action": "ALERT_DOCTOR",
+            })
+        elif risk_level == "high":
             alerts.append({
                 "rule_id": "FGR_HIGH_RISK",
-                "level": "RED" if risk_level == "critical" else "ORANGE",
-                "message": f"FGR评估结果: {risk_level}风险",
+                "domain": "fetal",
+                "level": "ORANGE",
+                "message": "FGR评估结果: 高风险",
                 "action": "ALERT_DOCTOR",
             })
         elif risk_level == "medium":
             alerts.append({
                 "rule_id": "FGR_MEDIUM_RISK",
+                "domain": "fetal",
                 "level": "YELLOW",
                 "message": "FGR评估结果: 中风险",
                 "action": "ALERT_NURSE",
@@ -192,15 +203,28 @@ class RuleEngine:
 # 全局单例
 rule_engine = RuleEngine()
 
-# 规则ID → 消息映射（用于数据修复）
-RULE_MESSAGE_MAP: dict[str, str] = {rule.id: rule.message for rule in RULES}
+# 规则元数据映射（用于数据修复）
+RULE_META_MAP: dict[str, dict] = {
+    rule.id: {"message": rule.message, "level": rule.level, "domain": rule.domain}
+    for rule in RULES
+}
 # 补充 FGR 相关规则
-RULE_MESSAGE_MAP.update({
-    "FGR_HIGH_RISK": "FGR评估结果: 高风险",
-    "FGR_MEDIUM_RISK": "FGR评估结果: 中风险",
+RULE_META_MAP.update({
+    "FGR_CRITICAL_RISK": {"message": "FGR评估结果: 极高风险", "level": "RED", "domain": "fetal"},
+    "FGR_HIGH_RISK": {"message": "FGR评估结果: 高风险", "level": "ORANGE", "domain": "fetal"},
+    "FGR_MEDIUM_RISK": {"message": "FGR评估结果: 中风险", "level": "YELLOW", "domain": "fetal"},
+    "EPDS_HIGH_RISK": {"message": "EPDS筛查高风险，建议心理干预", "level": "ORANGE", "domain": "mental"},
+    "NURSE_AI_ALERT": {"message": "护士AI分析预警", "level": "ORANGE", "domain": "vital"},
 })
 
 
 def get_rule_message(rule_id: str) -> str | None:
     """根据规则ID获取正确的消息文本"""
-    return RULE_MESSAGE_MAP.get(rule_id)
+    meta = RULE_META_MAP.get(rule_id)
+    return meta["message"] if meta else None
+
+
+def get_rule_level(rule_id: str) -> str | None:
+    """根据规则ID获取正确的风险级别"""
+    meta = RULE_META_MAP.get(rule_id)
+    return meta["level"] if meta else None

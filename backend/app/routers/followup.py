@@ -311,12 +311,14 @@ async def ai_review_followup(record_id: str):
 
 @router.put("/records/{record_id}")
 async def update_record(record_id: str, data: dict, db: Session = Depends(get_db)):
-    """更新随访记录"""
+    """更新随访记录（仅允许更新安全字段）"""
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
+    # 白名单：仅允许更新这些字段
+    allowed_fields = {"summary", "classification", "health_education", "nurse_notes"}
     for key, value in data.items():
-        if hasattr(record, key):
+        if key in allowed_fields and hasattr(record, key):
             setattr(record, key, value)
     db.commit()
     return {"message": "更新成功"}
@@ -553,6 +555,57 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
             # 添加孕周
             if pregnant and pregnant.gestational_age_days:
                 context["gest_week"] = pregnant.gestational_age_days // 7
+
+            # 补充查询聚合字段（规则引擎依赖这些历史数据）
+            if context:
+                from sqlalchemy import func
+                from datetime import timedelta
+                from ..utils.timezone import beijing_now
+                now = beijing_now()
+                week_ago = now - timedelta(days=7)
+                two_weeks_ago = now - timedelta(days=14)
+
+                # 补充当前随访未采集但规则引擎需要的指标
+                existing_keys = set(context.keys())
+
+                # 胎动平均值（近7天）
+                if "fetal_movement_avg" not in existing_keys:
+                    fm_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "fetal_movement",
+                        HealthDataPoint.recorded_at >= week_ago,
+                    ).scalar()
+                    if fm_avg:
+                        context["fetal_movement_avg"] = float(fm_avg)
+
+                # 体重周增长
+                if "weight_gain_weekly" not in existing_keys and "weight" in context:
+                    weight_prev = db.query(HealthDataPoint).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "weight",
+                        HealthDataPoint.recorded_at <= two_weeks_ago,
+                    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+                    if weight_prev and weight_prev.value > 0:
+                        context["weight_gain_weekly"] = (context["weight"] - weight_prev.value) / 2.0
+
+                # 情绪评分平均值（近7天）
+                if "emotion_score_avg_7d" not in existing_keys:
+                    emotion_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "emotion_score",
+                        HealthDataPoint.recorded_at >= week_ago,
+                    ).scalar()
+                    if emotion_avg:
+                        context["emotion_score_avg_7d"] = float(emotion_avg)
+
+                # 睡眠时长
+                if "sleep_hours" not in existing_keys:
+                    sleep = db.query(HealthDataPoint).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "sleep_hours",
+                    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+                    if sleep:
+                        context["sleep_hours"] = sleep.value
 
             # 调用规则引擎评估
             if context:

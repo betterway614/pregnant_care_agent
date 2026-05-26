@@ -354,9 +354,11 @@ async def _auto_evaluate_alerts(pregnant_id: str):
 def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:
     """构建规则引擎评估上下文，从数据库查询最新健康数据"""
     from datetime import timedelta
+    from ..utils.timezone import beijing_now
     from sqlalchemy import func
 
     context = {"gest_week": gest_week}
+    now = beijing_now()
 
     # 最新血压
     sbp = db.query(HealthDataPoint).filter(
@@ -381,7 +383,7 @@ def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:
         context["fetal_movement"] = fm.value
 
     # 近7天胎动平均值
-    week_ago = datetime.now() - timedelta(days=7)
+    week_ago = now - timedelta(days=7)
     fm_avg = db.query(func.avg(HealthDataPoint.value)).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
         HealthDataPoint.metric_code == "fetal_movement",
@@ -397,7 +399,7 @@ def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:
     ).order_by(HealthDataPoint.recorded_at.desc()).first()
     if weight:
         context["weight"] = weight.value
-    two_weeks_ago = datetime.now() - timedelta(days=14)
+    two_weeks_ago = now - timedelta(days=14)
     weight_prev = db.query(HealthDataPoint).filter(
         HealthDataPoint.pregnant_id == pregnant_id,
         HealthDataPoint.metric_code == "weight",
