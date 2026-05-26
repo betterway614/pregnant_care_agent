@@ -38,12 +38,12 @@ function normalizeMarkdown(content: string): string {
   result = result.replace(/([^\n#])(#{1,3})\s/g, '$1\n$2 ')
   // 2. 水平分割线 --- 前确保有换行
   result = result.replace(/([^\n])---(\s*)$/gm, '$1\n---$2')
-  // 3. 无序列表标记 * + 空格 紧跟 CJK 字符或标点时补换行（避免影响 **粗体** 闭合）
-  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》\.!?;:])(\*)\s/g, '$1\n$2 ')
-  // 4. 无序列表标记 - + 空格 同理
-  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》\.!?;:])(-)\s/g, '$1\n$2 ')
-  // 5. 有序列表 数字. 紧跟 CJK 字符或标点时补换行
-  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》])(\d+)\.\s/g, '$1\n$2. ')
+  // 3. 无序列表 * + 空格（允许标点与 * 之间有空格，如 "： * 西红柿"）
+  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》\.!?;:])\s*(\*)\s/g, '$1\n$2 ')
+  // 4. 无序列表 - + 空格 同理
+  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》\.!?;:])\s*(-)\s/g, '$1\n$2 ')
+  // 5. 有序列表 数字. + 空格（允许标点与数字之间有空格）
+  result = result.replace(/([一-鿿　-〿＀-￯。！？；：）」】》])\s*(\d+)\.\s/g, '$1\n$2. ')
   // 6. 冒号后紧跟 ### 的双重保障
   result = result.replace(/([：:])(#{1,3})\s/g, '$1\n$2 ')
   return result
