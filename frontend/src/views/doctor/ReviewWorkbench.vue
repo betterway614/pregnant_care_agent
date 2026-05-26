@@ -888,7 +888,7 @@ async function selectAlert(alert: Alert) {
 async function loadAlerts() {
   loading.value = true
   try {
-    const params: any = {}
+    const params: any = { level: 'RED' }
     if (!showHistorical.value) {
       params.status = 'pending,escalated'
     }
