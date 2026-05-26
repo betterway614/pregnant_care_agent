@@ -1,0 +1,666 @@
+{
+    "foreground_mean": {
+        "Dice": 0.7215895458265911,
+        "FN": 12847.5,
+        "FP": 16155.925,
+        "IoU": 0.5820322665368064,
+        "TN": 562050.825,
+        "TP": 43173.95,
+        "n_pred": 59329.875,
+        "n_ref": 56021.45
+    },
+    "mean": {
+        "1": {
+            "Dice": 0.7215895458265911,
+            "FN": 12847.5,
+            "FP": 16155.925,
+            "IoU": 0.5820322665368064,
+            "TN": 562050.825,
+            "TP": 43173.95,
+            "n_pred": 59329.875,
+            "n_ref": 56021.45
+        }
+    },
+    "metric_per_case": [
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8050399370007875,
+                    "FN": 3313,
+                    "FP": 3619,
+                    "IoU": 0.6736961024289211,
+                    "TN": 458756,
+                    "TP": 14312,
+                    "n_pred": 17931,
+                    "n_ref": 17625
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0000.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0000.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8775326279248306,
+                    "FN": 2480,
+                    "FP": 1189,
+                    "IoU": 0.781788985369335,
+                    "TN": 463186,
+                    "TP": 13145,
+                    "n_pred": 14334,
+                    "n_ref": 15625
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0001.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0001.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7839205382690254,
+                    "FN": 34883,
+                    "FP": 75977,
+                    "IoU": 0.6446293708087037,
+                    "TN": 655916,
+                    "TP": 201096,
+                    "n_pred": 277073,
+                    "n_ref": 235979
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0002.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0002.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8026326751645422,
+                    "FN": 4510,
+                    "FP": 228,
+                    "IoU": 0.6703311995546897,
+                    "TN": 465628,
+                    "TP": 9634,
+                    "n_pred": 9862,
+                    "n_ref": 14144
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0003.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0003.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7815486453468726,
+                    "FN": 20572,
+                    "FP": 4641,
+                    "IoU": 0.6414278603427434,
+                    "TN": 409685,
+                    "TP": 45102,
+                    "n_pred": 49743,
+                    "n_ref": 65674
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0004.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0004.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6809817501642991,
+                    "FN": 10290,
+                    "FP": 40194,
+                    "IoU": 0.5162792480309679,
+                    "TN": 375634,
+                    "TP": 53882,
+                    "n_pred": 94076,
+                    "n_ref": 64172
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0005.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0005.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7019237305417715,
+                    "FN": 3454,
+                    "FP": 9701,
+                    "IoU": 0.5407415165479682,
+                    "TN": 939228,
+                    "TP": 15489,
+                    "n_pred": 25190,
+                    "n_ref": 18943
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0006.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0006.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.9040970356541141,
+                    "FN": 9870,
+                    "FP": 23828,
+                    "IoU": 0.8249790949272088,
+                    "TN": 775335,
+                    "TP": 158839,
+                    "n_pred": 182667,
+                    "n_ref": 168709
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0007.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0007.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8446209084519083,
+                    "FN": 6692,
+                    "FP": 1487,
+                    "IoU": 0.7310335755861751,
+                    "TN": 937463,
+                    "TP": 22230,
+                    "n_pred": 23717,
+                    "n_ref": 28922
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0008.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0008.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5851394140612991,
+                    "FN": 12710,
+                    "FP": 14280,
+                    "IoU": 0.41356683469494177,
+                    "TN": 921848,
+                    "TP": 19034,
+                    "n_pred": 33314,
+                    "n_ref": 31744
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0009.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0009.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6213390961289593,
+                    "FN": 5468,
+                    "FP": 54808,
+                    "IoU": 0.4506830464143481,
+                    "TN": 581471,
+                    "TP": 49453,
+                    "n_pred": 104261,
+                    "n_ref": 54921
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0010.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0010.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6648601825733514,
+                    "FN": 2155,
+                    "FP": 12934,
+                    "IoU": 0.49797045515038596,
+                    "TN": 937816,
+                    "TP": 14967,
+                    "n_pred": 27901,
+                    "n_ref": 17122
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0011.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0011.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8574911741548777,
+                    "FN": 4459,
+                    "FP": 1152,
+                    "IoU": 0.7505335230304108,
+                    "TN": 457508,
+                    "TP": 16881,
+                    "n_pred": 18033,
+                    "n_ref": 21340
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0012.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0012.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8471691067588623,
+                    "FN": 6627,
+                    "FP": 5242,
+                    "IoU": 0.7348598235228415,
+                    "TN": 435235,
+                    "TP": 32896,
+                    "n_pred": 38138,
+                    "n_ref": 39523
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0013.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0013.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8887138590791244,
+                    "FN": 2772,
+                    "FP": 619,
+                    "IoU": 0.7997164963676097,
+                    "TN": 463069,
+                    "TP": 13540,
+                    "n_pred": 14159,
+                    "n_ref": 16312
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0014.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0014.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8377409948790855,
+                    "FN": 10614,
+                    "FP": 22941,
+                    "IoU": 0.7207868394118675,
+                    "TN": 359823,
+                    "TP": 86622,
+                    "n_pred": 109563,
+                    "n_ref": 97236
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0015.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0015.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6258634538152611,
+                    "FN": 13020,
+                    "FP": 19586,
+                    "IoU": 0.45545943418283846,
+                    "TN": 907994,
+                    "TP": 27272,
+                    "n_pred": 46858,
+                    "n_ref": 40292
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0016.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0016.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8955091521290305,
+                    "FN": 3811,
+                    "FP": 3730,
+                    "IoU": 0.8107891105256555,
+                    "TN": 402513,
+                    "TP": 32314,
+                    "n_pred": 36044,
+                    "n_ref": 36125
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0017.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0017.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5851504028580689,
+                    "FN": 40328,
+                    "FP": 14713,
+                    "IoU": 0.41357781352880385,
+                    "TN": 386141,
+                    "TP": 38818,
+                    "n_pred": 53531,
+                    "n_ref": 79146
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0018.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0018.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5074402730375427,
+                    "FN": 12506,
+                    "FP": 1926,
+                    "IoU": 0.3399798774352877,
+                    "TN": 458134,
+                    "TP": 7434,
+                    "n_pred": 9360,
+                    "n_ref": 19940
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0019.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0019.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5768446799836935,
+                    "FN": 453,
+                    "FP": 7851,
+                    "IoU": 0.40532798625035804,
+                    "TN": 466036,
+                    "TP": 5660,
+                    "n_pred": 13511,
+                    "n_ref": 6113
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0020.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0020.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7020609476836357,
+                    "FN": 7588,
+                    "FP": 869,
+                    "IoU": 0.5409044025840074,
+                    "TN": 461579,
+                    "TP": 9964,
+                    "n_pred": 10833,
+                    "n_ref": 17552
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0021.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0021.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.4383219954648526,
+                    "FN": 23108,
+                    "FP": 11570,
+                    "IoU": 0.2806737331203717,
+                    "TN": 431791,
+                    "TP": 13531,
+                    "n_pred": 25101,
+                    "n_ref": 36639
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0022.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0022.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5902495647127104,
+                    "FN": 2066,
+                    "FP": 6406,
+                    "IoU": 0.41869081926718815,
+                    "TN": 427794,
+                    "TP": 6102,
+                    "n_pred": 12508,
+                    "n_ref": 8168
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0023.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0023.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7942694144418448,
+                    "FN": 2947,
+                    "FP": 9891,
+                    "IoU": 0.6587453482190324,
+                    "TN": 442380,
+                    "TP": 24782,
+                    "n_pred": 34673,
+                    "n_ref": 27729
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0024.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0024.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5814232350817716,
+                    "FN": 49283,
+                    "FP": 17390,
+                    "IoU": 0.40986377999451223,
+                    "TN": 367021,
+                    "TP": 46306,
+                    "n_pred": 63696,
+                    "n_ref": 95589
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0025.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0025.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8040874110643241,
+                    "FN": 1767,
+                    "FP": 9027,
+                    "IoU": 0.672363029291243,
+                    "TN": 447055,
+                    "TP": 22151,
+                    "n_pred": 31178,
+                    "n_ref": 23918
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0026.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0026.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.4680243793667311,
+                    "FN": 1494,
+                    "FP": 16399,
+                    "IoU": 0.30550380375718056,
+                    "TN": 454236,
+                    "TP": 7871,
+                    "n_pred": 24270,
+                    "n_ref": 9365
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0027.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0027.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6413047552481473,
+                    "FN": 25343,
+                    "FP": 137340,
+                    "IoU": 0.47200044139793323,
+                    "TN": 659760,
+                    "TP": 145429,
+                    "n_pred": 282769,
+                    "n_ref": 170772
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0028.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0028.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.9210959177230964,
+                    "FN": 8224,
+                    "FP": 6023,
+                    "IoU": 0.8537329062461501,
+                    "TN": 1049196,
+                    "TP": 83157,
+                    "n_pred": 89180,
+                    "n_ref": 91381
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0029.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0029.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8628735462976593,
+                    "FN": 2034,
+                    "FP": 1692,
+                    "IoU": 0.7588193410576737,
+                    "TN": 464551,
+                    "TP": 11723,
+                    "n_pred": 13415,
+                    "n_ref": 13757
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0030.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0030.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.83,
+                    "FN": 6633,
+                    "FP": 2139,
+                    "IoU": 0.7094017094017094,
+                    "TN": 449814,
+                    "TP": 21414,
+                    "n_pred": 23553,
+                    "n_ref": 28047
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0031.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0031.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.8036904733459177,
+                    "FN": 45658,
+                    "FP": 20068,
+                    "IoU": 0.6718081361382554,
+                    "TN": 767605,
+                    "TP": 134541,
+                    "n_pred": 154609,
+                    "n_ref": 180199
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0032.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0032.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7619981541301338,
+                    "FN": 2219,
+                    "FP": 10159,
+                    "IoU": 0.615506476563228,
+                    "TN": 935679,
+                    "TP": 19815,
+                    "n_pred": 29974,
+                    "n_ref": 22034
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0033.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0033.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.9042802593389937,
+                    "FN": 13010,
+                    "FP": 9977,
+                    "IoU": 0.8252842636507357,
+                    "TN": 348432,
+                    "TP": 108581,
+                    "n_pred": 118558,
+                    "n_ref": 121591
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0034.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0034.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6728708687559737,
+                    "FN": 17194,
+                    "FP": 2315,
+                    "IoU": 0.5070123569100145,
+                    "TN": 440427,
+                    "TP": 20064,
+                    "n_pred": 22379,
+                    "n_ref": 37258
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0035.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0035.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.4283712550877427,
+                    "FN": 6669,
+                    "FP": 10465,
+                    "IoU": 0.2725651693979791,
+                    "TN": 456446,
+                    "TP": 6420,
+                    "n_pred": 16885,
+                    "n_ref": 13089
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0036.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0036.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.7224674502293542,
+                    "FN": 73162,
+                    "FP": 16685,
+                    "IoU": 0.5655178416855666,
+                    "TN": 761081,
+                    "TP": 116944,
+                    "n_pred": 133629,
+                    "n_ref": 190106
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0037.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0037.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.6831795512318694,
+                    "FN": 9362,
+                    "FP": 26657,
+                    "IoU": 0.5188099500360702,
+                    "TN": 405146,
+                    "TP": 38835,
+                    "n_pred": 65492,
+                    "n_ref": 48197
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0038.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0038.png"
+        },
+        {
+            "metrics": {
+                "1": {
+                    "Dice": 0.5774530158815757,
+                    "FN": 5152,
+                    "FP": 10519,
+                    "IoU": 0.4059289586413435,
+                    "TN": 453621,
+                    "TP": 10708,
+                    "n_pred": 21227,
+                    "n_ref": 15860
+                }
+            },
+            "prediction_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_results/Dataset001_PlacentaNT/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/case_0039.png",
+            "reference_file": "/media/dglguser/datadisk/workspace/swan/nnUNet/nnUNet_raw/Dataset001_PlacentaNT/labelsTr/case_0039.png"
+        }
+    ]
+}

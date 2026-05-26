@@ -51,6 +51,12 @@ class SegmentationService:
         env = os.environ.copy()
         # nnUNet_results 指向 Dataset001_PlacentaNT 的父目录
         env["nnUNet_results"] = os.path.dirname(self.model_dir)
+        env.setdefault("ROCR_VISIBLE_DEVICES", "0")
+        env.setdefault("HIP_VISIBLE_DEVICES", env["ROCR_VISIBLE_DEVICES"])
+        logger.info(
+            "[分割] 推理设备配置 ROCR_VISIBLE_DEVICES={} HIP_VISIBLE_DEVICES={}",
+            env.get("ROCR_VISIBLE_DEVICES"), env.get("HIP_VISIBLE_DEVICES"),
+        )
 
         cmd = [
             "nnUNetv2_predict",

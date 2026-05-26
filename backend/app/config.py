@@ -61,6 +61,12 @@ class Settings(BaseSettings):
 
     # FGR配置
     fgr_mode: bool = True
+    # FGR_BACKEND:
+    # - pytorch/cuda: 保留现有 PyTorch 权重路径，torch.cuda 可用时走 CUDA
+    # - rocm/onnx_igpu: ONNX Runtime MIGraphX/ROCm provider，面向 AMD iGPU
+    # - onnx_npu: ONNX Runtime VitisAIExecutionProvider，自动回退 ROCm/CPU
+    # - mock: 与 FGR_MODE=false 的 mock 场景配套使用
+    fgr_backend: Literal["pytorch", "cuda", "rocm", "onnx_npu", "onnx_igpu", "onnx_cpu", "mock"] = "pytorch"
 
     # nnU-Net 分割配置
     nnunet_model_dir: str = "fgr_compete/Dataset001_PlacentaNT"

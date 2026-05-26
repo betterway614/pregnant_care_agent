@@ -1,0 +1,74 @@
+{
+  "PT_8ECB6B903405": {
+    "display_name": "孕妇01",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\nor\\傅雪琴_001_074559_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\nor\\傅雪琴_001_074559.png",
+    "group": "NOR"
+  },
+  "PT_E806E372D0F7": {
+    "display_name": "孕妇02",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\nor\\杨英_001_124605_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\nor\\杨英_001_124605.png",
+    "group": "NOR"
+  },
+  "PT_B36932D88710": {
+    "display_name": "孕妇03",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\nor\\王婷婷_004_165926_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\nor\\王婷婷_004_165926.png",
+    "group": "NOR"
+  },
+  "PT_C88A1E1EE8BB": {
+    "display_name": "孕妇04",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\nor\\胡辉娟_005_170114_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\nor\\胡辉娟_005_170114.png",
+    "group": "NOR"
+  },
+  "PT_6C3C4DACA9B4": {
+    "display_name": "孕妇05",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\nor\\陈曼乔_001_125246_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\nor\\陈曼乔_001_125246.png",
+    "group": "NOR"
+  },
+  "PT_04F8B2B61B6A": {
+    "display_name": "孕妇06",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\fgr\\李丽雯_001_125913_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\fgr\\李丽雯_001_125913.png",
+    "group": "FGR"
+  },
+  "PT_CE1885CFF6DB": {
+    "display_name": "孕妇07",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\fgr\\李晶晶_003_161638_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\fgr\\李晶晶_003_161638.png",
+    "group": "FGR"
+  },
+  "PT_FA935922DD4F": {
+    "display_name": "孕妇08",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\fgr\\李芷薇_003_162425_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\fgr\\李芷薇_003_162425.png",
+    "group": "FGR"
+  },
+  "PT_EFC4306360B8": {
+    "display_name": "孕妇09",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\fgr\\蓝浠文_003_164021_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\fgr\\蓝浠文_003_164021.png",
+    "group": "FGR"
+  },
+  "PT_3D7F43981AC8": {
+    "display_name": "孕妇10",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\raw\\fgr\\邹燕萍_001_125534_0000.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\photo\\mask\\fgr\\邹燕萍_001_125534.png",
+    "group": "FGR"
+  },
+  "PT_1D8CEB34CC91": {
+    "display_name": "孕妇11",
+    "raw_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\uploads\\PT_1D8CEB34CC91\\image.png",
+    "mask_path": "E:\\githubproject\\medical_agent1\\backend\\fgr_compete\\uploads\\PT_1D8CEB34CC91\\mask.png",
+    "group": "upload"
+  },
+  "PT_1E8F45523667": {
+    "display_name": "孕妇20",
+    "raw_path": "e:\\githubproject\\medical_agent1\\backend\\fgr_compete\\uploads\\PT_1E8F45523667\\image.png",
+    "mask_path": "e:\\githubproject\\medical_agent1\\backend\\fgr_compete\\uploads\\PT_1E8F45523667\\mask.png",
+    "group": "upload"
+  }
+}

@@ -37,4 +37,15 @@ redisdata/
 # Logs
 *.log
 
-fgr_compete
+# FGR large model weights / generated artifacts
+backend/fgr_compete/**/*.pth
+backend/fgr_compete/**/*.pt
+backend/fgr_compete/**/*.ckpt
+backend/fgr_compete/**/*.safetensors
+backend/fgr_compete/onnx_resnet/*.onnx
+backend/fgr_compete/onnx_resnet/*.onnx.data
+backend/fgr_compete/onnx_resnet/*.ort
+backend/fgr_compete/cache/
+backend/fgr_compete/uploads/
+backend/fgr_compete/diagnostic_reports/
+backend/fgr_compete/photo/

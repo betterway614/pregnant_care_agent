@@ -149,6 +149,20 @@ def _run_fgr_model(image_path: str, mask_path: str, pregnant_id: str = "") -> di
 
 # ==================== 工具函数 ====================
 
+
+def _get_fgr_hardware() -> str:
+    """返回当前 FGR predictor 实际硬件/EP 名称。"""
+    if not settings.fgr_mode:
+        return "CPU"
+    try:
+        from fgr_compete import get_predictor
+        predictor = get_predictor()
+    except Exception:
+        predictor = None
+    if predictor is None:
+        return "NPU"
+    return str(getattr(predictor, "hardware", getattr(predictor, "execution_provider", "NPU")))
+
 def _prob_to_risk(prob: float) -> tuple[str, str]:
     if prob >= 0.7:
         return "critical", "极高风险"
@@ -262,7 +276,7 @@ def _assess_fgr_sync(pregnant_id: str, req: FgrAssessRequest, db: Session):
     _evaluate_rules(db, pregnant_id, result)
     db.commit()
 
-    return FgrAssessResponse(**result, hardware="NPU" if settings.fgr_mode else "CPU")
+    return FgrAssessResponse(**result, hardware=_get_fgr_hardware())
 
 
 @router.post("/upload/{pregnant_id}", response_model=FgrAssessResponse)
@@ -348,7 +362,7 @@ def _upload_assess_sync(
     _evaluate_rules(db, pregnant_id, result)
     db.commit()
 
-    return FgrAssessResponse(**result, hardware="NPU" if settings.fgr_mode else "CPU")
+    return FgrAssessResponse(**result, hardware=_get_fgr_hardware())
 
 
 @router.get("/trend/{pregnant_id}", response_model=list[FgrTrendPoint])
