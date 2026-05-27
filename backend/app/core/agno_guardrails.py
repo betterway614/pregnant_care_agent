@@ -84,6 +84,12 @@ class MedicalSafetyGuardrail:
         # 诊断变体
         "您应该有.*病", "指标提示.*可能",
         "根据您的.*情况.*诊断", "检查结果表明",
+        # 药物剂量模式
+        r"\d+\s*(?:片|粒|颗)\s*[,，]?\s*(?:每[日天])\s*\d+\s*次",
+        r"(?:每次|每回)\s*\d+\s*(?:ml|mg|g)",
+        r"口服\s*\d+\s*(?:片|粒|mg|g|ml)",
+        r"(?:饭前|饭后|睡前|空腹)\s*(?:服用|吃|口服)\s*\d+",
+        r"\d+\s*mg\s*(?:每日|每天|bid|tid|qd|qn)",
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
