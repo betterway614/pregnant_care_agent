@@ -98,7 +98,7 @@ class AlertService:
 
     @staticmethod
     async def enrich_alert_with_llm(alert_id, pregnant_id: str):
-        """使用护士 Agno Agent 为预警生成分析摘要（内部创建独立session）"""
+        """使用 Agno Workflow 为预警生成分析摘要（护士初筛 → 医生预分析）"""
         from ..database import SessionLocal
         from .alert_analysis_service import alert_analysis_service
 
@@ -115,21 +115,30 @@ class AlertService:
                 logger.warning("enrich_alert_with_llm: pregnant {} 不存在", pregnant_id)
                 return
 
-            nurse_result = await alert_analysis_service.run_nurse_analysis(db, alert, pregnant)
-            if not nurse_result:
-                return
+            # 使用 Workflow 路径（含护士→医生分析 + 自动 fallback）
+            result_payload = await alert_analysis_service.run_alert_workflow(db, alert, pregnant)
+
+            # 兼容读取：从 workflow 结果中提取摘要字段
+            steps = result_payload.get("steps", [])
+            workflow_output = result_payload.get("workflow_output", "")
+
+            nurse_summary = ""
+            for step in steps:
+                if step.get("role") == "nurse":
+                    nurse_summary = step.get("summary", "")
+                    break
 
             details = alert.details or {}
             details["llm_analysis"] = {
-                "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
-                "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
-                "severity_assessment": nurse_result.get("summary", ""),
-                "analyzed_at": nurse_result.get("analyzed_at", beijing_now().isoformat()),
-                "source": "agno_nurse_agent",
+                "risk_interpretation": nurse_summary or (workflow_output[:200] if isinstance(workflow_output, str) else ""),
+                "recommended_actions": [s.get("nursing_suggestions", "") for s in steps if s.get("role") == "nurse"],
+                "severity_assessment": nurse_summary or "",
+                "analyzed_at": beijing_now().isoformat(),
+                "source": "agno_workflow",
             }
             alert.details = details
             db.commit()
-            logger.info("Agno预警分析完成: alert_id={}", alert.id)
+            logger.info("Agno Workflow 预警分析完成: alert_id={}", alert.id)
         except Exception as e:
             logger.error("enrich_alert_with_llm 失败: alert_id={}, error={}", alert_id, e)
         finally:

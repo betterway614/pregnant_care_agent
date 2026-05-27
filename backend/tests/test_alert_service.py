@@ -192,7 +192,7 @@ class TestWebSocketManagerNurse:
 class TestAlertLLMEnrichment:
 
     @pytest.mark.asyncio
-    async def test_enrich_alert_stores_llm_analysis(self):
+    async def test_enrich_alert_stores_workflow_analysis(self):
         from app.services.alert_service import AlertService
 
         alert = MagicMock()
@@ -209,29 +209,31 @@ class TestAlertLLMEnrichment:
         pregnant.risk_tags = ["高血压"]
 
         mock_session = MagicMock()
-        # 第一次 query().filter().first() 返回 alert，第二次返回 pregnant
         mock_session.query.return_value.filter.return_value.first.side_effect = [alert, pregnant]
+
+        workflow_result = {
+            "workflow": "alert_analysis",
+            "workflow_output": "综合分析结果",
+            "steps": [
+                {"role": "nurse", "summary": "血压持续升高", "nursing_suggestions": "立即测量血压", "analyzed_at": "2026-01-01T00:00:00"},
+            ],
+        }
 
         with patch("app.database.SessionLocal", return_value=mock_session), \
              patch(
-                "app.services.alert_analysis_service.alert_analysis_service.run_nurse_analysis",
-                new=AsyncMock(return_value={
-                    "summary": "血压持续升高",
-                    "risk_assessment": "血压持续升高提示子痫前期风险",
-                    "nursing_suggestions": "立即测量血压",
-                    "analyzed_at": "2026-01-01T00:00:00",
-                }),
+                "app.services.alert_analysis_service.alert_analysis_service.run_alert_workflow",
+                new=AsyncMock(return_value=workflow_result),
              ):
             await AlertService.enrich_alert_with_llm(alert.id, "P001")
 
             assert "llm_analysis" in alert.details
-            assert alert.details["llm_analysis"]["source"] == "agno_nurse_agent"
-            assert "子痫前期" in alert.details["llm_analysis"]["risk_interpretation"]
+            assert alert.details["llm_analysis"]["source"] == "agno_workflow"
+            assert "血压持续升高" in alert.details["llm_analysis"]["risk_interpretation"]
             mock_session.commit.assert_called_once()
             mock_session.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_enrich_alert_handles_llm_failure_gracefully(self):
+    async def test_enrich_alert_handles_workflow_failure(self):
         from app.services.alert_service import AlertService
 
         alert = MagicMock()
@@ -243,8 +245,8 @@ class TestAlertLLMEnrichment:
 
         with patch("app.database.SessionLocal", return_value=mock_session), \
              patch(
-                "app.services.alert_analysis_service.alert_analysis_service.run_nurse_analysis",
-                new=AsyncMock(return_value=None),
+                "app.services.alert_analysis_service.alert_analysis_service.run_alert_workflow",
+                new=AsyncMock(side_effect=Exception("Workflow failed")),
              ):
             await AlertService.enrich_alert_with_llm(alert.id, "P001")
             assert "llm_analysis" not in alert.details
