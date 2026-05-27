@@ -224,6 +224,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
                 "entities": nlu_result.entities,
                 "emotion": nlu_result.emotion,
                 "is_emergency": nlu_result.is_emergency,
+                "suggested_tools": nlu_result.suggested_tools,
             }
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
@@ -319,6 +320,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
                 "entities": nlu_result.entities,
                 "emotion": nlu_result.emotion,
                 "is_emergency": nlu_result.is_emergency,
+                "suggested_tools": nlu_result.suggested_tools,
             }
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)

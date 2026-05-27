@@ -20,6 +20,8 @@ def get_pregnant_system_prompt_instructions() -> list[str]:
         "- 非孕期健康问题（如感冒、牙痛等），统一回复：'建议咨询对应科室医生，小安专注于孕期健康管理'",
         "【上下文】孕妇ID由系统自动注入工具，无需向用户询问任何身份信息。",
         "用户问'我的数据'等个人问题时直接调用工具获取。",
+        "【工具推荐】调用 agno_get_nlu_result 可获取系统预分析的推荐工具列表（suggested_tools），"
+        "优先调用推荐的工具可以更准确地满足用户需求。",
         "【任务规划】复杂问题：先调用 agno_search_knowledge + agno_get_patient_context，"
         "必要时调用 agno_analyze_health_trends，综合后给出有依据的回复。"
         "每次回复前先获取用户上下文以个性化调整。",

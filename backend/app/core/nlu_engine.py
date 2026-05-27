@@ -69,12 +69,14 @@ class NLUResult:
     """NLU解析结果"""
     def __init__(self, intent: str = "", entities: dict = None,
                  emotion: Optional[dict] = None, is_emergency: bool = False,
-                 category: IntentCategory = IntentCategory.CHAT):
+                 category: IntentCategory = IntentCategory.CHAT,
+                 suggested_tools: list[str] | None = None):
         self.intent = intent
         self.entities = entities or {}
         self.emotion = emotion or {"level": "neutral", "score": 0}
         self.is_emergency = is_emergency
         self.category = category
+        self.suggested_tools = suggested_tools or []
 
 
 class RuleBaseNLU:
@@ -224,8 +226,11 @@ class RuleBaseNLU:
         # 5. 高层意图分类
         category = self._classify_category(intent, entities, text)
 
+        # 6. 工具推荐
+        suggested_tools = self._suggest_tools(intent, entities, text)
+
         return NLUResult(intent=intent, entities=entities, emotion=emotion,
-                         category=category)
+                         category=category, suggested_tools=suggested_tools)
 
     def _classify_category(self, intent: str, entities: dict,
                            text: str = "") -> IntentCategory:
@@ -259,6 +264,43 @@ class RuleBaseNLU:
                 return IntentCategory.KNOWLEDGE
 
         return IntentCategory.CHAT
+
+    # 工具推荐关键词
+    _TREND_KEYWORDS = ("趋势", "变化", "走势", "对比", "最近", "历史")
+    _ASSESS_KEYWORDS = ("评估", "规则", "正常", "是否正常", "有没有问题")
+    _EPDS_KEYWORDS = ("心理", "抑郁", "情绪评估", "epds", "EPDS", "心理测试")
+    _KNOW_TOOL_KEYWORDS = ("知识", "什么", "怎么", "指南", "能不能吃", "注意事项")
+
+    def _suggest_tools(self, intent: str, entities: dict, text: str) -> list[str]:
+        """根据实体和关键词推荐具体工具，供 Agent 优先调用。"""
+        tools: list[str] = []
+
+        # 有健康数据实体 → 建议保存
+        data_entities = {"weight", "sbp", "dbp", "fetal_movement", "blood_sugar", "heart_rate", "sleep_hours"}
+        if data_entities & set(entities.keys()):
+            tools.append("agno_save_health_data")
+
+        # 意图 + 关键词 → 具体工具推荐
+        if intent == "HEALTH_DATA_REPORT" or any(kw in text for kw in self._TREND_KEYWORDS):
+            tools.append("agno_analyze_health_trends")
+
+        if any(kw in text for kw in self._ASSESS_KEYWORDS):
+            tools.append("agno_evaluate_vital_rules")
+
+        if any(kw in text for kw in self._EPDS_KEYWORDS):
+            tools.append("agno_get_epds_result")
+
+        if intent == "KNOWLEDGE_QUERY" or any(kw in text for kw in self._KNOW_TOOL_KEYWORDS):
+            tools.append("agno_search_knowledge")
+
+        # 去重保序
+        seen = set()
+        unique = []
+        for t in tools:
+            if t not in seen:
+                seen.add(t)
+                unique.append(t)
+        return unique
 
     def classify_with_llm(self, text: str) -> str:
         """LLM 辅助意图分类（仅在规则引擎返回 UNKNOWN 时调用）。
