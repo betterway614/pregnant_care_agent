@@ -28,6 +28,10 @@ from agno.run import RunContext
 from ..utils.timezone import beijing_now
 from agno.tools import tool
 
+# NLU 结果上下文：由路由层注入，供 agno_get_nlu_result 工具读取
+# key: session_id, value: NLU result dict
+_nlu_context: dict[str, dict] = {}
+
 
 def _resolve_pid(pregnant_id: str, run_context: RunContext | None) -> str:
     """解析孕妇ID：优先使用传入值，为空时从 RunContext.user_id 获取"""
@@ -51,6 +55,29 @@ def agno_parse_nlu(text: str) -> dict:
         "entities": result.entities,
         "emotion": result.emotion,
         "is_emergency": result.is_emergency,
+    }
+
+
+@tool
+def agno_get_nlu_result(run_context: RunContext | None = None) -> dict:
+    """获取当前消息的已解析 NLU 结果（意图、实体、情绪）。
+    结果由系统在路由阶段预计算并注入，无需再次解析。"""
+    # 从 session_state 读取（如果 Agno 支持注入）
+    if run_context is not None and hasattr(run_context, "session_state"):
+        nlu = run_context.session_state.get("nlu_result")
+        if nlu:
+            return nlu
+    # 从模块级上下文读取（按 session_id 查找）
+    if run_context is not None and hasattr(run_context, "session_id"):
+        nlu = _nlu_context.get(run_context.session_id)
+        if nlu:
+            return nlu
+    return {
+        "intent": "UNKNOWN",
+        "entities": {},
+        "emotion": {"level": "neutral", "score": 0},
+        "is_emergency": False,
+        "note": "NLU结果未注入，使用默认值",
     }
 
 
@@ -396,7 +423,7 @@ def agno_get_epds_result(total_score: int) -> dict:
 
 # 主对话 Agent 工具集
 MEDICAL_TOOLS = [
-    agno_parse_nlu,
+    agno_get_nlu_result,
     agno_check_emergency,
     agno_evaluate_vital_rules,
     agno_save_health_data,
@@ -818,12 +845,12 @@ DOCTOR_TOOLS = [
 
 TOOL_GROUPS: dict[str, list] = {
     "chat": [
-        agno_parse_nlu,
+        agno_get_nlu_result,
         agno_check_emergency,
         agno_get_patient_context,
     ],
     "record": [
-        agno_parse_nlu,
+        agno_get_nlu_result,
         agno_save_health_data,
         agno_evaluate_vital_rules,
         agno_get_patient_context,
