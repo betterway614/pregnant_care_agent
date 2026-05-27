@@ -260,6 +260,48 @@ class RuleBaseNLU:
 
         return IntentCategory.CHAT
 
+    def classify_with_llm(self, text: str) -> str:
+        """LLM 辅助意图分类（仅在规则引擎返回 UNKNOWN 时调用）。
+
+        使用项目配置的 LLM 做极简分类，max_tokens=30。
+        Returns:
+            重新判定的 NLU intent 字符串，失败时返回 "UNKNOWN"。
+        """
+        try:
+            from agno.models.message import Message
+            from .agno_client import get_agno_model
+            model = get_agno_model(role="pregnant")
+
+            classify_msg = Message(
+                role="user",
+                content=(
+                    "判断用户消息的意图，只返回一个标签（不要解释）：\n"
+                    "HEALTH_DATA_REPORT / EMOTION_EXPRESS / KNOWLEDGE_QUERY / "
+                    "SCHEDULE_INQUIRY / GREETING / UNKNOWN\n"
+                    f"消息：{text[:100]}"
+                ),
+            )
+
+            response = model.generate(
+                messages=[classify_msg],
+                max_tokens=30,
+            )
+            result_text = ""
+            if hasattr(response, "content") and response.content:
+                result_text = response.content.strip().upper()
+            elif hasattr(response, "text"):
+                result_text = response.text.strip().upper()
+
+            valid_intents = {
+                "HEALTH_DATA_REPORT", "EMOTION_EXPRESS", "KNOWLEDGE_QUERY",
+                "SCHEDULE_INQUIRY", "GREETING", "UNKNOWN",
+            }
+            if result_text in valid_intents:
+                return result_text
+            return "UNKNOWN"
+        except Exception:
+            return "UNKNOWN"
+
     def _analyze_emotion(self, text: str) -> dict:
         """简单情绪分析（含否定词过滤）"""
         anxiety_words = ["焦虑", "紧张", "担心", "害怕", "不安", "压力"]

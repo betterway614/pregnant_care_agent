@@ -208,6 +208,17 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         user_text = req.message.strip() if req.message else ""
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
+
+            # UNKNOWN 意图：尝试 LLM 辅助分类
+            if nlu_result.intent == "UNKNOWN":
+                refined_intent = nlu_engine.classify_with_llm(user_text)
+                if refined_intent != "UNKNOWN":
+                    from .nlu_engine import NLUResult as _NR
+                    nlu_result.intent = refined_intent
+                    nlu_result.category = nlu_engine._classify_category(
+                        refined_intent, nlu_result.entities, user_text,
+                    )
+
             nlu_dict = {
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
@@ -292,6 +303,17 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         user_text = req.message.strip() if req.message else ""
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
+
+            # UNKNOWN 意图：尝试 LLM 辅助分类
+            if nlu_result.intent == "UNKNOWN":
+                refined_intent = nlu_engine.classify_with_llm(user_text)
+                if refined_intent != "UNKNOWN":
+                    from .nlu_engine import NLUResult as _NR
+                    nlu_result.intent = refined_intent
+                    nlu_result.category = nlu_engine._classify_category(
+                        refined_intent, nlu_result.entities, user_text,
+                    )
+
             nlu_dict = {
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
