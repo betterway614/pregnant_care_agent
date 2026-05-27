@@ -29,8 +29,8 @@ async def test_nurse_analyze_uses_dedicated_agent():
 
     with patch("app.routers.nurse_ai.settings") as mock_settings:
         mock_settings.agno_enabled = True
-        with patch("app.core.agno_medical_agents.get_nurse_agent") as mock_create:
-            mock_agent = AsyncMock()
+        with patch("app.core.agno_medical_agents.get_nurse_analyze_agent") as mock_create:
+            mock_agent = MagicMock()
             mock_agent.arun = AsyncMock(return_value=mock_response)
             mock_create.return_value = mock_agent
             result = await _try_llm_nurse_analyze(mock_pregnant, 30, 2, [], {})
@@ -61,8 +61,8 @@ async def test_doctor_analyze_uses_dedicated_agent():
 
     with patch("app.routers.doctor_ai.settings") as mock_settings:
         mock_settings.agno_enabled = True
-        with patch("app.core.agno_medical_agents.get_doctor_agent") as mock_create:
-            mock_agent = AsyncMock()
+        with patch("app.core.agno_medical_agents.get_doctor_analyze_agent") as mock_create:
+            mock_agent = MagicMock()
             mock_agent.arun = AsyncMock(return_value=mock_response)
             mock_create.return_value = mock_agent
             result = await _try_llm_doctor_analyze(mock_pregnant, 30, 2, [], {}, "")

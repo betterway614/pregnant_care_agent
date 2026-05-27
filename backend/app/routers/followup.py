@@ -566,6 +566,7 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
 
                 # 胎动平均值（近7天）
                 if "fetal_movement_avg" not in existing_keys:
+                    from ..models import HealthDataPoint
                     fm_avg = db.query(func.avg(HealthDataPoint.value)).filter(
                         HealthDataPoint.pregnant_id == record.pregnant_id,
                         HealthDataPoint.metric_code == "fetal_movement",

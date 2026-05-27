@@ -90,7 +90,7 @@ def test_followup_generate_agent():
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_followup_generate_agent()
-            assert agent.name == "小安-随访生成"
+            assert agent.name == "小护-随访生成"
             assert agent.output_schema == FollowUpGenerateOutput
 
 

@@ -864,6 +864,7 @@ TOOL_GROUPS: dict[str, list] = {
         agno_check_emergency,
         agno_get_patient_context,
     ],
+    "complex": MEDICAL_TOOLS,
 }
 
 # 意图 → 工具组路由映射
