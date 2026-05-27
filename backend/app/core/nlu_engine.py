@@ -1,6 +1,18 @@
 """NLU引擎 - 意图识别、实体提取、情绪分析"""
 import re
+from enum import Enum
 from typing import Optional
+
+
+class IntentCategory(str, Enum):
+    """高层意图分类（供路由和 Workflow 使用）"""
+    CHAT = "chat"
+    ANALYZE = "analyze"
+    EMERGENCY = "emergency"
+    KNOWLEDGE = "knowledge"
+    FOLLOWUP = "followup"
+    ALERT = "alert"
+    REPORT = "report"
 
 
 # 中文数字到阿拉伯数字映射
@@ -56,11 +68,13 @@ def _cn_to_arabic(text: str) -> str:
 class NLUResult:
     """NLU解析结果"""
     def __init__(self, intent: str = "", entities: dict = None,
-                 emotion: Optional[dict] = None, is_emergency: bool = False):
+                 emotion: Optional[dict] = None, is_emergency: bool = False,
+                 category: IntentCategory = IntentCategory.CHAT):
         self.intent = intent
         self.entities = entities or {}
         self.emotion = emotion or {"level": "neutral", "score": 0}
         self.is_emergency = is_emergency
+        self.category = category
 
 
 class RuleBaseNLU:
@@ -129,6 +143,13 @@ class RuleBaseNLU:
         "想结束一切", "没有意义", "不如死了", "轻生",
     ]
 
+    # 分类关键词（从 intent_classifier.py 迁移）
+    _ANALYZE_KEYWORDS = ("分析", "评估", "解读", "看看", "怎么样", "情况如何")
+    _KNOWLEDGE_KEYWORDS = ("指南", "标准", "什么是", "怎么算", "正常范围", "知识")
+    _FOLLOWUP_KEYWORDS = ("随访", "回访", "打电话", "问卷")
+    _ALERT_KEYWORDS = ("预警", "告警", "异常")
+    _REPORT_KEYWORDS = ("上报医生", "通知医生", "转医生", "escalate")
+
     def parse(self, text: str) -> NLUResult:
         """解析用户输入，返回意图、实体和情绪"""
         entities = {}
@@ -175,14 +196,16 @@ class RuleBaseNLU:
                 return NLUResult(
                     intent="SUICIDE_RISK",
                     entities=entities,
-                    is_emergency=True
+                    is_emergency=True,
+                    category=IntentCategory.EMERGENCY
                 )
 
         if is_emergency:
             return NLUResult(
                 intent="EMERGENCY",
                 entities=entities,
-                is_emergency=True
+                is_emergency=True,
+                category=IntentCategory.EMERGENCY
             )
 
         # 3. 意图识别
@@ -198,7 +221,44 @@ class RuleBaseNLU:
         # 4. 情绪分析
         emotion = self._analyze_emotion(text)
 
-        return NLUResult(intent=intent, entities=entities, emotion=emotion)
+        # 5. 高层意图分类
+        category = self._classify_category(intent, entities, text)
+
+        return NLUResult(intent=intent, entities=entities, emotion=emotion,
+                         category=category)
+
+    def _classify_category(self, intent: str, entities: dict,
+                           text: str = "") -> IntentCategory:
+        """基于 NLU 意图 + 关键词的高层意图分类"""
+        # 紧急优先
+        if intent in ("EMERGENCY", "SUICIDE_RISK"):
+            return IntentCategory.EMERGENCY
+
+        # NLU 意图直接映射
+        _INTENT_MAP = {
+            "HEALTH_DATA_REPORT": IntentCategory.CHAT,
+            "EMOTION_EXPRESS": IntentCategory.CHAT,
+            "GREETING": IntentCategory.CHAT,
+            "KNOWLEDGE_QUERY": IntentCategory.KNOWLEDGE,
+            "SCHEDULE_INQUIRY": IntentCategory.CHAT,
+        }
+        if intent in _INTENT_MAP:
+            return _INTENT_MAP[intent]
+
+        # UNKNOWN 意图：使用关键词补充分类
+        if text:
+            if any(kw in text for kw in self._REPORT_KEYWORDS):
+                return IntentCategory.REPORT
+            if any(kw in text for kw in self._ALERT_KEYWORDS):
+                return IntentCategory.ALERT
+            if any(kw in text for kw in self._FOLLOWUP_KEYWORDS):
+                return IntentCategory.FOLLOWUP
+            if any(kw in text for kw in self._ANALYZE_KEYWORDS):
+                return IntentCategory.ANALYZE
+            if any(kw in text for kw in self._KNOWLEDGE_KEYWORDS):
+                return IntentCategory.KNOWLEDGE
+
+        return IntentCategory.CHAT
 
     def _analyze_emotion(self, text: str) -> dict:
         """简单情绪分析（含否定词过滤）"""
