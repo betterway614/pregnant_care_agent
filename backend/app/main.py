@@ -280,10 +280,14 @@ app = FastAPI(
 from .core.timeout_middleware import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout=300)
 
-# CORS 配置
+# CORS 配置（生产环境应通过 settings.cors_origins 配置域名白名单）
+_cors_origins = getattr(settings, "cors_origins", None) or [
+    "http://localhost:5173", "http://localhost:3000",
+    "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

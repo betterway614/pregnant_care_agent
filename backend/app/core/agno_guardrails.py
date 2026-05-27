@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from agno.agent._hooks import InputCheckError
@@ -76,6 +77,13 @@ class MedicalSafetyGuardrail:
         "建议用药", "建议服用", "处方",
         "可以吃药", "应该吃药", "用药方案",
         "治疗方案如下", "请按以下方案",
+        # 增强覆盖：药物名称和剂量
+        "推荐您服用", "您需要每天注射", "建议使用",
+        "口服.*mg", "每次.*片", "拉贝洛尔", "硝苯地平",
+        "低分子肝素", "阿司匹林", "黄体酮.*mg",
+        # 诊断变体
+        "您应该有.*病", "指标提示.*可能",
+        "根据您的.*情况.*诊断", "检查结果表明",
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -101,7 +109,7 @@ class MedicalSafetyGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if pattern in response:
+            if re.search(pattern, response):
                 return "小安不能提供诊断或用药建议。请咨询医生获取专业意见。"
         return None
 
@@ -124,6 +132,9 @@ class DoctorDraftGuardrail:
         "诊断为", "诊断是",
         "可以排除", "排除诊断",
         "治疗方案为", "治疗方案确定",
+        # 增强覆盖
+        "最终确定为", "临床判断为",
+        "排除了.*疾病", "没有问题",
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -136,7 +147,7 @@ class DoctorDraftGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if pattern in response:
+            if re.search(pattern, response):
                 return "以上分析为AI辅助生成，不构成确定性诊断结论，需医生审核确认。"
         return None
 
@@ -175,7 +186,7 @@ def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
 
     Args:
         text: 待检查文本
-        patterns: 违规关键词列表
+        patterns: 违规关键词/正则列表
 
     Returns:
         违规提示词（检测到违规时）
@@ -184,7 +195,7 @@ def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
     if not text:
         return None
     for pattern in patterns:
-        if pattern in text:
+        if re.search(pattern, text):
             return f"输出包含受限内容（{pattern}），已拦截"
     return None
 

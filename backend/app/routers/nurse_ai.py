@@ -16,6 +16,7 @@ from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
 from ..core.websocket_manager import ws_manager
 from ..config import settings
+from loguru import logger
 
 # 护士端工具调用 → 用户友好的中文描述
 NURSE_TOOL_THINKING_MAP: dict[str, str] = {
@@ -286,7 +287,8 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             followup_focus=data.get("followup_focus", []),
             alert_level=data.get("alert_level", "NONE"),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("护士LLM分析降级: %s", e)
         return None
 
 
@@ -458,7 +460,8 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
             questions=data.get("questions", []),
             closing_message=data.get("closing_message", ""),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("随访脚本生成LLM降级: %s", e)
         return None
 
 
@@ -567,8 +570,8 @@ async def nurse_chat_stream(req: dict):
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("护士端意图分类降级: %s", e)
 
     agent_factory = NURSE_AGENT_VARIANT_MAP.get(intent_variant, get_nurse_chat_agent)
     agent = agent_factory()

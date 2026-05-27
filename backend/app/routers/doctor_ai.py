@@ -13,6 +13,7 @@ from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
 from ..config import settings
+from loguru import logger
 
 # 医生端工具调用 → 用户友好的中文描述
 DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
@@ -636,8 +637,8 @@ async def doctor_chat_stream(req: dict):
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("医生端chat意图分类降级: %s", e)
 
     agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
     agent = agent_factory()
@@ -827,8 +828,8 @@ async def generate_report(pregnant_id: str):
                     "intent": nlu_result.intent,
                     "entities": nlu_result.entities,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("医生端报告意图分类降级: %s", e)
 
         agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
         agent = agent_factory()

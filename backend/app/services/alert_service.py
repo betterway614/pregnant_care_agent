@@ -97,25 +97,43 @@ class AlertService:
         return alerts
 
     @staticmethod
-    async def enrich_alert_with_llm(db: Session, alert: Alert, pregnant):
-        """使用护士 Agno Agent 为预警生成分析摘要"""
+    async def enrich_alert_with_llm(alert_id, pregnant_id: str):
+        """使用护士 Agno Agent 为预警生成分析摘要（内部创建独立session）"""
+        from ..database import SessionLocal
         from .alert_analysis_service import alert_analysis_service
 
-        nurse_result = await alert_analysis_service.run_nurse_analysis(db, alert, pregnant)
-        if not nurse_result:
-            return
+        db = SessionLocal()
+        try:
+            alert = db.query(Alert).filter(Alert.id == alert_id).first()
+            if not alert:
+                logger.warning("enrich_alert_with_llm: alert {} 不存在", alert_id)
+                return
 
-        details = alert.details or {}
-        details["llm_analysis"] = {
-            "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
-            "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
-            "severity_assessment": nurse_result.get("summary", ""),
-            "analyzed_at": nurse_result.get("analyzed_at", beijing_now().isoformat()),
-            "source": "agno_nurse_agent",
-        }
-        alert.details = details
-        db.commit()
-        logger.info("Agno预警分析完成: alert_id={}", alert.id)
+            from ..models import Pregnant
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+            if not pregnant:
+                logger.warning("enrich_alert_with_llm: pregnant {} 不存在", pregnant_id)
+                return
+
+            nurse_result = await alert_analysis_service.run_nurse_analysis(db, alert, pregnant)
+            if not nurse_result:
+                return
+
+            details = alert.details or {}
+            details["llm_analysis"] = {
+                "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
+                "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
+                "severity_assessment": nurse_result.get("summary", ""),
+                "analyzed_at": nurse_result.get("analyzed_at", beijing_now().isoformat()),
+                "source": "agno_nurse_agent",
+            }
+            alert.details = details
+            db.commit()
+            logger.info("Agno预警分析完成: alert_id={}", alert.id)
+        except Exception as e:
+            logger.error("enrich_alert_with_llm 失败: alert_id={}, error={}", alert_id, e)
+        finally:
+            db.close()
 
 
     @staticmethod

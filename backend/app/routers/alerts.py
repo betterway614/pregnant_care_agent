@@ -86,19 +86,18 @@ async def create_alert(
     if not pregnant:
         raise HTTPException(404, f"孕妇 {req.pregnant_id} 不存在")
 
-    # 2. 创建预警记录
-    alert = Alert(
+    # 2. 创建预警记录（统一走去重入口）
+    from ..services.alert_service import alert_service
+    alert = alert_service.create_alert(
+        db=db,
         pregnant_id=req.pregnant_id,
-        trigger_source=req.trigger_source,
-        rule_id=req.rule_id,
+        rule_id=req.rule_id or "MANUAL",
+        domain=req.details.get("domain", "") if req.details else "",
         level=req.level,
         message=req.message,
-        details=req.details or {},
-        status="PENDING",
+        trigger_source=req.trigger_source,
+        details=req.details,
     )
-    db.add(alert)
-    db.commit()
-    db.refresh(alert)
 
     # 3. 构建推送数据
     alert_data = {
@@ -121,10 +120,10 @@ async def create_alert(
     except Exception as e:
         logger.warning(f"WebSocket广播失败，预警已创建: {e}")
 
-    # 5. 后台异步调用 LLM 生成分析摘要
+    # 5. 后台异步调用 LLM 生成分析摘要（enrich_alert_with_llm 内部创建独立session）
     import asyncio
     from ..services.alert_service import alert_service
-    asyncio.create_task(alert_service.enrich_alert_with_llm(db, alert, pregnant))
+    asyncio.create_task(alert_service.enrich_alert_with_llm(alert.id, req.pregnant_id))
 
     # 6. 返回预警响应
     return AlertResponse(
@@ -139,19 +138,8 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
     """手动评估某孕妇的规则"""
     hits = rule_engine.evaluate_all(req.data)
 
-    created = []
-    for hit in hits:
-        alert = Alert(
-            pregnant_id=pregnant_id,
-            trigger_source="RULE_ENGINE",
-            rule_id=hit["rule_id"],
-            level=hit["level"],
-            message=hit["message"],
-            details={"trigger_data": req.data},
-        )
-        db.add(alert)
-        created.append(alert)
-    db.commit()
+    from ..services.alert_service import alert_service
+    created = alert_service.create_alerts_from_hits(db, pregnant_id, hits, "RULE_ENGINE")
 
     return {
         "message": f"触发了 {len(created)} 条预警",
@@ -333,6 +321,9 @@ def auto_dismiss_alerts(db: Session = Depends(get_db)):
 
         timeout_hours = {"RED": 72, "ORANGE": 48, "YELLOW": 24}.get(level, 24)
         for alert in stale:
+            # 幂等保护：二次校验状态，避免并发重复处理
+            if alert.status != "PENDING":
+                continue
             _append_history(alert, "auto_dismiss", "system", alert.level,
                           reason=f"超时{timeout_hours}小时未处理")
             alert.status = "AUTO_DISMISSED"

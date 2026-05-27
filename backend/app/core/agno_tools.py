@@ -413,58 +413,66 @@ MEDICAL_TOOLS = [
 
 
 @tool
-def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
+async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
     """查询孕妇完整数据，包括基本信息、健康数据、预警、随访记录。
     当护士需要了解孕妇整体情况时使用此工具。
-    查询结果会保存到 session_state，供后续工具使用。"""
+    查询结果会保存到 session_state，供后续工具使用。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
 
-    from ..database import SessionLocal
-    from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord
-    from sqlalchemy import desc
+    def _query():
+        from ..database import SessionLocal
+        from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord
+        from sqlalchemy import desc
 
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
-        if not pregnant:
-            return {"error": "孕妇不存在"}
+        db = SessionLocal()
+        try:
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+            if not pregnant:
+                return {"error": "孕妇不存在"}
 
-        gest_days = pregnant.gestational_age_days or 0
-        result = {
-            "basic_info": {
-                "name": pregnant.display_name,
-                "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
-                "risk_tags": pregnant.risk_tags or [],
+            gest_days = pregnant.gestational_age_days or 0
+            result = {
+                "basic_info": {
+                    "name": pregnant.display_name,
+                    "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
+                    "risk_tags": pregnant.risk_tags or [],
+                }
             }
-        }
 
-        recent_data = db.query(HealthDataPoint).filter(
-            HealthDataPoint.pregnant_id == pid
-        ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
-        result["recent_health_data"] = [
-            {"metric": d.metric_code, "value": d.value, "unit": d.unit, "time": d.recorded_at.isoformat()}
-            for d in recent_data
-        ]
+            recent_data = db.query(HealthDataPoint).filter(
+                HealthDataPoint.pregnant_id == pid
+            ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
+            result["recent_health_data"] = [
+                {"metric": d.metric_code, "value": d.value, "unit": d.unit, "time": d.recorded_at.isoformat()}
+                for d in recent_data
+            ]
 
-        active_alerts = db.query(Alert).filter(
-            Alert.pregnant_id == pid, Alert.status == "PENDING"
-        ).all()
-        result["active_alerts"] = [
-            {"level": a.level, "message": a.message, "time": a.created_at.isoformat()}
-            for a in active_alerts
-        ]
+            active_alerts = db.query(Alert).filter(
+                Alert.pregnant_id == pid, Alert.status == "PENDING"
+            ).all()
+            result["active_alerts"] = [
+                {"level": a.level, "message": a.message, "time": a.created_at.isoformat()}
+                for a in active_alerts
+            ]
 
-        recent_followups = db.query(FollowUpRecord).filter(
-            FollowUpRecord.pregnant_id == pid
-        ).order_by(desc(FollowUpRecord.created_at)).limit(3).all()
-        result["recent_followups"] = [
-            {"status": f.status, "complaint": f.chief_complaint, "time": f.created_at.isoformat()}
-            for f in recent_followups
-        ]
+            recent_followups = db.query(FollowUpRecord).filter(
+                FollowUpRecord.pregnant_id == pid
+            ).order_by(desc(FollowUpRecord.created_at)).limit(3).all()
+            result["recent_followups"] = [
+                {"status": f.status, "complaint": f.chief_complaint, "time": f.created_at.isoformat()}
+                for f in recent_followups
+            ]
 
-        # 保存到 session_state，供后续工具使用
+            return result
+        finally:
+            db.close()
+
+    result = await asyncio.to_thread(_query)
+
+    # 保存到 session_state，供后续工具使用
+    if not isinstance(result, dict) or "error" not in result:
         if run_context is not None:
             if run_context.session_state is None:
                 run_context.session_state = {}
@@ -473,51 +481,52 @@ def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | Non
                 "data": result,
             }
 
-        return result
-    finally:
-        db.close()
+    return result
 
 
 @tool
-def agno_create_followup_record(
+async def agno_create_followup_record(
     pregnant_id: str = "",
     chief_complaint: str = "",
     summary: str = "",
     run_context: RunContext | None = None,
 ) -> dict:
     """创建随访记录草稿。
-    当护士需要记录随访内容时使用此工具。"""
+    当护士需要记录随访内容时使用此工具。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
 
-    from ..database import SessionLocal
-    from ..models import Pregnant, FollowUpRecord
+    def _create():
+        from ..database import SessionLocal
+        from ..models import Pregnant, FollowUpRecord
 
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
-        if not pregnant:
-            return {"error": "孕妇不存在"}
+        db = SessionLocal()
+        try:
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+            if not pregnant:
+                return {"error": "孕妇不存在"}
 
-        gest_days = pregnant.gestational_age_days or 0
-        record = FollowUpRecord(
-            pregnant_id=pid,
-            gestational_week=str(gest_days // 7),
-            chief_complaint=chief_complaint,
-            summary=summary,
-            status="draft",
-        )
-        db.add(record)
-        db.commit()
+            gest_days = pregnant.gestational_age_days or 0
+            record = FollowUpRecord(
+                pregnant_id=pid,
+                gestational_week=str(gest_days // 7),
+                chief_complaint=chief_complaint,
+                summary=summary,
+                status="draft",
+            )
+            db.add(record)
+            db.commit()
 
-        return {"success": True, "record_id": str(record.id), "message": "随访记录已创建（草稿）"}
-    finally:
-        db.close()
+            return {"success": True, "record_id": str(record.id), "message": "随访记录已创建（草稿）"}
+        finally:
+            db.close()
+
+    return await asyncio.to_thread(_create)
 
 
 @tool
-def agno_report_issue_to_doctor(
+async def agno_report_issue_to_doctor(
     pregnant_id: str = "",
     title: str = "",
     description: str = "",
@@ -526,7 +535,7 @@ def agno_report_issue_to_doctor(
 ) -> dict:
     """上报问题给医生。
     当护士发现异常情况需要医生处理时使用此工具。
-    如果之前调用过 agno_query_patient_data，可以不传 pregnant_id，自动使用上次查询的孕妇。"""
+    如果之前调用过 agno_query_patient_data，可以不传 pregnant_id，自动使用上次查询的孕妇。异步安全。"""
     # 从 session_state 获取上次查询的孕妇 ID
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid and run_context and run_context.session_state:
@@ -537,123 +546,136 @@ def agno_report_issue_to_doctor(
     if not pid:
         return {"error": "未指定孕妇，请先查询孕妇数据或指定 pregnant_id"}
 
-    from ..database import SessionLocal
-    from ..models import NurseDoctorIssue
+    def _report():
+        from ..database import SessionLocal
+        from ..models import NurseDoctorIssue
 
-    db = SessionLocal()
-    try:
-        issue = NurseDoctorIssue(
-            pregnant_id=pid,
-            reported_by="nurse_ai",
-            issue_type="risk_alert",
-            title=title,
-            description=description,
-            priority=priority,
-            status="pending",
-        )
-        db.add(issue)
-        db.commit()
+        db = SessionLocal()
+        try:
+            issue = NurseDoctorIssue(
+                pregnant_id=pid,
+                reported_by="nurse_ai",
+                issue_type="risk_alert",
+                title=title,
+                description=description,
+                priority=priority,
+                status="pending",
+            )
+            db.add(issue)
+            db.commit()
 
-        # 清除 session_state 中的查询记录
-        if run_context and run_context.session_state:
-            run_context.session_state.pop("last_queried_patient", None)
+            return {"success": True, "issue_id": str(issue.id), "message": "问题已上报给医生"}
+        finally:
+            db.close()
 
-        return {"success": True, "issue_id": str(issue.id), "message": "问题已上报给医生"}
-    finally:
-        db.close()
+    result = await asyncio.to_thread(_report)
+
+    # 清除 session_state 中的查询记录
+    if run_context and run_context.session_state:
+        run_context.session_state.pop("last_queried_patient", None)
+
+    return result
 
 
 # ==================== 医生端专用工具 ====================
 
 
 @tool
-def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
+async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
     """综合分析孕妇数据，包括健康指标趋势、风险评估、医嘱评价。
     当医生需要全面了解孕妇情况时使用此工具。
-    分析结果会保存到 session_state，供后续工具（如生成医嘱）使用。"""
+    分析结果会保存到 session_state，供后续工具（如生成医嘱）使用。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
 
-    from ..database import SessionLocal
-    from ..models import Pregnant, HealthDataPoint, Alert, FgrAssessment, MedicalOrder, FollowUpRecord
-    from sqlalchemy import desc
+    def _analyze():
+        from ..database import SessionLocal
+        from ..models import Pregnant, HealthDataPoint, Alert, FgrAssessment, MedicalOrder, FollowUpRecord
+        from sqlalchemy import desc
 
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
-        if not pregnant:
-            return {"error": "孕妇不存在"}
+        db = SessionLocal()
+        try:
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
+            if not pregnant:
+                return {"error": "孕妇不存在"}
 
-        gest_days = pregnant.gestational_age_days or 0
-        result = {
-            "patient_info": {
-                "name": pregnant.display_name,
-                "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
-                "risk_tags": pregnant.risk_tags or [],
-            }
-        }
-
-        # 一次查询所有指标，再在内存中分组（避免 N 次查询）
-        metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar",
-                    "blood_sugar_fasting", "blood_sugar_postprandial", "heart_rate"]
-        all_points = db.query(HealthDataPoint).filter(
-            HealthDataPoint.pregnant_id == pid,
-            HealthDataPoint.metric_code.in_(metrics),
-        ).order_by(desc(HealthDataPoint.recorded_at)).limit(40).all()
-        trends = {}
-        for p in all_points:
-            m = p.metric_code
-            if m not in trends:
-                trends[m] = []
-            if len(trends[m]) < 5:
-                trends[m].append({"value": p.value, "unit": p.unit, "time": p.recorded_at.isoformat()})
-        result["health_trends"] = trends
-
-        alerts = db.query(Alert).filter(
-            Alert.pregnant_id == pid
-        ).order_by(desc(Alert.created_at)).limit(5).all()
-        result["alerts"] = [
-            {"level": a.level, "message": a.message, "status": a.status, "time": a.created_at.isoformat()}
-            for a in alerts
-        ]
-
-        # FGR 取最近 5 条（含趋势）
-        fgrs = db.query(FgrAssessment).filter(
-            FgrAssessment.pregnant_id == pid
-        ).order_by(desc(FgrAssessment.assessed_at)).limit(5).all()
-        if fgrs:
-            result["fgr_assessments"] = [
-                {
-                    "risk_level": f.risk_level,
-                    "gestational_weeks": f.gestational_weeks,
-                    "explanation": f.explanation,
-                    "assessed_at": f.assessed_at.isoformat() if f.assessed_at else "",
+            gest_days = pregnant.gestational_age_days or 0
+            result = {
+                "patient_info": {
+                    "name": pregnant.display_name,
+                    "gestational_week": f"{gest_days // 7}+{gest_days % 7}",
+                    "risk_tags": pregnant.risk_tags or [],
                 }
-                for f in fgrs
+            }
+
+            # 一次查询所有指标，再在内存中分组（避免 N 次查询）
+            metrics = ["weight", "systolic", "diastolic", "fetal_movement", "blood_sugar",
+                        "blood_sugar_fasting", "blood_sugar_postprandial", "heart_rate"]
+            all_points = db.query(HealthDataPoint).filter(
+                HealthDataPoint.pregnant_id == pid,
+                HealthDataPoint.metric_code.in_(metrics),
+            ).order_by(desc(HealthDataPoint.recorded_at)).limit(40).all()
+            trends = {}
+            for p in all_points:
+                m = p.metric_code
+                if m not in trends:
+                    trends[m] = []
+                if len(trends[m]) < 5:
+                    trends[m].append({"value": p.value, "unit": p.unit, "time": p.recorded_at.isoformat()})
+            result["health_trends"] = trends
+
+            alerts = db.query(Alert).filter(
+                Alert.pregnant_id == pid
+            ).order_by(desc(Alert.created_at)).limit(5).all()
+            result["alerts"] = [
+                {"level": a.level, "message": a.message, "status": a.status, "time": a.created_at.isoformat()}
+                for a in alerts
             ]
 
-        # 最新生化检验结果
-        latest_followup = db.query(FollowUpRecord).filter(
-            FollowUpRecord.pregnant_id == pid,
-            FollowUpRecord.lab_results.isnot(None),
-        ).order_by(desc(FollowUpRecord.created_at)).first()
-        if latest_followup and latest_followup.lab_results:
-            result["latest_lab_results"] = {
-                "gestational_week": latest_followup.gestational_week,
-                "follow_up_date": latest_followup.follow_up_date.isoformat() if latest_followup.follow_up_date else "",
-                "lab_results": latest_followup.lab_results,
-            }
+            # FGR 取最近 5 条（含趋势）
+            fgrs = db.query(FgrAssessment).filter(
+                FgrAssessment.pregnant_id == pid
+            ).order_by(desc(FgrAssessment.assessed_at)).limit(5).all()
+            if fgrs:
+                result["fgr_assessments"] = [
+                    {
+                        "risk_level": f.risk_level,
+                        "gestational_weeks": f.gestational_weeks,
+                        "explanation": f.explanation,
+                        "assessed_at": f.assessed_at.isoformat() if f.assessed_at else "",
+                    }
+                    for f in fgrs
+                ]
 
-        orders = db.query(MedicalOrder).filter(
-            MedicalOrder.pregnant_id == pid
-        ).order_by(desc(MedicalOrder.created_at)).limit(3).all()
-        result["recent_orders"] = [
-            {"content": o.content, "status": o.status, "time": o.created_at.isoformat()}
-            for o in orders
-        ]
+            # 最新生化检验结果
+            latest_followup = db.query(FollowUpRecord).filter(
+                FollowUpRecord.pregnant_id == pid,
+                FollowUpRecord.lab_results.isnot(None),
+            ).order_by(desc(FollowUpRecord.created_at)).first()
+            if latest_followup and latest_followup.lab_results:
+                result["latest_lab_results"] = {
+                    "gestational_week": latest_followup.gestational_week,
+                    "follow_up_date": latest_followup.follow_up_date.isoformat() if latest_followup.follow_up_date else "",
+                    "lab_results": latest_followup.lab_results,
+                }
 
-        # 保存到 session_state，供后续工具使用
+            orders = db.query(MedicalOrder).filter(
+                MedicalOrder.pregnant_id == pid
+            ).order_by(desc(MedicalOrder.created_at)).limit(3).all()
+            result["recent_orders"] = [
+                {"content": o.content, "status": o.status, "time": o.created_at.isoformat()}
+                for o in orders
+            ]
+
+            return result
+        finally:
+            db.close()
+
+    result = await asyncio.to_thread(_analyze)
+
+    # 保存到 session_state，供后续工具使用
+    if not isinstance(result, dict) or "error" not in result:
         if run_context is not None:
             if run_context.session_state is None:
                 run_context.session_state = {}
@@ -662,13 +684,11 @@ def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context: RunCo
                 "analysis": result,
             }
 
-        return result
-    finally:
-        db.close()
+    return result
 
 
 @tool
-def agno_generate_medical_order(
+async def agno_generate_medical_order(
     pregnant_id: str = "",
     content: str = "",
     order_type: str = "standard",
@@ -676,8 +696,7 @@ def agno_generate_medical_order(
 ) -> dict:
     """生成医嘱草稿。
     当医生需要开具医嘱时使用此工具。
-    如果之前调用过 agno_analyze_patient_comprehensive，可以不传 pregnant_id，自动使用上次分析的孕妇。"""
-    # 从 session_state 获取上次分析的孕妇 ID
+    如果之前调用过 agno_analyze_patient_comprehensive，可以不传 pregnant_id，自动使用上次分析的孕妇。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid and run_context and run_context.session_state:
         last_analyzed = run_context.session_state.get("last_analyzed_patient")
@@ -687,61 +706,68 @@ def agno_generate_medical_order(
     if not pid:
         return {"error": "未指定孕妇，请先分析患者数据或指定 pregnant_id"}
 
-    from ..database import SessionLocal
-    from ..models import MedicalOrder
+    def _generate():
+        from ..database import SessionLocal
+        from ..models import MedicalOrder
 
-    db = SessionLocal()
-    try:
-        order = MedicalOrder(
-            pregnant_id=pid,
-            content=content,
-            order_type=order_type,
-            source="AI_RECOMMENDED",
-            status="draft",
-        )
-        db.add(order)
-        db.commit()
+        db = SessionLocal()
+        try:
+            order = MedicalOrder(
+                pregnant_id=pid,
+                content=content,
+                order_type=order_type,
+                source="AI_RECOMMENDED",
+                status="draft",
+            )
+            db.add(order)
+            db.commit()
 
-        # 清除 session_state 中的分析记录
-        if run_context and run_context.session_state:
-            run_context.session_state.pop("last_analyzed_patient", None)
+            return {"success": True, "order_id": str(order.id), "message": "医嘱草稿已生成"}
+        finally:
+            db.close()
 
-        return {"success": True, "order_id": str(order.id), "message": "医嘱草稿已生成"}
-    finally:
-        db.close()
+    result = await asyncio.to_thread(_generate)
+
+    # 清除 session_state 中的分析记录
+    if run_context and run_context.session_state:
+        run_context.session_state.pop("last_analyzed_patient", None)
+
+    return result
 
 
 @tool
-def agno_handle_issue(
+async def agno_handle_issue(
     issue_id: str = "",
     resolution: str = "",
     run_context: RunContext | None = None,
 ) -> dict:
     """处理护士上报的问题。
-    当医生需要处理问题时使用此工具。"""
-    from uuid import UUID
-    from ..database import SessionLocal
-    from ..models import NurseDoctorIssue
-    from datetime import datetime
+    当医生需要处理问题时使用此工具。异步安全。"""
 
-    db = SessionLocal()
-    try:
+    def _handle():
+        from ..database import SessionLocal
+        from ..models import NurseDoctorIssue
+
+        db = SessionLocal()
         try:
-            issue_id_uuid = UUID(issue_id)
-        except (ValueError, AttributeError):
-            return {"error": "无效的问题ID"}
-        issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == issue_id_uuid).first()
-        if not issue:
-            return {"error": "问题不存在"}
+            try:
+                issue_id_uuid = UUID(issue_id)
+            except (ValueError, AttributeError):
+                return {"error": "无效的问题ID"}
+            issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == issue_id_uuid).first()
+            if not issue:
+                return {"error": "问题不存在"}
 
-        issue.status = "resolved"
-        issue.resolution = resolution
-        issue.resolved_at = beijing_now()
-        db.commit()
+            issue.status = "resolved"
+            issue.resolution = resolution
+            issue.resolved_at = beijing_now()
+            db.commit()
 
-        return {"success": True, "message": "问题已处理"}
-    finally:
-        db.close()
+            return {"success": True, "message": "问题已处理"}
+        finally:
+            db.close()
+
+    return await asyncio.to_thread(_handle)
 
 
 @tool

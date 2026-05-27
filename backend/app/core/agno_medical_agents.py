@@ -35,6 +35,9 @@ from .prompts import (
     get_followup_generate_instructions,
     get_followup_analysis_instructions,
     get_followup_review_instructions,
+    get_nurse_followup_prompt_instructions,
+    get_nurse_report_prompt_instructions,
+    get_doctor_issue_prompt_instructions,
 )
 
 import os
@@ -270,13 +273,13 @@ def get_nurse_analyze_agent() -> Agent:
 @lru_cache(maxsize=1)
 def get_nurse_followup_agent() -> Agent:
     """护士随访变体（2 tools: create_followup + query）"""
-    return _build_nurse_agent_variant("followup", NURSE_TOOL_GROUPS["followup"], tool_call_limit=2)
+    return _build_nurse_agent_variant("followup", NURSE_TOOL_GROUPS["followup"], tool_call_limit=2, instructions=get_nurse_followup_prompt_instructions())
 
 
 @lru_cache(maxsize=1)
 def get_nurse_report_agent() -> Agent:
     """护士上报变体（2 tools: report_issue + query）"""
-    return _build_nurse_agent_variant("report", NURSE_TOOL_GROUPS["report"], tool_call_limit=2)
+    return _build_nurse_agent_variant("report", NURSE_TOOL_GROUPS["report"], tool_call_limit=2, instructions=get_nurse_report_prompt_instructions())
 
 
 @lru_cache(maxsize=1)
@@ -302,7 +305,7 @@ def get_doctor_order_agent() -> Agent:
 @lru_cache(maxsize=1)
 def get_doctor_issue_agent() -> Agent:
     """医生问题处理变体（2 tools: handle_issue + comprehensive）"""
-    return _build_doctor_agent_variant("issue", DOCTOR_TOOL_GROUPS["issue"], tool_call_limit=2)
+    return _build_doctor_agent_variant("issue", DOCTOR_TOOL_GROUPS["issue"], tool_call_limit=2, instructions=get_doctor_issue_prompt_instructions())
 
 
 @lru_cache(maxsize=1)
@@ -311,7 +314,7 @@ def get_doctor_chat_variant_agent() -> Agent:
     return _build_doctor_agent_variant("chat", DOCTOR_TOOL_GROUPS["chat"], tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
 
 
-# ---- 向后兼容的 getter（全量兜底） ----
+# ---- 全量兜底 Agent（router fallback，NLU 未命中时使用） ----
 
 @lru_cache(maxsize=1)
 def get_nurse_agent() -> Agent:
@@ -371,7 +374,7 @@ DOCTOR_AGENT_VARIANT_MAP = {
 def create_followup_generate_agent() -> Agent:
     """创建随访脚本生成 Agent — Structured Output"""
     return Agent(
-        name="小安-随访生成",
+        name="小护-随访生成",
         model=get_agno_model(role="pregnant"),
         instructions=get_followup_generate_instructions(),
         output_schema=FollowUpGenerateOutput,

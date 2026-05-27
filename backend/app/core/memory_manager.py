@@ -2,6 +2,7 @@
 import time
 from typing import Optional
 from datetime import datetime, timedelta
+from ..utils.timezone import beijing_now
 
 
 class MemoryManager:
@@ -77,7 +78,7 @@ class MemoryManager:
             return True
         try:
             last = datetime.strptime(last_date, "%Y-%m-%d").date()
-            return last < datetime.now().date()
+            return last < beijing_now().date()
         except ValueError:
             return True
 
@@ -88,7 +89,7 @@ class MemoryManager:
             return True
         try:
             last = datetime.strptime(last_date, "%Y-%m-%d").date()
-            return last < datetime.now().date()
+            return last < beijing_now().date()
         except ValueError:
             return True
 

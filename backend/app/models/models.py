@@ -127,6 +127,10 @@ class FollowUpRecord(Base):
     signature_data = Column(JSON, default=dict, comment="签名数据：{image: base64, signer, signed_at}")
     created_at = Column(DateTime, default=beijing_now)
 
+    __table_args__ = (
+        Index('idx_followup_pregnant_status', 'pregnant_id', 'status'),
+    )
+
 
 class FgrAssessment(Base):
     """FGR评估记录"""
@@ -166,6 +170,10 @@ class Alert(Base):
     reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=beijing_now)
 
+    __table_args__ = (
+        Index('idx_alert_pregnant_status', 'pregnant_id', 'status', 'created_at'),
+    )
+
 
 class FetalMovementSession(Base):
     """胎动计数会话"""
@@ -202,6 +210,10 @@ class MedicalOrder(Base):
     order_text = Column(Text, nullable=True, comment="纯文本文档（打印/导出）")
     modified_by_doctor = Column(Boolean, default=False, comment="医生是否已修改内容")
     doctor_notes = Column(Text, nullable=True, comment="医生修改备注")
+
+    __table_args__ = (
+        Index('idx_order_pregnant_status', 'pregnant_id', 'status'),
+    )
 
 
 class Feedback(Base):

@@ -26,10 +26,18 @@ def _safe_eval_condition(condition: str, variables: dict) -> bool:
     - 比较: sbp >= 140, dbp < 60
     - 逻辑: and, or, not
     - 复合: sbp >= 140 or dbp >= 90
+    - 括号: (sbp >= 140 or dbp >= 90) and gest_week >= 32
     """
     try:
-        # 分割 by and/or
         condition = condition.strip()
+
+        # 处理括号：找到最内层括号，递归求值后替换
+        while "(" in condition:
+            inner_match = re.search(r'\(([^()]+)\)', condition)
+            if not inner_match:
+                break
+            inner_result = _safe_eval_condition(inner_match.group(1), variables)
+            condition = condition[:inner_match.start()] + str(inner_result) + condition[inner_match.end():]
 
         # 处理 "or" 逻辑
         if " or " in condition:
@@ -45,6 +53,12 @@ def _safe_eval_condition(condition: str, variables: dict) -> bool:
         if condition.startswith("not "):
             return not _safe_eval_condition(condition[4:].strip(), variables)
 
+        # 处理已求值的布尔值（来自括号替换）
+        if condition.strip() in ("True", "true"):
+            return True
+        if condition.strip() in ("False", "false"):
+            return False
+
         # 解析比较表达式: variable operator value
         for op_str, op_func in OPERATORS.items():
             if op_str in condition:
@@ -52,12 +66,10 @@ def _safe_eval_condition(condition: str, variables: dict) -> bool:
                 left = left.strip()
                 right = right.strip()
 
-                # 获取左操作数的值
                 left_value = variables.get(left)
                 if left_value is None:
                     return False
 
-                # 解析右操作数（可能是数字或变量）
                 try:
                     right_value = float(right)
                 except ValueError:
@@ -121,8 +133,8 @@ RULES = [
          "孕晚期血压偏高，子痫前期风险", "ALERT_NURSE_AND_DOCTOR"),
     Rule("RULE_BS_POSTPRANDIAL_HIGH", "vital", 3, "blood_sugar_postprandial > 7.0", "RED",
          "餐后血糖异常（>7.0mmol/L）", "ALERT_NURSE_AND_DOCTOR"),
-    Rule("RULE_BS_FASTING_HIGH", "vital", 2, "blood_sugar_fasting > 5.3", "ORANGE",
-         "空腹血糖偏高（>5.3mmol/L），建议复查", "ALERT_NURSE"),
+    Rule("RULE_BS_FASTING_HIGH", "vital", 2, "blood_sugar_fasting >= 5.1", "ORANGE",
+         "空腹血糖偏高（≥5.1mmol/L），符合GDM诊断标准，建议复查", "ALERT_NURSE"),
     Rule("RULE_WEIGHT_GAIN_FAST", "vital", 2, "weight_gain_weekly > 2.0", "ORANGE",
          "体重周增长过快（>2kg/周）", "ALERT_NURSE"),
     Rule("RULE_WEIGHT_GAIN_SLOW", "vital", 1, "weight_gain_weekly < 0.1 and gest_week > 16", "YELLOW",
@@ -151,13 +163,16 @@ class RuleEngine:
         self.rules = RULES
 
     def evaluate_all(self, context: dict) -> list[dict]:
-        """每个领域只返回优先级最高的命中。同领域同优先级合并 triggered_rules。"""
-        domain_hits: dict[str, dict] = {}
+        """返回所有命中的规则（不再丢弃低优先级），每个域内按优先级降序排列。"""
+        all_hits: list[dict] = []
+        # 用于同优先级合并的字典: (domain, priority) -> hit
+        merged: dict[tuple, dict] = {}
+
         for rule in self.rules:
             if rule.evaluate(context):
-                current = domain_hits.get(rule.domain)
-                if not current or rule.priority > current["priority"]:
-                    domain_hits[rule.domain] = {
+                key = (rule.domain, rule.priority)
+                if key not in merged:
+                    merged[key] = {
                         "rule_id": rule.id,
                         "domain": rule.domain,
                         "priority": rule.priority,
@@ -166,9 +181,13 @@ class RuleEngine:
                         "action": rule.action,
                         "triggered_rules": [rule.id],
                     }
-                elif rule.priority == current["priority"]:
-                    current["triggered_rules"].append(rule.id)
-        return list(domain_hits.values())
+                else:
+                    merged[key]["triggered_rules"].append(rule.id)
+                    merged[key]["message"] += f"；{rule.message}"
+
+        # 按域分组、优先级降序
+        all_hits = sorted(merged.values(), key=lambda x: (x["domain"], -x["priority"]))
+        return all_hits
 
     def evaluate_fgr_risk(self, risk_level: str) -> list[dict]:
         """FGR风险等级触发规则"""
