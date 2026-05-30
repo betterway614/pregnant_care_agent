@@ -21,6 +21,7 @@ from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
 from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
+from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
     NURSE_TOOLS,
     DOCTOR_TOOLS,
@@ -225,7 +226,8 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
         tools=tools,
         session_state={},
         db=_create_nurse_db(),
-        search_knowledge=False,
+        knowledge=medical_knowledge,
+        search_knowledge=True,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
@@ -246,7 +248,8 @@ def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit:
         tools=tools,
         session_state={},
         db=_create_doctor_db(),
-        search_knowledge=False,
+        knowledge=medical_knowledge,
+        search_knowledge=True,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
