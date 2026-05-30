@@ -85,7 +85,7 @@ def test_tool_groups_tool_count():
     """验证每个分组的工具数量正确"""
     from app.core.agno_tools import TOOL_GROUPS
 
-    assert len(TOOL_GROUPS["chat"]) == 3
+    assert len(TOOL_GROUPS["chat"]) == 4  # check_emergency + get_patient_context + get_epds_result + save_health_data
     assert len(TOOL_GROUPS["record"]) == 4
     assert len(TOOL_GROUPS["qa"]) == 3
     assert len(TOOL_GROUPS["emergency"]) == 2

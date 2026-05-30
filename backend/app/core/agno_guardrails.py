@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from agno.agent._hooks import InputCheckError
@@ -72,9 +73,10 @@ class MedicalSafetyGuardrail:
     __name__ = "MedicalSafetyGuardrail"
 
     BLOCKED_PATTERNS = [
-        "诊断为", "诊断是", "确诊",
-        "建议用药", "建议服用", "处方",
-        "可以吃药", "应该吃药", "用药方案",
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)诊断为"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)确诊"),
+        re.compile(r"建议用药|建议服用|处方(?!签)"),
+        re.compile(r"可以吃药|应该吃药|用药方案"),
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -100,7 +102,7 @@ class MedicalSafetyGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if pattern in response:
+            if pattern.search(response):
                 return "小安不能提供诊断或用药建议。请咨询医生获取专业意见。"
         return None
 
@@ -117,12 +119,13 @@ class DoctorDraftGuardrail:
     __name__ = "DoctorDraftGuardrail"
 
     BLOCKED_PATTERNS = [
-        "确诊", "确定诊断", "明确诊断",
-        "无需进一步检查", "无需进一步评估",
-        "没有风险", "完全正常",
-        "诊断为", "诊断是",
-        "可以排除", "排除诊断",
-        "治疗方案为", "治疗方案确定",
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)确诊"),
+        re.compile(r"(?<!不是)(?<!并非)确定诊断|明确诊断"),
+        re.compile(r"无需进一步检查|无需进一步评估"),
+        re.compile(r"(?<!不是)没有风险|完全正常"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)诊断为|诊断是"),
+        re.compile(r"可以排除(?!的可能性)"),
+        re.compile(r"治疗方案(为|确定)(?!的建议)"),
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -135,7 +138,7 @@ class DoctorDraftGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if pattern in response:
+            if pattern.search(response):
                 return "以上分析为AI辅助生成，不构成确定性诊断结论，需医生审核确认。"
         return None
 
@@ -169,12 +172,12 @@ ORDER_SAFETY_PATTERNS = [
 ]
 
 
-def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
+def check_output_safety(text: str, patterns: list) -> Optional[str]:
     """通用输出安全检查
 
     Args:
         text: 待检查文本
-        patterns: 违规关键词列表
+        patterns: 违规关键词列表（支持 str 或 re.Pattern）
 
     Returns:
         违规提示词（检测到违规时）
@@ -183,8 +186,12 @@ def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
     if not text:
         return None
     for pattern in patterns:
-        if pattern in text:
-            return f"输出包含受限内容（{pattern}），已拦截"
+        if isinstance(pattern, re.Pattern):
+            if pattern.search(text):
+                return "输出包含受限内容，已拦截"
+        else:
+            if pattern in text:
+                return f"输出包含受限内容（{pattern}），已拦截"
     return None
 
 

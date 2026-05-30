@@ -269,13 +269,60 @@ from .core.timeout_middleware import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout=300)
 
 # CORS 配置
+ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── JWT 认证中间件 ──
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from .core.auth import decode_token
+
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/v1/auth/login"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """JWT认证中间件：跳过公开路径和OPTIONS请求"""
+
+    async def dispatch(self, request: Request, call_next):
+        # 跳过 OPTIONS 预检请求
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        path = request.url.path
+
+        # 跳过公开路径
+        if path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        # 跳过静态资源
+        if path.startswith("/assets") or path.rsplit(".", 1)[-1] in ("js", "css", "ico", "png", "jpg", "svg", "woff", "woff2", "ttf"):
+            return await call_next(request)
+
+        # 跳过 Swagger UI 相关资源
+        if path.startswith("/swagger") or path.startswith("/favicon"):
+            return await call_next(request)
+
+        # 检查 Authorization 头
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "未提供认证凭据"})
+
+        token = auth_header[7:]  # 去掉 "Bearer " 前缀
+        payload = decode_token(token)
+        if payload is None:
+            return JSONResponse(status_code=401, content={"detail": "认证凭据无效或已过期"})
+
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
 
 # 注册路由
 app.include_router(chat.router)

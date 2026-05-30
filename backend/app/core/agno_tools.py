@@ -466,6 +466,32 @@ def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | Non
             for f in recent_followups
         ]
 
+        # 自动评估规则引擎：将最近数据喂入规则引擎检测异常
+        from .rule_engine import rule_engine
+        latest_vitals = {}
+        for d in recent_data:
+            code = d.metric_code
+            if code not in latest_vitals:
+                latest_vitals[code] = d.value
+        rule_ctx = {
+            "sbp": latest_vitals.get("systolic", 0),
+            "dbp": latest_vitals.get("diastolic", 0),
+            "weight": latest_vitals.get("weight", 0),
+            "fetal_movement": latest_vitals.get("fetal_movement", 0),
+            "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting", 0) or latest_vitals.get("blood_sugar", 0),
+            "heart_rate": latest_vitals.get("heart_rate", 0),
+            "gest_week": gest_days // 7 if gest_days else 0,
+        }
+        try:
+            auto_alerts = rule_engine.evaluate_all(rule_ctx)
+        except Exception:
+            auto_alerts = []
+        result["auto_alerts"] = [
+            {"level": a["level"], "message": a["message"]}
+            for a in auto_alerts
+        ]
+        result["has_abnormal"] = len(auto_alerts) > 0
+
         # 保存到 session_state，供后续工具使用
         if run_context is not None:
             if run_context.session_state is None:
@@ -744,25 +770,32 @@ def agno_handle_issue(
 
 @tool
 def agno_query_clinical_guideline(topic: str = "") -> dict:
-    """查询临床指南和规范。
-    当医生需要查阅相关指南时使用此工具。"""
+    """查询临床指南和规范。优先使用知识库检索。"""
+    # 注意：本地环境无向量数据库，使用关键词回退搜索
+    # 生产环境应部署pgvector + BGE-M3实现语义检索
+    try:
+        from .agno_rag import search_knowledge_base
+        results = search_knowledge_base(topic, limit=3)
+        if results:
+            return {
+                "topic": topic,
+                "guidelines": [r.get("content", "")[:500] for r in results],
+                "source": "knowledge_base",
+            }
+    except Exception:
+        pass
+
     guidelines = {
         "fgr": "ACOG Practice Bulletin No. 204: Fetal Growth Restriction (2021)",
         "gdm": "ACOG Practice Bulletin No. 190: Gestational Diabetes Mellitus (2023)",
         "hypertension": "ACOG Practice Bulletin No. 222: Gestational Hypertension and Preeclampsia (2023)",
         "prenatal": "中华医学会妇产科学分会. 孕前和孕期保健指南(2022)",
     }
-
     topic_lower = topic.lower()
-    matched = []
-    for key, guideline in guidelines.items():
-        if key in topic_lower:
-            matched.append(guideline)
-
+    matched = [v for k, v in guidelines.items() if k in topic_lower]
     if not matched:
         matched = list(guidelines.values())[:3]
-
-    return {"topic": topic, "guidelines": matched}
+    return {"topic": topic, "guidelines": matched, "source": "hardcoded_fallback"}
 
 
 # 护士端 Agent 工具集
@@ -790,9 +823,11 @@ DOCTOR_TOOLS = [
 
 TOOL_GROUPS: dict[str, list] = {
     "chat": [
-        agno_parse_nlu,
+        # agno_parse_nlu 移除 — 意图已由 chat_handler NLU 预分析注入
         agno_check_emergency,
         agno_get_patient_context,
+        agno_get_epds_result,       # 情绪评估
+        agno_save_health_data,      # 记录情绪评分
     ],
     "record": [
         agno_parse_nlu,
@@ -824,6 +859,8 @@ INTENT_TO_GROUP: dict[str, str] = {
     "ask_symptom": "qa",
     "ask_exam": "qa",
     "emergency": "emergency",
+    "health_data_report": "record",
+    "schedule_inquiry": "qa",
 }
 
 

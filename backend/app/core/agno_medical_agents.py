@@ -419,3 +419,21 @@ def create_followup_review_agent() -> Agent:
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
     )
+
+
+@lru_cache(maxsize=1)
+def get_followup_generate_agent() -> Agent:
+    """获取随访脚本生成 Agent 单例"""
+    return create_followup_generate_agent()
+
+
+@lru_cache(maxsize=1)
+def get_followup_analysis_agent() -> Agent:
+    """获取随访分析 Agent 单例"""
+    return create_followup_analysis_agent()
+
+
+@lru_cache(maxsize=1)
+def get_followup_review_agent() -> Agent:
+    """获取随访审核辅助 Agent 单例"""
+    return create_followup_review_agent()

@@ -56,6 +56,11 @@
         <p>医生：doctor / doctor123</p>
         <p>管理员：admin / admin123</p>
       </div>
+
+      <div class="compliance-notice">
+        <el-icon><Warning /></el-icon>
+        <span>本系统仅用于科研教学辅助，不替代临床诊断。所有AI分析结果需经医生审核确认。</span>
+      </div>
     </div>
   </div>
 </template>
@@ -63,7 +68,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { UserFilled, Lock } from '@element-plus/icons-vue'
+import { UserFilled, Lock, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import { useAppStore } from '@/stores/app'
@@ -91,15 +96,6 @@ async function handleLogin() {
 
   loggingIn.value = true
   try {
-    // admin 本地登录（不经过后端auth）
-    if (form.hospital_id.trim() === 'admin' && form.password.trim() === 'admin123') {
-      appStore.login('admin')
-      ElMessage.success('欢迎，管理员！')
-      const redirect = router.currentRoute.value.query.redirect as string
-      router.push(redirect || '/admin/dashboard')
-      return
-    }
-
     const res = await axios.post('/api/v1/auth/login', {
       hospital_id: form.hospital_id.trim(),
       password: form.password.trim(),
@@ -110,6 +106,9 @@ async function handleLogin() {
       ElMessage.error(data.message || '登录失败')
       return
     }
+
+    // 存储 JWT token
+    localStorage.setItem('token', data.token)
 
     // 登录成功
     if (data.role === 'pregnant') {
@@ -128,6 +127,7 @@ async function handleLogin() {
       const routes: Record<string, string> = {
         nurse: '/nurse/dashboard',
         doctor: '/doctor/dashboard',
+        admin: '/admin/dashboard',
         pregnant: '/pregnant/home',
       }
       router.push(routes[data.role] || '/login')
@@ -214,5 +214,19 @@ async function handleLogin() {
 
 .login-hint p {
   margin: 2px 0;
+}
+
+.compliance-notice {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: #FFF3E0;
+  border: 1px solid #FFE0B2;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #E65100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.5;
 }
 </style>
