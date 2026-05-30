@@ -27,6 +27,7 @@ from uuid import UUID
 from agno.run import RunContext
 from ..utils.timezone import beijing_now
 from agno.tools import tool
+from ..config import settings
 
 
 def _resolve_pid(pregnant_id: str, run_context: RunContext | None) -> str:
@@ -326,24 +327,33 @@ async def agno_analyze_health_trends(
 # ==================== 知识搜索工具 ====================
 
 
-@tool
+@tool(
+    name="search_knowledge",
+    description="检索医学知识库，获取与问题相关的医学知识和指南。用于回答孕期健康、用药安全、产检指标等问题。",
+    show_result=True,
+    stop_after_tool_call=False,
+)
 async def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
-    """搜索产科知识库，返回与问题最相关的文档片段。用于回答孕期知识问题。异步安全。"""
-    from ..config import settings
-
+    """检索医学知识库"""
     if not settings.rag_enabled:
-        return {"results": [], "message": "RAG功能未启用"}
+        return {"error": "RAG功能未启用", "results": []}
 
     try:
-        from ..core.agno_rag import agno_rag_engine
+        from .agno_knowledge import knowledge
+        results = knowledge.search(query=query, max_results=top_k)
+        if not results:
+            return {"message": "未找到相关知识", "results": []}
 
-        async def _search():
-            result = await agno_rag_engine.search(query, top_k=top_k)
-            return {"results": result, "count": len(result)}
-
-        return await _search()
+        formatted = []
+        for doc in results:
+            formatted.append({
+                "content": doc.content[:500] if hasattr(doc, "content") else str(doc)[:500],
+                "source": getattr(doc, "name", "unknown"),
+                "score": getattr(doc, "score", 0),
+            })
+        return {"results": formatted}
     except Exception as e:
-        return {"results": [], "error": str(e)}
+        return {"error": f"知识检索失败: {str(e)}", "results": []}
 
 
 # ==================== 心理筛查工具 ====================
@@ -771,15 +781,16 @@ def agno_handle_issue(
 @tool
 def agno_query_clinical_guideline(topic: str = "") -> dict:
     """查询临床指南和规范。优先使用知识库检索。"""
-    # 注意：本地环境无向量数据库，使用关键词回退搜索
-    # 生产环境应部署pgvector + BGE-M3实现语义检索
     try:
-        from .agno_rag import search_knowledge_base
-        results = search_knowledge_base(topic, limit=3)
+        from .agno_knowledge import knowledge
+        results = knowledge.search(query=topic, max_results=3)
         if results:
             return {
                 "topic": topic,
-                "guidelines": [r.get("content", "")[:500] for r in results],
+                "guidelines": [
+                    doc.content[:500] if hasattr(doc, "content") else str(doc)[:500]
+                    for doc in results
+                ],
                 "source": "knowledge_base",
             }
     except Exception:
