@@ -126,12 +126,18 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
-    # RAG配置
-    rag_enabled: bool = False
-    embedding_mode: Literal["mock", "local", "api"] = "mock"
-    embedding_api_url: str = ""
+    # RAG (Agno native)
+    rag_enabled: bool = True
+    rag_chunk_size: int = 600
+    rag_chunk_overlap: int = 120
+    rag_search_type: Literal["vector", "hybrid"] = "hybrid"
+    rag_max_results: int = 5
+
+    # Embedding (DashScope / OpenAI-compatible)
+    embedding_api_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embedding_api_key: str = ""
-    embedding_model: str = "BAAI/bge-m3"
+    embedding_model: str = "text-embedding-v3"
+    embedding_dimensions: int = 1024
 
     # Seed
     seed_data: bool = True
