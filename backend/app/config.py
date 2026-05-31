@@ -118,6 +118,13 @@ class Settings(BaseSettings):
             return None
         return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
+    @property
+    def agno_database_url(self) -> str:
+        """Agno PgVector 使用 psycopg3 驱动"""
+        if self.db_type == "sqlite":
+            return self.database_url
+        return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379

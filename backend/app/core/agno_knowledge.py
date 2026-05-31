@@ -24,7 +24,7 @@ def create_knowledge() -> Knowledge:
         description="孕期智能管理平台医学知识库，覆盖产检指南、用药安全、孕期疾病管理等",
         vector_db=PgVector(
             table_name="knowledge_chunks",
-            db_url=settings.database_url,
+            db_url=settings.agno_database_url,
             search_type=search_type,
             embedder=OpenAIEmbedder(
                 id=settings.embedding_model,
