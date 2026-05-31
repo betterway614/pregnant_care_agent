@@ -22,7 +22,7 @@ DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
     "agno_query_clinical_guideline": "正在查阅临床指南...",
     "agno_analyze_health_trends": "正在分析健康趋势...",
     "agno_evaluate_vital_rules": "正在评估生命体征...",
-    "agno_search_knowledge": "正在查阅医学知识库...",
+    "search_knowledge_base": "正在查阅医学知识库...",
     "agno_query_patient_data": "正在查询患者数据...",
 }
 

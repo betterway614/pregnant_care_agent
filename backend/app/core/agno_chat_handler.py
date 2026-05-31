@@ -32,7 +32,7 @@ from ..config import settings, get_asr_mode
 TOOL_THINKING_MAP: dict[str, str] = {
     "agno_parse_nlu": "正在理解您的需求...",
     "agno_check_emergency": "正在进行安全检查...",
-    "agno_search_knowledge": "正在查阅孕期知识库...",
+    "search_knowledge_base": "正在查阅孕期知识库...",
     "agno_get_patient_context": "正在了解您的健康情况...",
     "agno_analyze_health_trends": "正在分析您的健康趋势...",
     "agno_evaluate_vital_rules": "正在评估健康指标...",

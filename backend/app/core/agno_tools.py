@@ -324,39 +324,10 @@ async def agno_analyze_health_trends(
     return await asyncio.to_thread(_analyze_health_trends_sync, pid)
 
 
-# ==================== 知识搜索工具 ====================
-
-
-@tool(
-    name="search_knowledge",
-    description="检索医学知识库，获取与问题相关的医学知识和指南。用于回答孕期健康、用药安全、产检指标等问题。",
-    show_result=True,
-    stop_after_tool_call=False,
-)
-async def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
-    """检索医学知识库"""
-    if not settings.rag_enabled:
-        return {"error": "RAG功能未启用", "results": []}
-
-    try:
-        from .agno_knowledge import knowledge
-        results = knowledge.search(query=query, max_results=top_k)
-        if not results:
-            return {"message": "未找到相关知识", "results": []}
-
-        formatted = []
-        for doc in results:
-            formatted.append({
-                "content": doc.content[:500] if hasattr(doc, "content") else str(doc)[:500],
-                "source": getattr(doc, "name", "unknown"),
-                "score": getattr(doc, "score", 0),
-            })
-        return {"results": formatted}
-    except Exception as e:
-        return {"error": f"知识检索失败: {str(e)}", "results": []}
-
-
 # ==================== 心理筛查工具 ====================
+
+# 注意：知识搜索工具由 Agno 框架自动注入 (search_knowledge_base)
+# 当 Agent 设置 search_knowledge=True 时，框架会自动创建该工具
 
 
 @tool
@@ -416,7 +387,6 @@ MEDICAL_TOOLS = [
     agno_should_ask_weight,
     agno_should_ask_bp,
     agno_analyze_health_trends,
-    agno_search_knowledge,
     agno_get_epds_result,
 ]
 
@@ -816,7 +786,6 @@ NURSE_TOOLS = [
     agno_report_issue_to_doctor,
     agno_analyze_health_trends,
     agno_evaluate_vital_rules,
-    agno_search_knowledge,
 ]
 
 # 医生端 Agent 工具集
@@ -827,7 +796,6 @@ DOCTOR_TOOLS = [
     agno_query_clinical_guideline,
     agno_analyze_health_trends,
     agno_evaluate_vital_rules,
-    agno_search_knowledge,
 ]
 
 # ==================== 工具子集分组（工具路由） ====================
@@ -847,8 +815,7 @@ TOOL_GROUPS: dict[str, list] = {
         agno_get_patient_context,
     ],
     "qa": [
-        agno_search_knowledge,
-        agno_get_patient_context,
+            agno_get_patient_context,
         agno_analyze_health_trends,
     ],
     "emergency": [
@@ -901,8 +868,7 @@ NURSE_TOOL_GROUPS: dict[str, list] = {
         agno_query_patient_data,
         agno_analyze_health_trends,
         agno_evaluate_vital_rules,
-        agno_search_knowledge,
-    ],
+        ],
     "followup": [
         agno_create_followup_record,
         agno_query_patient_data,
@@ -913,8 +879,7 @@ NURSE_TOOL_GROUPS: dict[str, list] = {
     ],
     "chat": [
         agno_query_patient_data,
-        agno_search_knowledge,
-        agno_analyze_health_trends,
+            agno_analyze_health_trends,
     ],
 }
 
@@ -949,8 +914,7 @@ DOCTOR_TOOL_GROUPS: dict[str, list] = {
         agno_analyze_patient_comprehensive,
         agno_analyze_health_trends,
         agno_evaluate_vital_rules,
-        agno_search_knowledge,
-        agno_query_clinical_guideline,
+            agno_query_clinical_guideline,
     ],
     "order": [
         agno_generate_medical_order,
@@ -961,8 +925,7 @@ DOCTOR_TOOL_GROUPS: dict[str, list] = {
         agno_analyze_patient_comprehensive,
     ],
     "chat": [
-        agno_search_knowledge,
-        agno_analyze_health_trends,
+            agno_analyze_health_trends,
         agno_evaluate_vital_rules,
     ],
 }

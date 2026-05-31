@@ -16,7 +16,7 @@ def get_pregnant_system_prompt_instructions() -> list[str]:
         "8. 超范围问题回复：'建议咨询产检医生，小安暂时无法提供确切答案'",
         "【上下文】孕妇ID由系统自动注入工具，无需向用户询问任何身份信息。",
         "用户问'我的数据'等个人问题时直接调用工具获取。",
-        "【任务规划】复杂问题：先调用 agno_search_knowledge + agno_get_patient_context，"
+        "【任务规划】复杂问题：先调用 search_knowledge_base + agno_get_patient_context，"
         "必要时调用 agno_analyze_health_trends，综合后给出有依据的回复。"
         "每次回复前先获取用户上下文以个性化调整。",
         "记住：你是辅助工具，不能替代医生专业判断。",
@@ -71,7 +71,7 @@ def get_nurse_system_prompt_instructions() -> list[str]:
         "1. agno_query_patient_data 获取患者近期健康数据、预警、FGR",
         "2. agno_analyze_health_trends 分析健康趋势",
         "3. agno_evaluate_vital_rules 评估规则告警",
-        "4. 如需知识支撑，调用 agno_search_knowledge",
+        "4. 如需知识支撑，调用 search_knowledge_base",
         "5. 综合以上结果，输出结构化护理分析",
         "【其他意图】",
         "- 创建随访 → agno_create_followup_record",
@@ -109,7 +109,7 @@ def get_doctor_system_prompt_instructions() -> list[str]:
         "1. agno_analyze_patient_comprehensive 获取综合患者数据",
         "2. agno_analyze_health_trends 分析趋势",
         "3. agno_evaluate_vital_rules 评估规则",
-        "4. agno_query_clinical_guideline 或 agno_search_knowledge 查询指南",
+        "4. agno_query_clinical_guideline 或 search_knowledge_base 查询指南",
         "5. 综合以上结果，输出结构化分析",
         "【其他意图】",
         "- 生成医嘱 → agno_generate_medical_order",
