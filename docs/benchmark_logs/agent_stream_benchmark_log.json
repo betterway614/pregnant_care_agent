@@ -1,0 +1,592 @@
+{
+  "benchmark_time": "2026-05-28T00:18:20.706291",
+  "config": {
+    "cloud_model": "qwen3.6-35b-a3b",
+    "local_model": "qwen3.6-35b-q8-vl",
+    "cloud_thinking": "disabled",
+    "local_reasoning": "off",
+    "stream": true,
+    "temperature": 0.3
+  },
+  "total_calls": 12,
+  "calls": [
+    {
+      "timestamp": "2026-05-28T00:11:07.661376",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "请分析孕妇张某（ID: P20240032）最近一周的血压数据，她孕32周，血压记录：130/85, 132/87, 135/90, 138/92。需要判断是否有子痫前期风险。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "7d9f73f9-36a5-9e97-a095-6c619f41d479",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "200",
+        "req-arrive-time": "1779869432753",
+        "resp-start-time": "1779869432953",
+        "x-envoy-upstream-service-time": "199",
+        "date": "Wed, 27 May 2026 08:10:32 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 4.6666,
+        "ttft": 0.32,
+        "prompt_tokens": 150,
+        "completion_tokens": 995,
+        "reasoning_tokens": 0,
+        "text_tokens": 995,
+        "text_content_len": 1094,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 197,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 213.22,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是小护。针对孕妇张某（ID: P20240032）的血压数据分析如下：\n\n### 1. 数据趋势分析\n*   **收缩压 (SBP) 变化**：130 → 132 → 135 → 138 mmHg（呈持续上升趋势）。\n*   **舒张压 (DBP) 变化**：85 → 87 → 90 → 92 mmHg（呈持续上升趋势）。\n*   **最新数值**：**138/92 mmHg**。\n\n### 2. 风险评估（基于子痫前期诊断标准）\n根据《妊娠期高血压疾病诊治指南》，子痫前期的诊断标准通常包括：\n*   妊娠20周后出现高血压（收缩压 ≥140 mmHg 和/或 舒张压 ≥90 mmHg）。\n*   伴有蛋白尿或其他器官功能障碍。\n\n**对张某的分析：**\n1.  **血压水平**：虽然最新一次记录为 138/92 mmHg，其中舒张压已触及 **90 mmHg** 的临界值，且收缩压接近 140 mmHg。更重要的是，数据显示出**进行性升高**的趋势。\n2.  **风险等级**：**高风险预警**。\n    *   舒张压连续两次及以上 ≥90 mmHg 即符合高血压定义。\n",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:11:47.989521",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "请分析孕妇张某（ID: P20240032）最近一周的血压数据，她孕32周，血压记录：130/85, 132/87, 135/90, 138/92。需要判断是否有子痫前期风险。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 21.0692,
+        "ttft": 0.3176,
+        "prompt_tokens": 150,
+        "completion_tokens": 840,
+        "reasoning_tokens": 0,
+        "text_tokens": 840,
+        "text_content_len": 1546,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 901,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 39.87,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是小护。已收到孕妇张某（ID: P20240032）的血压数据。根据您提供的最近一周血压记录（130/85, 132/87, 135/90, 138/92），结合孕32周的生理特点，我进行了如下分析：\n\n### 1. 数据趋势分析\n*   **收缩压 (SBP)**：从 130 mmHg 上升至 138 mmHg，呈**持续上升趋势**。\n*   **舒张压 (DBP)**：从 85 mmHg 上升至 92 mmHg，呈**持续上升趋势**。\n*   **脉压差**：维持在 40-46 mmHg 左右，基本正常，但舒张压升高明显。\n\n### 2. 风险评估：子痫前期风险判定\n根据《妊娠高血压疾病诊治指南》及临床标准：\n*   **高血压定义**：妊娠20周后，收缩压 ≥140 mmHg 和/或 舒张压 ≥90 mmHg。\n*   **当前状态**：\n    *   最新一次血压 **138/92 mmHg**。\n    *   虽然收缩压尚未达到140 mmHg的确诊阈值，但**舒张压已明确超过90 mmHg**。\n    *   血压呈现**进行性升高**趋势，且舒张压升高往",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:12:08.907651",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某（ID: P20240045）孕28周，GDM确诊，空腹血糖5.8mmol/L，餐后2h血糖8.2mmol/L。请制定本周随访计划。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "707bf776-25b8-9545-b54e-f0021d14ff0e",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "152",
+        "req-arrive-time": "1779869484475",
+        "resp-start-time": "1779869484627",
+        "x-envoy-upstream-service-time": "152",
+        "date": "Wed, 27 May 2026 08:11:24 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 10.8564,
+        "ttft": 0.2726,
+        "prompt_tokens": 129,
+        "completion_tokens": 1418,
+        "reasoning_tokens": 0,
+        "text_tokens": 1418,
+        "text_content_len": 2421,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 431,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 130.61,
+        "mentioned_tools": [
+          "report_issue_to_doctor"
+        ]
+      },
+      "text_preview": "您好，我是小护。针对孕妇李某（ID: P20240045）目前孕28周、确诊妊娠期糖尿病（GDM）且血糖控制未达标的情况，我为您制定了以下本周随访计划及健康指导方案。\n\n### 📋 患者概况分析\n*   **当前状态**：孕28周（进入孕晚期初期，胰岛素抵抗可能进一步加重）。\n*   **诊断**：妊娠期糖尿病（GDM）。\n*   **血糖数据评估**：\n    *   空腹血糖 5.8 mmol/L：**偏高**（目标值通常 < 5.3 mmol/L）。\n    *   餐后2h血糖 8.2 mmol/L：**偏高**（目标值通常 < 6.7 mmol/L）。\n*   **风险预警**：目前饮食运动干预下的血糖仍未达标，存在巨大儿、羊水过多、新生儿低血糖等风险，需加强监测并考虑是否需要药物干预。\n\n---\n\n### 📅 本周随访计划 (Follow-up Plan)\n\n#### 1. 医疗评估与复查 (Medical Assessment)\n*   **复诊时间**：建议 **3天内** 前往产科或内分泌科复诊。\n*   **检查项目**：\n    *   **糖化血红蛋白 (HbA",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:13:02.700086",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某（ID: P20240045）孕28周，GDM确诊，空腹血糖5.8mmol/L，餐后2h血糖8.2mmol/L。请制定本周随访计划。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 26.1361,
+        "ttft": 0.3547,
+        "prompt_tokens": 129,
+        "completion_tokens": 1207,
+        "reasoning_tokens": 0,
+        "text_tokens": 1207,
+        "text_content_len": 1900,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 1120,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 46.18,
+        "mentioned_tools": [
+          "report_issue_to_doctor",
+          "check_emergency"
+        ]
+      },
+      "text_preview": "您好，我是小护。针对孕妇李某（ID: P20240045）目前孕28周、确诊妊娠期糖尿病（GDM）且血糖控制未达标的情况，我为您制定了本周的详细随访计划。\n\n### 📊 当前状况分析\n*   **孕周**：28周（进入妊娠晚期，胰岛素抵抗增加，血糖波动风险加大）。\n*   **诊断**：GDM（妊娠期糖尿病）。\n*   **血糖数据**：\n    *   空腹 5.8 mmol/L（目标值通常 < 5.3 mmol/L，**偏高**）。\n    *   餐后2h 8.2 mmol/L（目标值通常 < 6.7 mmol/L，**偏高**）。\n*   **风险评估**：当前血糖水平高于GDM控制目标，存在巨大儿、羊水过多、新生儿低血糖等风险，需立即干预。\n\n---\n\n### 📅 本周随访计划 (Follow-up Plan)\n\n#### 1. 医疗干预与复诊安排\n*   **复诊时间**：建议 **3天内** 前往产科或内分泌科复诊。\n*   **医生评估重点**：\n    *   评估是否需要启动或调整胰岛素治疗（鉴于饮食运动控制不佳，可能需要药物介入）。\n    *   排查是否有酮症",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:13:19.057496",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "孕妇王某（ID: P20240018）孕36周，胎动明显减少（过去2小时只有1次），之前每天约10次。请立即评估。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "c6f9435e-924f-93ce-b5ce-c9708232c544",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "145",
+        "req-arrive-time": "1779869559178",
+        "resp-start-time": "1779869559324",
+        "x-envoy-upstream-service-time": "144",
+        "date": "Wed, 27 May 2026 08:12:39 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 6.8293,
+        "ttft": 0.2572,
+        "prompt_tokens": 121,
+        "completion_tokens": 1177,
+        "reasoning_tokens": 0,
+        "text_tokens": 1177,
+        "text_content_len": 1616,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 271,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 172.35,
+        "mentioned_tools": []
+      },
+      "text_preview": "**【紧急警报：胎动异常】**\n\n您好，我是小护。根据您提供的数据，孕妇王某（ID: P20240018）目前孕36周，出现**胎动显著减少**的情况（过去2小时仅1次，远低于正常标准及既往水平）。这属于产科急症预警信号，可能提示胎儿宫内窘迫或胎盘功能不全。\n\n请立即执行以下评估与处理步骤：\n\n### 1. 立即行动建议（给家属/患者）\n*   **左侧卧位休息**：让孕妇立即采取左侧卧位，改善子宫胎盘血流灌注。\n*   **补充能量**：如果距离上一餐时间较长，可少量进食巧克力或果汁，有时低血糖会导致胎动减少，进食后观察30-60分钟。\n*   **再次计数**：在安静环境下，专注感受胎动。若1小时内胎动仍少于3次，或总计数仍极低，**必须立即前往医院急诊**。\n\n### 2. 医疗评估重点（护士/医生视角）\n作为AI助手，我建议您立即调用工具进行详细核查和干预：\n\n#### 🚨 第一步：紧急检查 (Check Emergency)\n*   **目的**：确认当前生命体征及胎儿状况。\n*   **操作**：立即安排**胎心监护 (NST)** 和 **B超生物物理评分 (BPP)**",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:13:53.312265",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士AI助手。\n你的职责：分析孕妇健康数据、SOAP格式记录、生成随访计划、异常上报。\n可用工具：query_patient_data, analyze_health_trends, search_knowledge, create_followup_record, report_issue_to_doctor, check_emergency"
+          },
+          {
+            "role": "user",
+            "content": "孕妇王某（ID: P20240018）孕36周，胎动明显减少（过去2小时只有1次），之前每天约10次。请立即评估。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 11.0107,
+        "ttft": 0.353,
+        "prompt_tokens": 121,
+        "completion_tokens": 1014,
+        "reasoning_tokens": 0,
+        "text_tokens": 1014,
+        "text_content_len": 810,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 463,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 92.09,
+        "mentioned_tools": [
+          "report_issue_to_doctor",
+          "check_emergency"
+        ]
+      },
+      "text_preview": "**【紧急医疗预警】检测到高危异常指标**\n\n**患者信息**：王某 (ID: P20240018)\n**孕周**：36周\n**主诉**：胎动明显减少（过去2小时仅1次，基线约10次/天）\n\n**初步评估结论**：\n胎动显著减少是胎儿宫内缺氧（Fetal Distress）的早期敏感信号。孕36周属于晚期妊娠，胎盘功能可能逐渐减退，胎动减少需立即排除脐带绕颈、胎盘功能不全或急性缺氧风险。**此为产科急症前兆，需立即干预。**\n\n---\n\n### 🚨 立即执行行动建议\n\n1.  **立即通知医生**：\n    *   使用 `report_issue_to_doctor` 上报紧急病例。\n    *   告知医生：患者孕36周，胎动由正常（~10次/天）骤降至过去2小时1次。\n\n2.  **紧急检查建议（需医生下达医嘱）**：\n    *   **胎心监护 (NST)**：评估胎儿心率基线、变异及加速情况，判断是否存在胎儿窘迫。\n    *   **B超检查**：重点评估羊水指数 (AFI)、脐血流阻力指数 (S/D值)、生物物理评分 (BPP)。\n    *   **血氧饱和度监测**",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:14:16.347478",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "97965ac9-1e22-9013-84c3-bcff106b60f1",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "164",
+        "req-arrive-time": "1779869609793",
+        "resp-start-time": "1779869609957",
+        "x-envoy-upstream-service-time": "164",
+        "date": "Wed, 27 May 2026 08:13:29 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 13.2565,
+        "ttft": 0.2799,
+        "prompt_tokens": 128,
+        "completion_tokens": 1646,
+        "reasoning_tokens": 0,
+        "text_tokens": 1646,
+        "text_content_len": 2895,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 523,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 124.17,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是智医生。根据您提供的病例信息（孕34周初产妇，头痛、视物模糊，BP 155/100mmHg，尿蛋白++，双下肢水肿），该患者目前高度疑似**重度子痫前期（Severe Pre-eclampsia）**，且已出现中枢神经系统症状（头痛、视物模糊），属于产科急症范畴。\n\n以下是针对该病例的详细鉴别诊断分析及后续处理建议：\n\n### 一、 核心诊断评估\n*   **初步诊断**：**重度子痫前期**\n    *   **依据**：\n        1.  妊娠20周后发病。\n        2.  高血压：收缩压≥160mmHg或舒张压≥110mmHg为重度标准，本例155/100mmHg虽未完全达到重度血压标准，但伴有靶器官损害症状。\n        3.  蛋白尿：++（提示肾脏损害）。\n        4.  **关键警示症状**：持续性头痛、视物模糊。这是脑血管痉挛、脑水肿或视网膜病变的表现，提示病情危重，随时可能进展为子痫发作。\n\n---\n\n### 二、 鉴别诊断 (Differential Diagnosis)\n\n需要排除其他引起妊娠期高血压及类似症状的疾病：\n\n###",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:15:21.632994",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 33.1655,
+        "ttft": 0.3524,
+        "prompt_tokens": 128,
+        "completion_tokens": 1402,
+        "reasoning_tokens": 0,
+        "text_tokens": 1402,
+        "text_content_len": 2587,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 1430,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 42.27,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是智医生。根据您提供的病例信息，患者李某为28岁初产妇，孕34周，出现头痛、视物模糊，伴有高血压（155/100mmHg）、蛋白尿（++）及下肢水肿。\n\n**初步临床印象：**\n高度怀疑为 **妊娠期高血压疾病（Hypertensive Disorders of Pregnancy, HDP）**，具体分型倾向于 **子痫前期（Preeclampsia）**，且因伴有神经系统症状（头痛、视物模糊），需警惕 **重度子痫前期（Severe Preeclampsia）** 或即将发生子痫的风险。\n\n以下是详细的鉴别诊断分析：\n\n### 1. 核心诊断：子痫前期 (Preeclampsia)\n*   **支持点：**\n    *   **时间符合：** 孕20周后发病（本例为34周）。\n    *   **高血压：** BP 155/100mmHg（≥140/90mmHg）。\n    *   **蛋白尿：** 尿蛋白++（提示肾脏受损）。\n    *   **靶器官损害症状：** 头痛、视物模糊提示中枢神经系统受累（脑水肿或脑血管痉挛），这是重度子痫前期的典型表现。\n    *   ",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:15:44.367817",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "护士报告：孕妇王某孕36周，胎动明显减少（2小时内仅1次），无腹痛无出血。既往产检正常。请评估并给出处理方案。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "e802736e-cd72-93fb-9cbb-0595754e03be",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "203",
+        "req-arrive-time": "1779869698109",
+        "resp-start-time": "1779869698313",
+        "x-envoy-upstream-service-time": "203",
+        "date": "Wed, 27 May 2026 08:14:58 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 9.2785,
+        "ttft": 0.3159,
+        "prompt_tokens": 109,
+        "completion_tokens": 1751,
+        "reasoning_tokens": 0,
+        "text_tokens": 1751,
+        "text_content_len": 2034,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 362,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 188.72,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是智医生。针对孕妇王某目前的情况（孕36周，胎动明显减少至2小时1次），这是一个**产科急症信号**。\n\n虽然患者无腹痛、无出血且既往产检正常，但“胎动减少”是胎儿宫内缺氧最敏感、最早的临床表现之一。必须立即进行干预，排除胎儿窘迫风险。\n\n以下是我的综合评估与处理方案：\n\n### 1. 紧急风险评估\n*   **高危因素**：孕晚期胎动显著减少（正常应≥3-5次/2小时，或较平时减少50%以上）。\n*   **潜在风险**：胎盘功能减退、脐带受压/绕颈、羊水过少、胎儿宫内窘迫甚至胎死宫内。\n*   **当前状态**：虽无腹痛出血，但不能排除急性或慢性缺氧可能。**严禁等待观察超过1-2小时**。\n\n### 2. 立即执行医嘱 (Generate Medical Order)\n\n请护士立即执行以下操作，并通知产科医生床旁会诊：\n\n#### A. 生命体征与胎儿监测\n1.  **持续电子胎心监护 (NST)**：\n    *   立即行20-40分钟电子胎心监护。\n    *   **关注指标**：基线变异、加速情况、有无减速（特别是晚期减速或变异减速）。\n    *   *若NS",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:16:46.129030",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "护士报告：孕妇王某孕36周，胎动明显减少（2小时内仅1次），无腹痛无出血。既往产检正常。请评估并给出处理方案。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 31.1233,
+        "ttft": 0.327,
+        "prompt_tokens": 109,
+        "completion_tokens": 1337,
+        "reasoning_tokens": 0,
+        "text_tokens": 1337,
+        "text_content_len": 2146,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 1347,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 42.96,
+        "mentioned_tools": []
+      },
+      "text_preview": "你好，我是智医生。针对孕妇王某（孕36周，胎动明显减少）的情况，这是一个**产科急症预警信号**。\n\n胎动减少是胎儿宫内缺氧的早期敏感指标，必须立即排除胎儿窘迫。虽然患者无腹痛、无出血，但不能因此掉以轻心。\n\n以下是综合评估、鉴别诊断及处理方案：\n\n### 1. 紧急评估与初步判断\n\n*   **风险等级**：**高危（红色预警）**。孕36周已近足月，胎动2小时仅1次远低于正常标准（正常应≥10次/2小时，或≥3-5次/小时）。\n*   **核心问题**：疑似胎儿宫内窘迫（Fetal Distress）。\n*   **首要任务**：立即进行胎儿监护，评估胎儿储备能力，决定是否需要紧急终止妊娠。\n\n### 2. 鉴别诊断思路\n\n尽管既往产检正常，但需考虑以下可能导致胎动减少的原因：\n1.  **胎盘功能减退/胎盘早剥（隐性）**：虽无阴道出血，但可能存在后壁胎盘早剥或胎盘功能急性下降，导致供氧不足。\n2.  **脐带因素**：脐带绕颈过紧、脐带真结或脐带受压，导致急性血流阻断。\n3.  **羊水异常**：羊水过少导致脐带受压风险增加。\n4.  **母体因素**：低血糖、低血压、镇静药物",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:17:08.455079",
+      "backend": "cloud",
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "孕妇赵某孕30周，GDM，饮食控制血糖不达标（空腹5.9, 餐后2h 9.1）。请评估是否需要胰岛素治疗并生成医嘱。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true,
+        "enable_thinking": false
+      },
+      "response_headers": {
+        "vary": "Origin",
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "731850ad-50da-9932-8a7f-20c8be9a2123",
+        "x-dashscope-call-gateway": "true",
+        "req-cost-time": "187",
+        "req-arrive-time": "1779869782613",
+        "resp-start-time": "1779869782801",
+        "x-envoy-upstream-service-time": "187",
+        "date": "Wed, 27 May 2026 08:16:22 GMT",
+        "server": "istio-envoy",
+        "transfer-encoding": "chunked"
+      },
+      "result": {
+        "backend": "cloud",
+        "latency": 11.6081,
+        "ttft": 0.3102,
+        "prompt_tokens": 110,
+        "completion_tokens": 1504,
+        "reasoning_tokens": 0,
+        "text_tokens": 1504,
+        "text_content_len": 2622,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 476,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 129.57,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是智医生。针对孕妇赵某（孕30周，GDM，饮食控制血糖不达标）的情况，我将结合临床指南进行综合评估，并生成相应的医疗建议。\n\n### 1. 综合评估与鉴别诊断\n\n**患者现状分析：**\n*   **孕周：** 30周（妊娠晚期，胎盘分泌的拮抗胰岛素激素如人胎盘生乳素、皮质醇等水平较高，胰岛素抵抗加重）。\n*   **诊断：** 妊娠期糖尿病（GDM）。\n*   **治疗史：** 已尝试医学营养治疗（MNT）及运动疗法。\n*   **血糖监测结果：**\n    *   空腹血糖 (FPG)：5.9 mmol/L\n    *   餐后2小时血糖 (2h PG)：9.1 mmol/L\n\n**达标标准对比（依据《中国2型糖尿病防治指南》及《妊娠期高血糖诊治指南》）：**\n*   GDM血糖控制目标通常为：\n    *   空腹：< 5.3 mmol/L\n    *   餐后1小时：< 7.8 mmol/L\n    *   餐后2小时：< 6.7 mmol/L\n*   **评估结论：** 赵某的**空腹血糖 (5.9)** 和 **餐后2小时血糖 (9.1)** 均显著高于控制目标。且经",
+      "thinking_preview": ""
+    },
+    {
+      "timestamp": "2026-05-28T00:18:20.706020",
+      "backend": "local",
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生AI助手。\n你的职责：综合评估、鉴别诊断、生成医嘱、处理异常。\n可用工具：analyze_patient_comprehensive, query_patient_data, query_clinical_guideline, generate_medical_order, handle_issue"
+          },
+          {
+            "role": "user",
+            "content": "孕妇赵某孕30周，GDM，饮食控制血糖不达标（空腹5.9, 餐后2h 9.1）。请评估是否需要胰岛素治疗并生成医嘱。"
+          }
+        ],
+        "temperature": 0.3,
+        "stream": true
+      },
+      "response_headers": {
+        "keep-alive": "timeout=5, max=100",
+        "content-type": "text/event-stream",
+        "server": "llama.cpp",
+        "transfer-encoding": "chunked",
+        "access-control-allow-origin": ""
+      },
+      "result": {
+        "backend": "local",
+        "latency": 30.7782,
+        "ttft": 0.3269,
+        "prompt_tokens": 110,
+        "completion_tokens": 1810,
+        "reasoning_tokens": 0,
+        "text_tokens": 1810,
+        "text_content_len": 2361,
+        "thinking_content_len": 0,
+        "has_thinking": false,
+        "text_chunk_count": 1332,
+        "thinking_chunk_count": 0,
+        "text_tok_per_sec": 58.81,
+        "mentioned_tools": []
+      },
+      "text_preview": "您好，我是智医生。针对孕妇赵某的情况，我将结合临床指南进行综合评估，并生成相应的医疗建议。\n\n### 1. 综合评估与诊断分析\n\n**患者现状：**\n*   **孕周：** 30周（妊娠晚期）。\n*   **诊断：** 妊娠期糖尿病（GDM）。\n*   **干预措施：** 饮食控制（医学营养治疗 MNT）。\n*   **血糖监测结果：**\n    *   空腹血糖 (FPG)：5.9 mmol/L\n    *   餐后2小时血糖 (2hPG)：9.1 mmol/L\n\n**评估依据（基于《妊娠期高血糖诊治指南》及ACOG/ADA指南）：**\n妊娠期糖尿病的控制目标通常设定为：\n*   空腹血糖 < 5.3 mmol/L\n*   餐后1小时血糖 < 7.8 mmol/L\n*   餐后2小时血糖 < 6.7 mmol/L\n\n**判定逻辑：**\n1.  **空腹血糖：** 5.9 mmol/L > 5.3 mmol/L，**超标**。\n2.  **餐后2小时血糖：** 9.1 mmol/L > 6.7 mmol/L，**显著超标**。\n3.  **干预时长：** 虽然您未提及饮食控制的具体天数",
+      "thinking_preview": ""
+    }
+  ]
+}

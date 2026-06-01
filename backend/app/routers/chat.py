@@ -9,7 +9,8 @@ from sse_starlette.sse import EventSourceResponse
 from loguru import logger
 
 from ..schemas import ChatSendRequest, ChatResponse
-from ..core import memory_manager, rag_engine
+from ..core import memory_manager
+from ..core.agno_knowledge import knowledge
 from ..core.agno_chat_handler import handle_chat_with_agno, handle_chat_with_agno_stream
 from ..models import HealthDataPoint, Pregnant, MedicalOrder, ConversationMessage
 from ..database import SessionLocal
@@ -128,6 +129,59 @@ async def get_memory(patient_id: str):
     return {"pregnant_id": patient_id, "memory": memory}
 
 
+@router.get("/sessions/{pregnant_id}")
+async def list_sessions(pregnant_id: str):
+    """列出该孕妇的所有历史会话（按时间倒序）"""
+    if not settings.persist_chat_messages:
+        return {"sessions": []}
+
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func, distinct
+
+        # 查询所有不同的 session_id 及其消息数和最新时间
+        rows = (
+            db.query(
+                ConversationMessage.session_id,
+                func.count(ConversationMessage.id).label("message_count"),
+                func.min(ConversationMessage.created_at).label("started_at"),
+                func.max(ConversationMessage.created_at).label("last_message_at"),
+            )
+            .filter(ConversationMessage.pregnant_id == pregnant_id)
+            .group_by(ConversationMessage.session_id)
+            .order_by(func.max(ConversationMessage.created_at).desc())
+            .limit(50)
+            .all()
+        )
+
+        sessions = []
+        for row in rows:
+            # 获取该会话的第一条用户消息作为预览
+            first_user_msg = (
+                db.query(ConversationMessage.content)
+                .filter(
+                    ConversationMessage.pregnant_id == pregnant_id,
+                    ConversationMessage.session_id == row.session_id,
+                    ConversationMessage.role == "user",
+                )
+                .order_by(ConversationMessage.created_at.asc())
+                .first()
+            )
+            preview = first_user_msg.content[:50] if first_user_msg else ""
+
+            sessions.append({
+                "session_id": row.session_id,
+                "message_count": row.message_count,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "last_message_at": row.last_message_at.isoformat() if row.last_message_at else None,
+                "preview": preview,
+            })
+
+        return {"sessions": sessions}
+    finally:
+        db.close()
+
+
 @router.delete("/memory")
 async def clear_memory(patient_id: str):
     memory_manager.clear(patient_id)
@@ -198,50 +252,58 @@ async def rag_ask(req: RAGAskRequest):
     if not settings.rag_enabled:
         raise HTTPException(400, "RAG功能未启用，请设置 RAG_ENABLED=true")
 
-    patient_context = ""
-    if req.patient_id:
-        db = SessionLocal()
-        try:
-            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.patient_id).first()
-            if pregnant and pregnant.gestational_age_days:
-                gw = pregnant.gestational_age_days // 7
-                gd = pregnant.gestational_age_days % 7
-                patient_context = f"孕{gw}+{gd}周"
-                if pregnant.risk_tags:
-                    patient_context += f" 风险: {', '.join(pregnant.risk_tags)}"
-        finally:
-            db.close()
+    try:
+        results = knowledge.search(query=req.question, max_results=req.top_k)
 
-    result = await rag_engine.ask(
-        question=req.question,
-        patient_context=patient_context,
-        top_k=req.top_k,
-    )
-    return RAGAskResponse(**result)
+        if not results:
+            return RAGAskResponse(
+                answer="抱歉，未找到相关医学知识。建议咨询产检医生。",
+                sources=[],
+                chunks=[],
+                rag_used=False,
+            )
+
+        chunks = []
+        sources = []
+        for doc in results:
+            content = doc.content[:200] if hasattr(doc, "content") else str(doc)[:200]
+            source_name = getattr(doc, "name", "unknown")
+            chunks.append({"content": content, "similarity": getattr(doc, "score", 0)})
+            sources.append({"title": source_name, "category": "knowledge"})
+
+        knowledge_text = "\n\n".join([
+            f"【来源: {getattr(doc, 'name', '未知')}】\n{doc.content[:300]}"
+            for doc in results
+        ])
+        answer = f"根据知识库信息：\n{knowledge_text}\n\n以上为参考信息，如需更详细解答，请咨询产检医生。"
+
+        return RAGAskResponse(
+            answer=answer,
+            sources=sources,
+            chunks=chunks,
+            rag_used=True,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"知识检索失败: {str(e)}")
 
 
 @router.get("/rag/status")
 def rag_status():
-    db = SessionLocal()
     try:
-        from ..models.vector_models import KnowledgeChunk
-        from sqlalchemy import func, distinct
+        results = knowledge.search(query="test", max_results=1)
+        chunk_count = "available" if results else "empty"
+    except Exception:
+        chunk_count = "unavailable"
 
-        total = db.query(KnowledgeChunk).count()
-        categories = db.query(
-            KnowledgeChunk.doc_category, func.count(KnowledgeChunk.id)
-        ).group_by(KnowledgeChunk.doc_category).all()
-        docs = db.query(distinct(KnowledgeChunk.doc_title)).count()
-        return {
-            "enabled": settings.rag_enabled,
-            "total_chunks": total,
-            "total_docs": docs,
-            "categories": [{"category": c, "count": cnt} for c, cnt in categories],
-            "db_type": settings.db_type,
-            "embedding_mode": settings.embedding_mode,
-        }
-    finally:
-        db.close()
+    return {
+        "enabled": settings.rag_enabled,
+        "search_type": settings.rag_search_type,
+        "embedding_model": settings.embedding_model,
+        "embedding_dimensions": settings.embedding_dimensions,
+        "max_results": settings.rag_max_results,
+        "knowledge_status": chunk_count,
+        "vector_db": "pgvector",
+    }
 
 
 # ==================== 健康趋势分析 ====================

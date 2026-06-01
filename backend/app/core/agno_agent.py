@@ -14,8 +14,8 @@ from functools import lru_cache
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
-from .agno_knowledge import agno_knowledge
-from .prompts import get_pregnant_system_prompt_instructions
+from .agno_knowledge import knowledge
+from .prompts import get_pregnant_system_prompt_instructions, VARIANT_INSTRUCTIONS
 from .agno_tools import MEDICAL_TOOLS, TOOL_GROUPS
 from .agno_guardrails import EmergencyGuardrail, MedicalSafetyGuardrail
 
@@ -37,10 +37,10 @@ def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
     return Agent(
         name=f"小安-{variant_name}",
         model=get_agno_model(role="pregnant"),
-        instructions=get_pregnant_system_prompt_instructions(),
+        instructions=VARIANT_INSTRUCTIONS.get(variant_name, get_pregnant_system_prompt_instructions()),
         tools=tools,
-        knowledge=agno_knowledge,
-        search_knowledge=False,
+        knowledge=knowledge,
+        search_knowledge=True,
         db=_create_pregnant_db(),
         add_history_to_context=True,
         num_history_runs=8,

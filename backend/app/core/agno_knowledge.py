@@ -1,93 +1,122 @@
-"""Agno Knowledge 适配器
+"""Agno Knowledge — 医学知识库
 
-将现有 agno_rag.py 的向量检索包装为 Agno Knowledge 兼容接口，
-不依赖 pgvector Python 包，继续使用原始 SQL 查询 PostgreSQL pgvector 扩展。
-
-使用方式：
-1. 直接使用 agno_knowledge.search() — 通过适配器调用现有 RAG 引擎
-2. Agent tool (agno_search_knowledge) — 已在 agno_tools.py 中定义
+使用 Agno 原生 Knowledge + PgVector + OpenAIEmbedder。
+支持动态 RAG 配置：检索策略、分词策略、Reranker、元数据过滤。
 """
 from __future__ import annotations
 
-from typing import Optional
-from dataclasses import dataclass
+from typing import Any, Optional
+
+from agno.knowledge.knowledge import Knowledge
+from agno.vectordb.pgvector import PgVector, SearchType
+from agno.knowledge.embedder.openai import OpenAIEmbedder
+from ..config import settings
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass
-class KnowledgeResult:
-    """知识检索结果"""
-    content: str
-    doc_title: str
-    doc_category: str
-    similarity: float
-    chunk_index: int
+def _build_reranker(config: dict | None = None):
+    """根据配置构建 Reranker 实例"""
+    cfg = config or {}
+    provider = cfg.get("reranker_provider", settings.reranker_provider) or ""
+    model = cfg.get("reranker_model", settings.reranker_model) or ""
+
+    if not provider or not model:
+        return None
+
+    if provider == "cohere":
+        try:
+            from agno.knowledge.reranker.cohere import CohereReranker
+            return CohereReranker(model=model)
+        except ImportError:
+            logger.warning("CohereReranker 未安装，请 pip install cohere")
+            return None
+
+    if provider == "infinity":
+        base_url = cfg.get("reranker_base_url", settings.reranker_base_url) or ""
+        if not base_url:
+            logger.warning("InfinityReranker 需要配置 reranker_base_url")
+            return None
+        try:
+            from agno.knowledge.reranker.infinity import InfinityReranker
+            return InfinityReranker(base_url=base_url, model=model)
+        except ImportError:
+            logger.warning("InfinityReranker 未安装")
+            return None
+
+    return None
 
 
-class AgnoKnowledgeAdapter:
-    """Agno Knowledge 适配器 - 包装现有 RAG 引擎为 Agno 兼容接口
+def create_knowledge(config: dict | None = None) -> Knowledge:
+    """创建 Agno Knowledge 实例
 
-    核心价值：
-    - 不改变现有 pgvector SQL 查询逻辑
-    - 提供 Agno Knowledge 风格的 search() 接口
-    - 可被 Agno Agent 的 knowledge 参数使用
+    Args:
+        config: 可选的运行时配置覆盖，用于动态调整 RAG 参数。
+                支持字段: rag_search_type, rag_max_results, rag_chunk_size,
+                embedding_model, embedding_dimensions, reranker_provider, reranker_model 等。
     """
+    cfg = config or {}
 
-    def __init__(self):
-        self._engine = None
+    search_type_str = cfg.get("rag_search_type", settings.rag_search_type)
+    search_type = (
+        SearchType.hybrid if search_type_str == "hybrid" else SearchType.vector
+    )
 
-    @property
-    def engine(self):
-        """延迟加载 RAG 引擎"""
-        if self._engine is None:
-            from .agno_rag import agno_rag_engine
-            self._engine = agno_rag_engine
-        return self._engine
+    embedder_model = cfg.get("embedding_model", settings.embedding_model)
+    embedder_dims = cfg.get("embedding_dimensions", settings.embedding_dimensions)
 
-    async def search(
-        self,
-        query: str,
-        top_k: int = 5,
-        category: Optional[str] = None,
-        filters: Optional[dict] = None,
-    ) -> list[KnowledgeResult]:
-        """知识检索 — Agno Knowledge 兼容接口
+    reranker = _build_reranker(cfg)
+    max_results = cfg.get("rag_max_results", settings.rag_max_results)
 
-        Args:
-            query: 查询文本
-            top_k: 返回结果数
-            category: 按分类过滤 (guideline / drug / education)
-            filters: 额外过滤条件（预留）
+    pgvector_kwargs: dict[str, Any] = {
+        "table_name": settings.agno_knowledge_table,
+        "db_url": settings.agno_database_url,
+        "search_type": search_type,
+        "embedder": OpenAIEmbedder(
+            id=embedder_model,
+            dimensions=embedder_dims,
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_api_url,
+        ),
+    }
+    if reranker:
+        pgvector_kwargs["reranker"] = reranker
 
-        Returns:
-            list[KnowledgeResult]
-        """
-        # 使用现有 RAG 引擎的 search 方法
-        raw_results = self.engine.search(query, top_k=top_k, category=category)
+    knowledge = Knowledge(
+        name="AI-Care 医学知识库",
+        description="孕期智能管理平台医学知识库，覆盖产检指南、用药安全、孕期疾病管理等",
+        vector_db=PgVector(**pgvector_kwargs),
+        max_results=max_results,
+    )
 
-        return [
-            KnowledgeResult(
-                content=r["content"],
-                doc_title=r["doc_title"],
-                doc_category=r["doc_category"],
-                similarity=r["similarity"],
-                chunk_index=r["chunk_index"],
-            )
-            for r in raw_results
-        ]
-
-    async def asearch(self, query: str, top_k: int = 5, **kwargs) -> list[dict]:
-        """异步知识检索 — 返回 dict 格式（供 Agent tool 使用）"""
-        results = await self.search(query, top_k=top_k, **kwargs)
-        return [
-            {
-                "content": r.content,
-                "doc_title": r.doc_title,
-                "doc_category": r.doc_category,
-                "similarity": r.similarity,
-            }
-            for r in results
-        ]
+    logger.info(
+        "Knowledge 创建完成: search_type={}, max_results={}, embedder={}, reranker={}",
+        search_type_str, max_results, embedder_model,
+        type(reranker).__name__ if reranker else "none",
+    )
+    return knowledge
 
 
-# 全局单例
-agno_knowledge = AgnoKnowledgeAdapter()
+# 全局单例 — 供 Agent 和 API 使用
+knowledge = create_knowledge()
+
+
+def get_rag_config() -> dict:
+    """获取当前 RAG 配置快照（供 API 返回）"""
+    return {
+        "enabled": settings.rag_enabled,
+        "search_type": settings.rag_search_type,
+        "chunk_size": settings.rag_chunk_size,
+        "chunk_overlap": settings.rag_chunk_overlap,
+        "chunking_strategy": settings.rag_chunking_strategy,
+        "max_results": settings.rag_max_results,
+        "embedding_model": settings.embedding_model,
+        "embedding_dimensions": settings.embedding_dimensions,
+        "embedding_api_url": settings.embedding_api_url,
+        "reranker_provider": settings.reranker_provider,
+        "reranker_model": settings.reranker_model,
+        "reranker_base_url": settings.reranker_base_url,
+        "vector_db_table": settings.agno_knowledge_table,
+    }

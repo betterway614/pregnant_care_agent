@@ -30,6 +30,10 @@
           <el-icon><Connection /></el-icon>
           <template #title>路由监控</template>
         </el-menu-item>
+        <el-menu-item index="/admin/knowledge">
+          <el-icon><Collection /></el-icon>
+          <template #title>知识库管理</template>
+        </el-menu-item>
       </el-menu>
 
       <div class="admin-sidebar__footer">

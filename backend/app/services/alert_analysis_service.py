@@ -9,6 +9,7 @@ from ..models import Alert, Pregnant, FollowUpRecord
 from ..core.agno_medical_agents import get_nurse_agent, get_doctor_agent
 from ..core.agno_structured import extract_structured_content
 from ..core.agno_workflow import get_alert_analysis_workflow
+from ..core.agno_team import get_alert_team
 from ..services.patient_context_service import get_recent_health_data
 
 
@@ -98,8 +99,7 @@ class AlertAnalysisService:
 
     @staticmethod
     async def run_alert_workflow(db, alert: Alert, pregnant: Pregnant) -> dict:
-        """执行完整预警分析 Workflow，结果写入 alert.details"""
-        workflow = get_alert_analysis_workflow()
+        """执行完整预警分析 — 优先 Team 并行，降级串行 Workflow，最终降级单 Agent"""
         gest_week = (pregnant.gestational_age_days or 0) // 7
         input_text = (
             f"预警ID {alert.id}：孕妇 {pregnant.display_name} 孕{gest_week}周，"
@@ -108,17 +108,28 @@ class AlertAnalysisService:
 
         result_payload: dict = {"workflow": "alert_analysis", "steps": []}
 
+        # 优先使用 Team 并行分析（护士+医生同时分析）
         try:
-            run = await workflow.arun(input=input_text, user_id=alert.pregnant_id)
+            team = get_alert_team()
+            run = await team.arun(input=input_text, user_id=alert.pregnant_id)
             result_payload["workflow_output"] = run.content if hasattr(run, "content") else str(run)
+            result_payload["mode"] = "team_parallel"
         except Exception as exc:
-            logger.warning("Alert Workflow 执行失败，降级单 Agent: {}", exc)
-            nurse = await AlertAnalysisService.run_nurse_analysis(db, alert, pregnant)
-            if nurse:
-                result_payload["steps"].append(nurse)
-            doctor = await AlertAnalysisService.run_doctor_pre_analysis(db, alert, pregnant)
-            if doctor:
-                result_payload["steps"].append(doctor)
+            logger.warning("Alert Team 并行分析失败，降级串行 Workflow: {}", exc)
+            try:
+                workflow = get_alert_analysis_workflow()
+                run = await workflow.arun(input=input_text, user_id=alert.pregnant_id)
+                result_payload["workflow_output"] = run.content if hasattr(run, "content") else str(run)
+                result_payload["mode"] = "workflow_sequential"
+            except Exception as exc2:
+                logger.warning("Alert Workflow 也失败，降级单 Agent: {}", exc2)
+                nurse = await AlertAnalysisService.run_nurse_analysis(db, alert, pregnant)
+                if nurse:
+                    result_payload["steps"].append(nurse)
+                doctor = await AlertAnalysisService.run_doctor_pre_analysis(db, alert, pregnant)
+                if doctor:
+                    result_payload["steps"].append(doctor)
+                result_payload["mode"] = "single_agent_fallback"
 
         details = alert.details or {}
         details["ai_workflow"] = result_payload

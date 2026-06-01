@@ -26,7 +26,7 @@ NURSE_TOOL_THINKING_MAP: dict[str, str] = {
     "agno_report_issue_to_doctor": "正在上报问题给医生...",
     "agno_analyze_health_trends": "正在分析健康趋势...",
     "agno_evaluate_vital_rules": "正在评估生命体征...",
-    "agno_search_knowledge": "正在查阅护理知识库...",
+    "search_knowledge_base": "正在查阅护理知识库...",
     "agno_get_patient_context": "正在获取患者信息...",
 }
 

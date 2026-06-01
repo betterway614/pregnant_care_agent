@@ -24,6 +24,10 @@ export const chatApi = {
       `/chat/conversation/${pregnantId}`,
       { params: { session_id: sessionId } }
     ),
+  listSessions: (pregnantId: string) =>
+    client.get<{ sessions: Array<{ session_id: string; message_count: number; started_at: string; last_message_at: string; preview: string }> }>(
+      `/chat/sessions/${pregnantId}`
+    ),
   clearConversation: (pregnantId: string, sessionId?: string) =>
     client.delete(`/chat/conversation/${pregnantId}`, { params: { session_id: sessionId } }),
 }
@@ -281,11 +285,13 @@ async function _sseFetch(
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
+  const token = localStorage.getItem('token')
   await fetchEventSource(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
     signal,

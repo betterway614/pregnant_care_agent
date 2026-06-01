@@ -72,6 +72,7 @@ export const useAppStore = defineStore('app', () => {
     localStorage.removeItem('isLoggedIn')
     localStorage.removeItem('currentPregnantId')
     localStorage.removeItem('currentRole')
+    localStorage.removeItem('token')
   }
 
   return {
