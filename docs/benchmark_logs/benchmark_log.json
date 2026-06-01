@@ -1,0 +1,1503 @@
+{
+  "benchmark_time": "2026-05-27T22:41:04.802688",
+  "config": {
+    "max_tokens": 0,
+    "temperature": 0.3,
+    "runs_per_case": 3,
+    "cloud_model": "qwen3.6-35b-a3b",
+    "local_model": "qwen3.6-35b-q8-vl",
+    "cloud_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "local_base_url": "http://localhost:8080/v1"
+  },
+  "total_calls": 24,
+  "calls": [
+    {
+      "timestamp": "2026-05-27T22:29:40.496381",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "你好呀～怀孕28周正是身体负担逐渐加重的阶段，你主动关注自己的血压和身体信号，非常棒！我来帮你仔细梳理一下，希望能让你更安心、更有方向地应对。\n\n### 🔍 关于血压 135/88 mmHg\n在孕期，国内外指南通常将 **≥140/90 mmHg** 作为妊娠期高血压的诊断标准。你的读数略低于这个阈值，属于**“正常高值”**范围。虽然目前不算高血压，但已高于理想状态（＜120/80），提示血管调节负荷在增加，需要引起重视并持续观察。\n\n### 💡 关于经常头晕\n孕中晚期头晕很常见，多数与以下**生理性变化**有关：\n- 血容量增加+外周血管扩张，易出现体位性血压波动\n- 缺铁性贫血（孕期对铁需求量大增）\n- 血糖偏低、饮水不足或睡眠不佳\n- 长时间站立、久坐后突然起身，或仰卧位压迫下腔静脉\n\n但头晕合并血压偏高时，也需**警惕妊娠期高血压疾病**的早期表现。两者不一定直接相关，但放在一起评估会更安全。\n\n---\n\n### 📝 建议你日常注意这些细节：\n✅ **规范自测血压**  \n每天固定时间（如早晨起床后、晚上睡前各1次），静坐休息5分钟后再测，手臂与心脏同高，不说话不移动。连续3天记录平均值，若多次≥135/85 或出现≥140/90，请及时联系产科医生。\n\n✅ **排查常见诱因**  \n- 三餐规律，适当加餐（如坚果、全麦饼干）防低血糖  \n- 每日饮水1500～1700ml，少量多次，避免一次性大量饮水  \n- 起身、翻身时动作放缓，避免久站久坐；休息尽量左侧卧  \n- 保证充足睡眠，睡前可温水泡脚10～15分钟促进循环\n\n✅ **配合产检完善评估**  \n下次产检时务必告知医生头晕和血压情况。医生可能会建议查：血常规（看是否贫血）、尿常规（筛查蛋白尿）、肝肾功能、胎儿超声及胎心监护等，帮助全面判断。\n\n✅ **保持情绪平稳**  \n焦虑或紧张会放大头晕感。试试腹式深呼吸、听轻音乐、与家人散步交流，给身心留出缓冲空间。\n\n---\n\n### 🚨 出现以下情况请**立即就医**：\n- 血压持续 ≥140/90 mmHg，或短时间内快速升高\n- 头晕伴随：剧烈头痛、视力模糊/眼前发黑、上腹或右上腹痛、恶心呕吐\n- 面部、手部或小腿突然明显水肿（按压有凹陷且不易恢复）\n- 胎动较平时明显减少或异常频繁\n- 胸闷、心悸、呼吸困难\n\n---\n\n孕期身体正在经历一场温柔的“重塑”，偶尔的小信号是在提醒你多照顾自己。你的每一次细心观察都很珍贵，但网络建议不能替代面诊。**建议尽快把近几天的血压记录和头晕频率详细告知你的产检医生**，必要时可提前复诊或加做检查，让专业团队为你保驾护航。\n\n如果还有具体症状想补充，或需要了解如何正确在家测血压、饮食搭配等，随时告诉我。我会一直在这里，陪你稳稳地走过这段特殊时光 🌸💕",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **User:** Pregnant woman, 28 weeks gestation\n   - **Symptoms:** Frequent dizziness\n   - **Home BP reading:** 135/88 mmHg\n   - **Questions:** Is this normal? What should I pay attention to?\n\n2.  **Identify Key Medical/Health Concepts:**\n   - Gestational age: 28 weeks (third trimester approaching)\n   - Symptoms: Dizziness in pregnancy\n   - Blood pressure: 135/88 mmHg\n   - Normal BP in pregnancy: Generally <140/90 mmHg is considered normal, but guidelines vary slightly. ACOG defines hypertension in pregnancy as ≥140/90 mmHg on two occasions. However, 135/88 is elevated-normal or stage 1 hypertension by some standards, and warrants monitoring.\n   - Dizziness causes in pregnancy: Orthostatic hypotension, anemia, low blood sugar, dehydration, vasovagal response, sleep apnea, or potentially related to BP changes (though usually high BP doesn't cause dizziness directly; low BP or rapid changes do).\n   - Risks at 28 weeks: Preeclampsia risk increases after 20 weeks. Need to watch for other symptoms (headache, visual changes, upper abdominal pain, swelling, proteinuria).\n   - Home BP measurement accuracy: Needs proper technique, multiple readings, average over time.\n\n3.  **Determine Professional Guidelines & Safety Considerations:**\n   - **BP Threshold:** ≥140/90 is diagnostic for gestational hypertension/preeclampsia. 135/88 is borderline/elevated but not yet hypertensive by standard criteria. However, it's above the ideal (<120/80) and should be monitored closely.\n   - **Dizziness:** Common in pregnancy due to physiological changes (increased blood volume, vasodilation, supine hypotension, anemia, etc.). But combined with elevated BP, needs careful evaluation to rule out preeclampsia or other issues.\n   - **Red Flags:** Severe headache, visual disturbances, epigastric/RUQ pain, sudden swelling, decreased fetal movement, BP ≥140/90, protein in urine.\n   - **Recommendations:** Monitor BP properly, check for other symptoms, stay hydrated, eat regular meals, avoid standing too long, change positions slowly, maintain good posture, attend prenatal visits, possibly get lab tests (CBC for anemia, urine protein, liver/kidney function if indicated).\n   - **Disclaimer:** I am an AI assistant, not a doctor. Must advise consulting her obstetrician/midwife promptly.\n\n4.  **Structure the Response (in Chinese, as requested):**\n   - Acknowledge & reassure gently\n   - Address BP: Explain what 135/88 means in pregnancy context\n   - Address dizziness: Common causes, when it's concerning\n   - Provide actionable advice/precautions\n   - List red flags requiring immediate medical attention\n   - Emphasize professional consultation\n   - Maintain warm, professional tone (\"小安\" persona)\n\n   Draft structure:\n   - 开头：温柔问候+肯定她的关注\n   - 血压解读：135/88在孕期的意义（未达高血压标准，但偏高，需重视）\n   - 头晕原因分析：孕期常见生理变化 vs 需警惕的情况\n   - 日常注意事项：监测方法、生活方式调整、产检建议\n   - 危险信号：何时必须就医\n   - 结尾：鼓励+提醒及时咨询医生+免责声明（温和版）\n\n5.  **Draft Content (Mental Refinement in Chinese):**\n   你好呀～怀孕28周正是身体负担逐渐加重的阶段，你主动关注自己的血压和身体信号，非常棒！我来帮你仔细分析一下：\n\n   **关于血压 135/88 mmHg：**\n   在孕期，医学上通常将≥140/90 mmHg 作为妊娠期高血压的诊断标准。你的读数略低于这个阈值，属于“正常高值”范围，虽然暂时不算高血压，但已经比理想状态（＜120/80）偏高，需要引起重视并持续观察。\n\n   **关于经常头晕：**\n   孕中晚期头晕很常见，多数与以下生理变化有关：\n   - 血容量增加但血管扩张，导致血压波动或体位性低血压\n   - 贫血（缺铁性贫血在孕期高发）\n   - 血糖偏低、脱水或睡眠不足\n   - 长时间站立或突然起身\n   不过，头晕合并血压偏高时，也需要排除妊娠期高血压疾病的可能。\n\n   **建议你注意以下几点：**\n   ✅ **规范测量血压**：每天固定时间（如早晚各1次），静坐休息5分钟后测量，记录数值。连续几天都≥135/85 或出现≥140/90，请及时联系产科医生。\n   ✅ **排查常见诱因**：按时吃三餐防低血糖；保证饮水（每天1500-1700ml）；避免久站久坐，起身时动作放缓；侧卧休息可减轻下腔静脉压迫。\n   ✅ **配合产检检查**：下次产检时务必告知医生头晕和血压情况，医生可能会安排血常规（查是否贫血）、尿常规（看有无蛋白）、肝肾功能等评估。\n   ✅ **保持情绪平稳**：焦虑也会加重头晕感，试试深呼吸、温水泡脚、听轻音乐放松。\n\n   ⚠️ **出现以下情况请立即就医**：\n   - 血压持续≥140/90 mmHg\n   - 头晕伴随剧烈头痛、视力模糊、眼前发黑\n   - 上腹部或右上腹疼痛、恶心呕吐\n   - 面部/手部突然明显水肿\n   - 胎动明显减少或异常增多\n\n   孕期身体就像在经历一场温柔的“重塑”，偶尔的小信号是在提醒你多照顾自己。你的每一次细心观察都很重要，但网络建议不能替代面诊。建议尽快把近期血压记录和症状详细告诉你的产检医生，必要时提前复诊哦～  \n   如果还有其他不适或疑问，随时告诉我，我会一直在这里陪你安心度过这段特殊时光 🌸\n\n6.  **Self-Correction/Verification during drafting:**\n   - *BP threshold:* Correct. ACOG/Chinese guidelines use ≥140/90 for diagnosis. 135/88 is elevated but not diagnostic. Mentioning \"正常高值\" is accurate.\n   - *Dizziness causes:* Covered physiological (orthostatic, anemia, hypoglycemia, dehydration) and pathological (preeclampsia-related). Balanced.\n   - *Monitoring advice:* Proper technique emphasized. Frequency reasonable.\n   - *Red flags:* Aligned with preeclampsia warning signs. Clear and actionable.\n   - *Tone:* Warm, professional, non-alarmist, encourages medical consultation.\n   - *Disclaimer:* Integrated naturally without breaking persona.\n   - *Accuracy check:* All recommendations align with current obstetric guidelines (ACOG, Chinese Maternal Health Guidelines). No overpromising, no diagnosis. Emphasizes professional evaluation.\n   - *Language:* Natural, clear, appropriate for pregnant woman. Uses bullet points/emojis sparingly for readability.\n\n   One minor adjustment: Clarify that home BP monitors should be validated, and mention checking technique briefly if needed, but keep it concise. Also, specify that 28 weeks is entering third trimester, where preeclampsia screening becomes more important.\n\n   The draft looks solid. Proceed. \n   Output matches the refined version. \n   Structure: Greeting → BP analysis → Dizziness explanation → Actionable tips → Red flags → Encouragement + medical reminder → Closing. All in Chinese, professional yet gentle.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 59,
+          "completion_tokens": 2443,
+          "total_tokens": 2502,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1713,
+            "text_tokens": 2443
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 59
+          }
+        },
+        "created": 1779863357,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-8ba80a93-7e2b-91af-875c-b0f6c59e9b2c"
+      },
+      "measured_latency_s": 19.924,
+      "prompt_tokens": 59,
+      "completion_tokens": 2443,
+      "total_tokens": 2502,
+      "tokens_per_sec": 122.62,
+      "output_text": "你好呀～怀孕28周正是身体负担逐渐加重的阶段，你主动关注自己的血压和身体信号，非常棒！我来帮你仔细梳理一下，希望能让你更安心、更有方向地应对。\n\n### 🔍 关于血压 135/88 mmHg\n在孕期，国内外指南通常将 **≥140/90 mmHg** 作为妊娠期高血压的诊断标准。你的读数略低于这个阈值，属于**“正常高值”**范围。虽然目前不算高血压，但已高于理想状态（＜120/80），提示血管调节负荷在增加，需要引起重视并持续观察。\n\n### 💡 关于经常头晕\n孕中晚期头晕很常见，多数与以下**生理性变化**有关：\n- 血容量增加+外周血管扩张，易出现体位性血压波动\n- 缺铁性贫血（孕期对铁需求量大增）\n- 血糖偏低、饮水不足或睡眠不佳\n- 长时间站立、久坐后突然起身，或仰卧位压迫下腔静脉\n\n但头晕合并血压偏高时，也需**警惕妊娠期高血压疾病**的早期表现。两者不一定直接相关，但放在一起评估会更安全。\n\n---\n\n### 📝 建议你日常注意这些细节：\n✅ **规范自测血压**  \n每天固定时间（如早晨起床后、晚上睡前各1次），静坐休息5分钟后再测，手臂与心脏同高，不说话不移动。连续3"
+    },
+    {
+      "timestamp": "2026-05-27T22:29:56.152400",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "你好！怀孕28周已进入孕晚期，身体负担逐渐加重，出现头晕和血压波动是比较常见的现象。你能主动关注并记录这些数据，非常细心负责。我来为你逐一分析并提供实用建议：\n\n### 🔍 关于血压 135/88 mmHg 是否正常？\n- **孕期血压参考范围**：一般建议控制在 **<140/90 mmHg**。你的读数属于“正常偏高”，尚未达到妊娠期高血压的诊断标准（连续两次≥140/90），但已接近临界值，需要开始规律监测。\n- **家庭自测提示**：家用血压计可能存在误差，测量前请静坐休息5分钟，手臂与心脏同高，避免刚活动、喝咖啡或憋尿后测量。建议连续记录3~5天同一时段的数据，产检时带给医生参考。\n\n### 🤔 头晕的常见原因\n孕中晚期头晕多与以下因素有关，不一定全是血压问题：\n1. **体位性低血压**：久站、久坐后突然起身，血液回流不及导致短暂脑供血不足。\n2. **生理性贫血**：孕期血容量增加，红细胞稀释，若铁摄入不足易引发头晕、乏力。\n3. **血糖波动**：两餐间隔过长或饮食不规律易出现低血糖。\n4. **睡眠不足/脱水**：孕晚期睡眠质量下降、饮水不足也会加重头晕。\n5. **血压波动**：部分孕妇对血压轻微升高较敏感，可能出现头胀、头晕。\n\n### 📋 日常需要注意什么？\n1. **规范监测**：每天早晚各测1次血压并记录；同时留意胎动变化（28周后建议每天固定时间数胎动）。\n2. **缓慢变换体位**：起床或从坐姿站起时，动作放慢，先在床边坐1~2分钟再站立。\n3. **均衡营养**：适量增加富含铁和优质蛋白的食物（如瘦肉、动物肝脏、深绿色蔬菜、豆类）；少量多餐，避免长时间空腹；每日饮水约1500~1700ml（无心肾疾病前提下）。\n4. **保证休息**：尽量左侧卧睡，减轻下腔静脉压迫，改善胎盘供血；白天可安排短时午休。\n5. **适度活动**：每天散步20~30分钟即可，避免闷热环境或过度疲劳。\n\n### 🚨 何时需要尽快就医？\n若出现以下任一情况，请**及时联系产科或前往医院**：\n- 血压持续 ≥140/90 mmHg，或较平时明显升高\n- 头晕频繁发作、持续时间延长，或伴头痛、视物模糊、耳鸣\n- 出现上腹部/右上腹疼痛、恶心呕吐、尿量明显减少\n- 下肢或面部水肿突然加重\n- 胎动明显减少或异常活跃\n\n### 💡 温馨提示\n28周是产检频率加快的节点，下次产检时请务必带上你的血压记录和症状描述。医生可能会根据情况安排尿常规、血常规、肝肾功能或胎儿监护等检查，以便早期排查妊娠期高血压或贫血等问题。\n\n孕期身体敏感，你的觉察力就是保护自己和宝宝的第一道防线。如有其他不适或想进一步了解某项建议，随时告诉我。祝你孕期顺利，母婴平安健康～  \n（注：以上为健康科普建议，不能替代执业医师的面诊评估哦。）",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **User:** Pregnant woman, 28 weeks gestation\n   - **Symptom:** Frequent dizziness (头晕)\n   - **Home BP reading:** 135/88 mmHg\n   - **Questions:** Is this normal? What should I pay attention to?\n\n2.  **Identify Key Medical/Health Concepts:**\n   - Gestational age: 28 weeks (third trimester begins at 28 weeks)\n   - Blood pressure: 135/88 mmHg (elevated, approaching hypertensive range for pregnancy)\n   - Symptom: Dizziness (common in pregnancy but can be related to BP, anemia, dehydration, etc.)\n   - Pregnancy hypertension guidelines: Normal BP in pregnancy is generally <140/90 mmHg. 135/88 is within the \"normal-high\" or \"elevated\" range, not yet diagnostic of gestational hypertension (which requires ≥140/90 on two occasions), but warrants monitoring.\n   - Dizziness causes in pregnancy: Orthostatic hypotension, anemia, dehydration, low blood sugar, supine hypotensive syndrome, or elevated BP.\n   - Need to emphasize: Home BP monitoring accuracy, proper technique, when to seek medical help, lifestyle modifications, and prenatal care follow-up.\n\n3.  **Formulate Response Structure (in Chinese, as requested):**\n   - Acknowledge & reassure (gentle, professional tone)\n   - Address BP: Explain if 135/88 is normal/acceptable, reference pregnancy standards\n   - Address dizziness: Common causes, link to BP if relevant\n   - Provide actionable advice/precautions\n   - Highlight red flags (when to see a doctor immediately)\n   - Encourage regular prenatal check-ups\n   - Maintain disclaimer (not a substitute for professional medical advice)\n\n4.  **Draft Content (Mental Refinement in Chinese):**\n   *(Greeting & Reassurance)* 你好！怀孕28周进入孕晚期，身体变化较多，出现头晕和血压波动是比较常见的现象。别太担心，我来帮你详细分析一下。\n   \n   *(BP Analysis)* 关于血压：孕期正常血压一般建议控制在**140/90 mmHg以下**。你在家测得135/88 mmHg属于“正常偏高”范围，尚未达到妊娠期高血压的诊断标准（≥140/90），但已经接近临界值，需要引起重视并持续监测。\n   \n   *(Dizziness Analysis)* 头晕的原因可能有很多：除了血压波动外，孕中晚期常见的原因还包括贫血、血糖偏低、体位性低血压（如久站或突然起身）、睡眠不足或脱水等。如果头晕伴随头痛、视物模糊、胸闷、水肿加重等，需特别警惕。\n   \n   *(Precautions/Advice)* 建议你注意以下几点：\n   1. **规范测量血压**：每天固定时间（如早晚各一次）静坐休息5分钟后测量，记录数值。家用血压计建议定期校准。\n   2. **调整生活习惯**：避免久站或突然改变体位；保证充足睡眠；饮食均衡，适当增加富含铁和蛋白质的食物（预防贫血）；少量多餐防低血糖；每天饮水1500-1700ml（无禁忌情况下）。\n   3. **适度活动**：散步等轻度运动有助于血液循环，但避免劳累。\n   4. **按时产检**：下次产检时务必带上你的血压记录，医生可能会安排尿常规、血常规、肝肾功能等检查，排除妊娠期高血压或贫血等问题。\n   \n   *(Red Flags)* ⚠️ 如果出现以下情况，请**立即就医**：血压持续≥140/90 mmHg；头晕频繁发作或加重；伴有剧烈头痛、视力模糊、上腹痛、恶心呕吐、下肢明显水肿或胎动异常。\n   \n   *(Closing & Disclaimer)* 孕期身体敏感，任何不适都值得认真对待。你的细心观察非常棒！如有其他症状或疑问，随时告诉我。祝你和宝宝平安健康～（注：以上建议不能替代线下产科医生的面诊评估哦。）\n\n5.  **Self-Correction/Verification during Drafting:**\n   - *BP threshold:* Correct. ACOG/Chinese guidelines state ≥140/90 is gestational hypertension. 135/88 is elevated but not diagnostic.\n   - *Dizziness causes:* Covered major ones appropriately for pregnancy.\n   - *Monitoring advice:* Emphasized proper technique, logging, home cuff calibration.\n   - *Lifestyle:* Iron/protein for anemia, hydration, position changes, diet. All evidence-based for pregnancy.\n   - *Red flags:* Included preeclampsia warning signs (headache, visual changes, epigastric pain, edema, fetal movement changes). Accurate.\n   - *Tone:* Gentle, professional, reassuring, clear structure.\n   - *Disclaimer:* Included appropriately.\n   - *Language:* Natural Chinese, medically accurate but accessible.\n   - *Check against guidelines:* Chinese Obstetrics guidelines align with international standards on BP thresholds and preeclampsia symptoms. Home monitoring recommendations are standard. No overpromising or diagnosing.\n\n   Everything looks solid. Ready to output. All points addressed concisely and safely. Matches the persona \"小安\".✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 59,
+          "completion_tokens": 1900,
+          "total_tokens": 1959,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1167,
+            "text_tokens": 1900
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 59
+          }
+        },
+        "created": 1779863373,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-864e0e97-03ec-94cd-8473-91e9dc5c3c40"
+      },
+      "measured_latency_s": 15.6557,
+      "prompt_tokens": 59,
+      "completion_tokens": 1900,
+      "total_tokens": 1959,
+      "tokens_per_sec": 121.36,
+      "output_text": "你好！怀孕28周已进入孕晚期，身体负担逐渐加重，出现头晕和血压波动是比较常见的现象。你能主动关注并记录这些数据，非常细心负责。我来为你逐一分析并提供实用建议：\n\n### 🔍 关于血压 135/88 mmHg 是否正常？\n- **孕期血压参考范围**：一般建议控制在 **<140/90 mmHg**。你的读数属于“正常偏高”，尚未达到妊娠期高血压的诊断标准（连续两次≥140/90），但已接近临界值，需要开始规律监测。\n- **家庭自测提示**：家用血压计可能存在误差，测量前请静坐休息5分钟，手臂与心脏同高，避免刚活动、喝咖啡或憋尿后测量。建议连续记录3~5天同一时段的数据，产检时带给医生参考。\n\n### 🤔 头晕的常见原因\n孕中晚期头晕多与以下因素有关，不一定全是血压问题：\n1. **体位性低血压**：久站、久坐后突然起身，血液回流不及导致短暂脑供血不足。\n2. **生理性贫血**：孕期血容量增加，红细胞稀释，若铁摄入不足易引发头晕、乏力。\n3. **血糖波动**：两餐间隔过长或饮食不规律易出现低血糖。\n4. **睡眠不足/脱水**：孕晚期睡眠质量下降、饮水不足也会加重头晕。\n5. **"
+    },
+    {
+      "timestamp": "2026-05-27T22:30:13.963406",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "你好！怀孕28周已进入孕晚期初期，身体正处于快速调整阶段，出现头晕和血压波动是比较常见的现象。别太担心，我来为你详细梳理一下，并给出实用的应对建议。\n\n### 🩺 关于你的血压（135/88 mmHg）\n- **是否正常？** 孕期血压一般建议控制在 **＜140/90 mmHg**。你目前的数值属于**“正常高值”（临界范围）**，尚未达到妊娠期高血压的诊断标准，但已接近上限，需要引起重视并持续监测。\n- **家庭自测提示：** 家用血压计易受测量姿势、袖带松紧、情绪、刚活动完等因素影响。建议每次测量前静坐休息5分钟，双脚平放、手臂与心脏同高，连续测2次取平均值，并做好记录。\n\n### 💡 孕28周头晕的常见原因\n1. **体位性低血压**：久站或突然起身时，血液回流不及导致短暂脑供血不足。\n2. **生理性血容量增加**：孕中期后血容量上升约30%-50%，心脏负荷加重，部分孕妇会出现头晕、乏力。\n3. **贫血或铁储备不足**：孕期对铁需求大增，轻度贫血常表现为头晕、面色苍白、易疲劳。\n4. **血糖波动或进食不规律**：两餐间隔过长或碳水摄入不足易引发低血糖性头晕。\n5. **睡眠不足、精神紧张或环境闷热**：也会影响自主神经调节，诱发头晕。\n\n### 📋 日常需要注意什么？\n✅ **规范监测血压**  \n每天固定时间（如早晨起床后、晚上睡前各1次）测量并记录。若连续3天家庭血压 **≥140/90 mmHg**，请及时联系产科医生。\n\n✅ **科学缓解头晕**  \n- 起身、翻身时动作放缓，遵循“躺→坐→站”三步过渡  \n- 避免长时间站立、泡热水澡或处于闷热不通风的环境  \n- 每日饮水1500-1700ml（少量多次），避免脱水  \n- 三餐规律，可备少量全麦饼干、坚果等作为加餐，防低血糖  \n- 保证7-8小时睡眠，尽量采取**左侧卧位**，有助于改善胎盘血流\n\n✅ **按时产检与营养关注**  \n下次产检时主动告知医生头晕情况，重点复查：血常规（看血红蛋白/铁蛋白）、尿常规（尿蛋白）、肝肾功能、胎儿生长发育及羊水情况。如确诊缺铁性贫血，请遵医嘱规范补铁，勿自行用药。\n\n✅ **适度活动**  \n每天散步20-30分钟或做孕妇瑜伽，促进血液循环，但以“微汗、不喘、不累”为度。\n\n### 🚨 出现以下情况请立即就医\n- 头晕频繁发作或伴随**头痛、视物模糊、胸闷心悸、恶心呕吐**\n- 血压持续 **≥140/90 mmHg**，或单次测量 **≥160/110 mmHg**\n- **胎动明显减少**（2小时内＜10次）或突然异常剧烈\n- 下肢或面部水肿**短期内迅速加重**\n- 阴道流血、流液或规律宫缩\n\n---\n🌸 你的情况目前不必过度焦虑，多数孕晚期头晕通过生活调整即可缓解。但孕期血压和症状的变化需要动态观察，请务必以你的产科医生面诊评估为准。如果你愿意，也可以把近几天的血压记录和头晕发生的时间、诱因发给我，我帮你一起分析。祝你孕期平稳顺利，宝宝健康长大！",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **User:** Pregnant woman, 28 weeks gestation\n   - **Symptom:** Frequent dizziness\n   - **Home Blood Pressure Reading:** 135/88 mmHg\n   - **Questions:** Is this normal? What should I pay attention to?\n\n2.  **Identify Key Medical/Health Concepts:**\n   - Gestational age: 28 weeks (third trimester approaching)\n   - Symptom: Dizziness (头晕)\n   - BP: 135/88 mmHg\n   - Normal pregnancy BP: Generally <140/90 mmHg is considered normal, but guidelines vary slightly. ACOG defines hypertension in pregnancy as ≥140/90 mmHg on two occasions. However, 135/88 is elevated-normal and warrants monitoring.\n   - Dizziness in pregnancy can be caused by many factors: orthostatic hypotension, anemia, low blood sugar, dehydration, physiological changes, or potentially preeclampsia (though BP isn't high enough yet).\n   - Need to emphasize: Home BP monitoring accuracy, proper technique, frequency, when to seek medical help, lifestyle/dietary advice, and red flags.\n\n3.  **Determine Response Structure:**\n   - Acknowledge & reassure (gentle, professional tone)\n   - Address BP: Is 135/88 normal? Explain pregnancy BP standards\n   - Address dizziness: Common causes at 28 weeks\n   - Actionable advice: Monitoring, lifestyle, diet, when to see a doctor\n   - Red flags/Warning signs\n   - Disclaimer: Not a substitute for professional medical advice\n   - Keep it concise, structured, and empathetic\n\n4.  **Draft - Section by Section (Mental Refinement):**\n   *(Greeting & Reassurance)* 你好！怀孕28周进入孕晚期初期，身体变化较大，出现头晕和血压波动是比较常见的现象。别太担心，我来帮你详细分析一下。\n   \n   *(BP Analysis)* 关于血压：孕期正常血压一般建议控制在＜140/90 mmHg。你在家测得135/88 mmHg属于“正常高值”（临界范围），尚未达到妊娠期高血压的诊断标准，但需要引起重视并持续监测。家庭自测血压有时会受到测量姿势、情绪、袖带松紧等因素影响，建议规范测量并记录。\n   \n   *(Dizziness Causes)* 头晕在孕中晚期很常见，可能原因包括：①体位性低血压（久站或突然起身时）；②贫血或铁储备不足；③血糖偏低或进食不规律；④血容量增加导致心脏负担加重；⑤睡眠不足或精神紧张。当然，也需要排除早期血压异常或其他潜在问题。\n   \n   *(Actionable Advice)* 建议你注意以下几点：\n   - **规范测血压**：每天固定时间（如早晚各1次），静坐休息5分钟后测量，记录数值。连续几天若≥140/90 mmHg，请及时就医。\n   - **预防头晕**：起身动作放缓；避免长时间站立或闷热环境；保证充足饮水（每天1500-1700ml）；三餐规律，适当加餐防低血糖；保证睡眠，左侧卧位更利于胎盘供血。\n   - **营养与检查**：按时产检，重点查血常规（看是否贫血）、尿常规（蛋白）、肝肾功能及胎儿发育情况。如有缺铁性贫血，遵医嘱补充铁剂。\n   - **适度活动**：每天散步20-30分钟，促进血液循环，但避免劳累。\n   \n   *(Red Flags)* ⚠️ 如果出现以下情况，请立即就医：头晕伴随头痛、视物模糊、胸闷心悸、恶心呕吐；血压持续≥140/90 mmHg；胎动明显减少或异常；下肢水肿突然加重。\n   \n   *(Closing & Disclaimer)* 你的情况目前不必过度焦虑，但需密切观察。以上建议仅供参考，具体请以你的产科医生面诊评估为准。祝你孕期顺利，宝宝健康成长！有任何新变化随时告诉我哦～\n\n5.  **Self-Correction & Verification (Mental Check):**\n   - *BP threshold:* ACOG & Chinese guidelines: ≥140/90 is hypertension in pregnancy. 135/88 is indeed \"elevated\" or \"high-normal\". Correct.\n   - *Dizziness causes:* All physiologically sound for 28 weeks. Mentioned anemia, orthostatic hypotension, hypoglycemia, dehydration, sleep/stress. Good.\n   - *Monitoring advice:* Standard home BP protocol included. Emphasized recording and thresholds for seeking care. Correct.\n   - *Lifestyle:* Hydration, slow position changes, regular meals, left lateral rest, moderate exercise. All evidence-based for pregnancy.\n   - *Red flags:* Headache, visual changes, chest tightness, decreased fetal movement, sudden edema → classic preeclampsia warning signs. Correct.\n   - *Tone:* Gentle, professional, reassuring, clear structure. Matches \"小安\" persona.\n   - *Disclaimer:* Included appropriately.\n   - *Language:* Pure Chinese, medically accurate but accessible.\n   - *Potential improvement:* Clarify that home BP monitors should be validated, and mention checking with OB/GYN if concerned. Already covered implicitly. Could add a note about avoiding self-medication. Added mentally to ensure safety.\n\n   Everything aligns with current obstetric guidelines (ACOG, Chinese Society of Obstetrics and Gynecology). No overpromising, clear boundaries, actionable steps.\n\n6.  **Final Output Generation:** (Matches the refined draft)✅\n   Structure:\n   - 温暖开场\n   - 血压解读\n   - 头晕常见原因\n   - 日常注意事项（分点）\n   - 何时必须就医（警示信号）\n   - 温馨提示+免责声明\n   - 语气：专业、温柔、有条理、符合孕期健康助手设定。 \n   Ready.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 59,
+          "completion_tokens": 2104,
+          "total_tokens": 2163,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1318,
+            "text_tokens": 2104
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 59
+          }
+        },
+        "created": 1779863390,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-649066af-4150-9aa5-83dc-c6e0e5911bf1"
+      },
+      "measured_latency_s": 17.8107,
+      "prompt_tokens": 59,
+      "completion_tokens": 2104,
+      "total_tokens": 2163,
+      "tokens_per_sec": 118.13,
+      "output_text": "你好！怀孕28周已进入孕晚期初期，身体正处于快速调整阶段，出现头晕和血压波动是比较常见的现象。别太担心，我来为你详细梳理一下，并给出实用的应对建议。\n\n### 🩺 关于你的血压（135/88 mmHg）\n- **是否正常？** 孕期血压一般建议控制在 **＜140/90 mmHg**。你目前的数值属于**“正常高值”（临界范围）**，尚未达到妊娠期高血压的诊断标准，但已接近上限，需要引起重视并持续监测。\n- **家庭自测提示：** 家用血压计易受测量姿势、袖带松紧、情绪、刚活动完等因素影响。建议每次测量前静坐休息5分钟，双脚平放、手臂与心脏同高，连续测2次取平均值，并做好记录。\n\n### 💡 孕28周头晕的常见原因\n1. **体位性低血压**：久站或突然起身时，血液回流不及导致短暂脑供血不足。\n2. **生理性血容量增加**：孕中期后血容量上升约30%-50%，心脏负荷加重，部分孕妇会出现头晕、乏力。\n3. **贫血或铁储备不足**：孕期对铁需求大增，轻度贫血常表现为头晕、面色苍白、易疲劳。\n4. **血糖波动或进食不规律**：两餐间隔过长或碳水摄入不足易引发低血糖性头晕。\n5. **"
+    },
+    {
+      "timestamp": "2026-05-27T22:30:41.862687",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "护士-数据分析",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "以下是按照SOAP格式为您整理的产科护理评估与分析。内容严格遵循《妊娠期高血压疾病诊治指南（2020）》及围产期护理规范，供临床参考。\n\n---\n### **S（Subjective 主观资料）**\n- 孕妇自述近一周血压呈上升趋势，具体数值已按日记录。\n- 自诉胎动规律，每日早、中、晚各计数3次。\n- 本周体重较上周增加0.8kg。\n- **需补充询问**：有无头痛、头晕、视物模糊、胸闷、上腹部/右上腹疼痛、恶心呕吐、突发下肢或面部水肿加重等症状；既往是否有高血压、肾脏疾病、糖尿病史；本次妊娠是否为多胎；近期是否服用保健品或含钠较高的食物/药物。\n\n### **O（Objective 客观资料）**\n- **基本信息**：张某，女，32岁，孕32周。\n- **血压趋势**：130/85 → 132/87 → 135/90 → 138/92 mmHg（近7日内进行性升高，舒张压已达90mmHg临界值）。\n- **体重变化**：本周增长0.8kg（孕中晚期推荐健康BMI孕妇增速为0.3～0.5kg/周）。\n- **胎动记录**：早、中、晚各3次（未注明单次计数时长及12小时累计总数）。\n- **待完善检查**：尿常规（尿蛋白定性/定量）、肝肾功能、血常规、凝血功能、尿酸、眼底检查、胎儿超声及胎心监护（NST/BPP）。\n\n### **A（Assessment 评估分析）**\n1. **血压趋势评估**：孕20周后首次出现收缩压≥140mmHg **或** 舒张压≥90mmHg即可诊断为妊娠期高血压。该孕妇舒张压已连续多次≥90mmHg，虽收缩压暂未达140mmHg，但已符合妊娠期高血压诊断标准之一，且呈进行性上升，处于疾病早期/进展期，存在发展为子痫前期的较高风险。\n2. **体重增长评估**：0.8kg/周略超推荐范围，结合血压升高，高度提示可能存在水钠潴留或隐性水肿，需警惕血管内皮损伤及胎盘灌注下降。\n3. **胎动评估**：目前记录提示胎儿活动尚可，但“早中晚各3次”非标准化计数法，无法准确反映胎儿宫内储备状态。需规范计数以排除胎儿窘迫早期表现。\n4. **综合判断**：孕32周合并妊娠期高血压早期表现，属高危妊娠范畴。当前核心风险为血压进一步升高诱发子痫前期/子痫，以及继发性胎儿生长受限或胎盘功能减退。需立即启动分级监测与干预流程。\n\n### **P（Plan 护理计划与建议）**\n1. **血压规范监测**  \n   - 指导正确测量：静坐休息5分钟、排空膀胱、裸露右上臂、使用校准电子血压计，每日早晚固定时间各测1次，连续记录。  \n   - 若连续2次测量≥140/90mmHg，或单次≥160/110mmHg，立即转诊产科急诊。\n\n2. **实验室与辅助检查跟进**  \n   - 建议48小时内完成：尿蛋白/肌酐比值（PCR）或24h尿蛋白定量、肝肾功能、血小板、尿酸、D-二聚体。  \n   - 预约胎儿监护：NST每周1～2次，必要时行B超评估羊水、脐血流（S/D值）及胎儿生物物理评分。\n\n3. **生活方式与饮食干预**  \n   - 限盐：每日食盐≤5g，避免腌制食品、加工肉类、外卖高汤。  \n   - 均衡营养：保证优质蛋白（鱼禽蛋奶豆），适量新鲜蔬果，控制精制碳水与油脂。  \n   - 体重管理：每周固定晨起空腹称重，目标增速0.3～0.5kg；若伴凹陷性水肿，适当限制自由液体入量并记录出入量。\n\n4. **胎动标准化监测**  \n   - 教会“2小时数胎动法”：每日早、中、晚各选1小时安静状态下计数，3次相加×4≥10次/12小时为正常。  \n   - 警示：胎动较平时减少≥50%、＜10次/12小时，或先骤增后骤减，立即急诊。\n\n5. **健康教育与预警识别**  \n   - 发放《妊娠期高血压居家监测手册》，明确告知子痫前期危险信号：持续剧烈头痛、视力模糊/眼前闪光、上腹/右上腹剧痛、恶心呕吐、呼吸困难、突发全身水肿。出现任一症状即刻拨打急救电话或前往有母儿救治能力的医院。\n   - 保持情绪稳定，避免劳累与精神紧张，保证左侧卧位休息以改善胎盘血流。\n\n6. **随访与多学科协作**  \n   - 建议每周产检1次，血压波动期缩短至3天1次。  \n   - 本评估为护理视角，降压药物选择（如拉贝洛尔、硝苯地平）、硫酸镁预防抽搐指征、分娩时机决策等须由产科医师综合化验结果后制定。  \n   - 建立高危妊娠档案，纳入院级专案管理。\n\n> 📌 **护士提示**：妊娠期高血压疾病具有隐匿性与进展快特点，32周已具备宫外存活条件，但母胎安全仍为首要原则。请督促孕妇严格遵医嘱复诊，切勿自行停药或更改剂量。如有新发症状或血压持续攀升，请优先保障及时转诊。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** 张某 (Zhang), Female, 32 years old\n   - **Gestational Age:** 32 weeks pregnant\n   - **Blood Pressure (BP) Trend (last week):** 130/85, 132/87, 135/90, 138/92 mmHg\n   - **Weight Gain:** 0.8 kg this week\n   - **Fetal Movement:** Recorded 3 times in the morning, afternoon, and evening each (早中晚各3次)\n   - **Request:** Analyze trends and provide recommendations using SOAP format.\n\n2.  **Understand SOAP Format:**\n   - **S (Subjective):** Patient's reported symptoms, history, feelings.\n   - **O (Objective):** Measurable data, vital signs, lab results, physical exam findings.\n   - **A (Assessment):** Clinical interpretation of S & O, diagnosis, trend analysis, risk assessment.\n   - **P (Plan):** Management plan, recommendations, follow-up, patient education.\n\n3.  **Map Data to SOAP Components:**\n   - *S:* Patient is 32yo, G?P? (not specified, assume primipara/multipara not given, but age 32 is advanced maternal age borderline). Reports BP readings over the past week. Reports fetal movement pattern (3 times/day, morning/afternoon/evening). Weight gain noted. No explicit complaints mentioned, but I should note if any are absent or ask for them. I'll frame subjective as what's provided + standard prenatal questions.\n   - *O:* \n     - Gestational age: 32 weeks\n     - BP trend: 130/85 → 132/87 → 135/90 → 138/92 mmHg (clear upward trend, approaching/presumptive hypertension range)\n     - Weight gain: 0.8 kg/week (within normal limits for 2nd/3rd trimester: ~0.3-0.5 kg/week is typical, but 0.8 is slightly high but not alarming; need to consider baseline)\n     - Fetal movement: 3 times/day (morning, afternoon, evening) - actually, standard fetal movement counting is usually ≥3 times/hour or ≥10 times/12 hours. \"早中晚各3次\" might mean she counts 3 times per period, which could be adequate, but needs clarification. I'll note it as reported.\n   - *A:* \n     - BP shows an increasing trend. At 32 weeks, BP ≥140/90 is diagnostic for gestational hypertension. Current readings are prehypertensive/near threshold. Risk of progression to preeclampsia exists.\n     - Weight gain 0.8 kg/week is slightly above recommended (0.3-0.5 kg), may indicate fluid retention or excessive intake.\n     - Fetal movement pattern seems stable but needs standardization (count to 10 in 2 hours or similar).\n     - Overall: Suspected gestational hypertension / early warning sign of preeclampsia. Needs close monitoring.\n   - *P:* \n     - Monitor BP daily/twice daily, proper technique.\n     - Check urine protein, liver/kidney function, platelets, D-dimer if indicated.\n     - Assess for preeclampsia symptoms (headache, visual changes, epigastric pain, swelling).\n     - Dietary advice: low salt, balanced nutrition, control weight gain.\n     - Fetal monitoring: NST/BPP at next visit, continue fetal movement counting properly.\n     - Follow-up: Weekly visits, sooner if symptoms worsen.\n     - Education on red flags.\n\n4.  **Draft SOAP (Mental Refinement - Chinese):**\n   *(Note: Must use professional obstetric nursing terminology, align with Chinese clinical guidelines)*\n\n   **S（主观资料）：**\n   - 孕妇自述近一周血压波动，具体数值已记录。\n   - 自诉胎动规律，每日早、中、晚各计数3次。\n   - 本周体重增加0.8kg。\n   - （需补充询问：有无头痛、眼花、胸闷、上腹痛、下肢水肿加重等不适；既往史、产检史、用药史等。）\n\n   **O（客观资料）：**\n   - 孕周：32周\n   - 血压趋势：130/85 → 132/87 → 135/90 → 138/92 mmHg（呈进行性升高，收缩压≥135mmHg，舒张压≥90mmHg）\n   - 体重变化：本周增长0.8kg（孕晚期推荐增速约0.3~0.5kg/周）\n   - 胎动记录：早、中、晚各3次（未明确单次计数时长及12小时总数）\n   - （待完善：尿蛋白、肝肾功能、血常规、胎儿监护结果等）\n\n   **A（评估分析）：**\n   - **血压趋势：** 近一周血压持续上升，舒张压已达90mmHg临界值，符合妊娠期高血压疾病早期表现（妊娠20周后首次出现血压≥140/90mmHg可诊断，目前处于“正常高值”向“妊娠期高血压”过渡阶段），存在进展为子痫前期的风险。\n   - **体重增长：** 0.8kg/周略高于孕晚期推荐标准，提示可能存在水钠潴留或摄入过量，需结合水肿情况综合判断。\n   - **胎动情况：** 记录方式非标准化（常规建议每日固定时间计数，≥3次/小时或≥10次/2小时为正常），目前描述提示胎动尚可，但需规范计数方法以准确评估胎儿宫内状况。\n   - **综合评估：** 孕32周，高龄初产/经产（年龄32岁属高危因素边缘），当前主要风险为妊娠期高血压疾病早期预警，需密切监测以防病情进展；胎儿目前活动度未见明显异常，但需加强监护。\n\n   **P（护理计划与建议）：**\n   1. **血压管理：** 指导正确测量血压（静息5分钟、同侧手臂、同一时间、使用合格水银/电子血压计），每日早晚各测1次并记录；若连续2次≥140/90mmHg，立即就诊。\n   2. **实验室检查：** 建议尽快复查尿常规（重点看尿蛋白）、肝肾功能、凝血功能、血常规及尿酸，必要时行眼底检查，排查子痫前期。\n   3. **体重与饮食：** 控制盐摄入（<5g/日），保证优质蛋白，避免高脂高糖；每周称重1次，目标增速0.3~0.5kg。若伴明显水肿，需限制液体入量并评估心肾功能。\n   4. **胎动监测：** 教会标准化胎动计数法（早、中、晚各选1小时，3次之和×4≥10次/12小时为正常）；若胎动骤减（<10次/12小时）或骤增后减少，立即急诊。\n   5. **症状筛查与健康教育：** 告知子痫前期危险信号（剧烈头痛、视力模糊、上腹/右上腹痛、恶心呕吐、呼吸困难、突发水肿加重），出现任一症状即刻就医。\n   6. **随访安排：** 建议每周产检1次，必要时缩短至3天1次；预约无应激试验（NST）或生物物理评分（BPP）评估胎儿储备；根据检查结果决定是否需要药物干预（如硫酸镁预防抽搐、降压药等，由产科医师决策）。\n   7. **心理支持：** 缓解焦虑情绪，强调规律产检的重要性，提供书面指导材料。\n\n5.  **Self-Correction/Verification against Guidelines:**\n   - *BP Thresholds:* Chinese guidelines (ACOG/中华医学会妇产科学分会) define gestational hypertension as BP ≥140/90 mmHg after 20 weeks. Current max is 138/92. Diastolic 92 is ≥90, so technically meets criteria for hypertension if confirmed. I should note that diastolic ≥90 already meets diagnostic threshold on one reading, but requires confirmation. I'll adjust A to reflect that 舒张压已达90mmHg，符合妊娠期高血压诊断标准之一，需重复测量确认。\n   - *Weight Gain:* IOM guidelines recommend 0.3-0.5 kg/week in 2nd/3rd trimester for normal BMI. 0.8 is high. Correct.\n   - *Fetal Movement:* Standard is ≥10 movements in 2 hours, or count to 10 within 2 hours. \"早中晚各3次\" is vague. I'll clarify the standard method in P.\n   - *SOAP Structure:* Strictly followed. Professional tone. Nursing-focused but includes medical collaboration points.\n   - *Safety:* Emphasize red flags, prompt referral, avoid prescribing (leave meds to OB/GYN).\n   - *Language:* Chinese, precise, clinical.\n\n   All points align with current obstetric nursing standards. I will now generate the final response. \n   Structure check:\n   S: 主观资料 (patient report + missing info needed)\n   O: 客观资料 (vitals, labs pending, measurements)\n   A: 评估分析 (trend interpretation, risk stratification, synthesis)\n   P: 护理计划与建议 (monitoring, education, follow-up, escalation)\n   Matches perfectly. Ready. \n   Output matches the refined draft. \n   *Self-Correction/Note during drafting:* \n   - Make sure to explicitly state that BP ≥140/90 is diagnostic, but diastolic 92 already crosses the threshold, so it's clinically significant even if systolic isn't 140 yet. Actually, either systolic ≥140 OR diastolic ≥90 qualifies. So 138/92 meets criteria. I'll clarify this in A.\n   - Emphasize that this is a nursing assessment, and definitive diagnosis/management requires physician evaluation.\n   - Keep it concise and actionable.\n\n   Final output generation. \n   [Proceeds]✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 105,
+          "completion_tokens": 3533,
+          "total_tokens": 3638,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2280,
+            "text_tokens": 3533
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 105
+          }
+        },
+        "created": 1779863418,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-cdaf86bf-3deb-9590-b915-ad660db1b3e7"
+      },
+      "measured_latency_s": 27.899,
+      "prompt_tokens": 105,
+      "completion_tokens": 3533,
+      "total_tokens": 3638,
+      "tokens_per_sec": 126.64,
+      "output_text": "以下是按照SOAP格式为您整理的产科护理评估与分析。内容严格遵循《妊娠期高血压疾病诊治指南（2020）》及围产期护理规范，供临床参考。\n\n---\n### **S（Subjective 主观资料）**\n- 孕妇自述近一周血压呈上升趋势，具体数值已按日记录。\n- 自诉胎动规律，每日早、中、晚各计数3次。\n- 本周体重较上周增加0.8kg。\n- **需补充询问**：有无头痛、头晕、视物模糊、胸闷、上腹部/右上腹疼痛、恶心呕吐、突发下肢或面部水肿加重等症状；既往是否有高血压、肾脏疾病、糖尿病史；本次妊娠是否为多胎；近期是否服用保健品或含钠较高的食物/药物。\n\n### **O（Objective 客观资料）**\n- **基本信息**：张某，女，32岁，孕32周。\n- **血压趋势**：130/85 → 132/87 → 135/90 → 138/92 mmHg（近7日内进行性升高，舒张压已达90mmHg临界值）。\n- **体重变化**：本周增长0.8kg（孕中晚期推荐健康BMI孕妇增速为0.3～0.5kg/周）。\n- **胎动记录**：早、中、晚各3次（未注明单次计数时长及12小时累计总数）。\n"
+    },
+    {
+      "timestamp": "2026-05-27T22:31:04.828650",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "护士-数据分析",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "您好，我是产科护士小护。根据您提供的信息，我已按SOAP格式为您进行系统分析与护理评估。以下内容供临床参考，具体诊疗请以主治医生面诊为准。\n\n---\n### 📋 【S】主观资料（Subjective）\n- 孕妇自述近一周血压呈逐步上升趋势，本周体重增加0.8kg。\n- 胎动记录方式：早、中、晚各计数3次。\n- 暂未主诉头痛、头晕、视物模糊、上腹部不适、胸闷、下肢明显水肿等症状。（*注：临床需进一步询问有无上述子痫前期预警症状及既往史、家族史*）\n\n### 📊 【O】客观资料（Objective）\n- **孕周**：32周（孕晚期）\n- **血压趋势**：130/85 → 132/87 → 135/90 → 138/92 mmHg（收缩压持续攀升，舒张压已达92mmHg）\n- **体重变化**：本周+0.8kg（孕中晚期推荐增速一般为0.3～0.5kg/周，受孕前BMI影响略有浮动）\n- **胎动情况**：早中晚各3次（日均约9～12次，目前数量在可接受范围，但计数时段与方法未标准化）\n- **缺失关键指标**：尿蛋白、水肿程度、肝肾功能、尿酸、血常规等实验室数据暂未提供。\n\n### 🔍 【A】评估分析（Assessment）\n1. **血压趋势**：近一周血压呈进行性升高，最新值138/92mmHg已接近《妊娠高血压疾病诊治指南》诊断阈值（≥140/90mmHg）。舒张压≥90mmHg提示外周血管阻力增加，需高度警惕**妊娠期高血压疾病（早期）**或向子痫前期进展的风险。\n2. **体重增速**：单周0.8kg超出孕晚期常规推荐范围，结合血压升高，提示可能存在**隐性水钠潴留**或热量/盐分摄入偏多。\n3. **胎动情况**：当前频次尚可，但“早中晚各3次”缺乏统一时长标准，易造成漏判。孕32周胎儿神经系统发育完善，胎动应趋于规律，需规范监测以防宫内缺氧被掩盖。\n4. **综合风险分级**：中等风险。暂无明确器官损害证据，但血压进行性上升+体重增速偏快，属于高危预警信号，需主动干预阻断病情发展。\n\n### 📝 【P】护理计划与建议（Plan）\n#### 1. 严密监测与随访\n- ✅ **血压管理**：每日早晚固定时间静息5分钟后测量，同一手臂、同一体位，记录数值。若连续2次≥140/90mmHg，立即联系产科。\n- ✅ **体重与尿检**：每周固定晨起空腹称重1次；3日内复查尿常规（重点看尿蛋白±/++）、肝肾功能、尿酸。\n- ✅ **胎动规范化**：改为“早、中、晚各取1小时安静状态下计数，3次之和×4=12小时胎动”。≥10次/12小时为正常；＜6次或较平时减少/增加＞50%，立即就诊。\n\n#### 2. 生活方式与健康教育\n- 🥗 **饮食调整**：严格限盐（＜5g/日，注意隐形盐如酱油、咸菜、加工食品）；控制总热量，保证优质蛋白（鱼、禽、蛋、奶、豆制品）；多食富含钾钙的蔬果。\n- 🛌 **体位与休息**：每日保证8～10小时睡眠，午休及夜间采取**左侧卧位**，改善子宫胎盘血流灌注。\n- 🚫 **避免诱因**：保持情绪平稳，避免久站久坐、剧烈活动、便秘用力及自行服用偏方/保健品。\n\n#### 3. 预警教育与应急指引\n⚠️ 出现以下任一情况请**立即急诊**：\n- 血压≥160/110mmHg，或伴剧烈头痛、视力模糊、恶心呕吐\n- 上腹部或右上腹持续疼痛、胸闷气促\n- 阴道流血/流液、胎动明显减少或消失\n- 全身或面部突发水肿、尿量显著减少\n\n#### 4. 多学科协作与后续安排\n- 建议**3～5日内至产科高危门诊复诊**，完善基础化验，评估是否需启动低剂量阿司匹林（若孕前/孕早期未使用且符合指征）或安全降压方案。\n- 建立孕期血压-体重-胎动三联记录表，便于动态追踪。\n- 提供书面《妊娠期高血压居家监测指南》，家属陪同学习应急流程。\n\n---\n💡 **小护提醒**：孕32周是子痫前期高发窗口期，血压“渐进式升高”比单次轻度升高更需重视。目前处于可干预的黄金阶段，规范监测+生活管理可有效降低母婴并发症风险。如有新发症状或血压突破140/90，请勿等待，及时就医。祝您和宝宝平安顺利！",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** 张某 (Zhang), Female, 32 years old\n   - **Gestational Age:** 32 weeks\n   - **Blood Pressure (BP) Trend (past week):** 130/85, 132/87, 135/90, 138/92 mmHg\n   - **Weight Gain:** 0.8 kg this week\n   - **Fetal Movement:** 3 times in the morning, 3 times at noon, 3 times in the evening (total 9 times/day? Or per period? Usually, fetal movement counts are done over specific periods, e.g., 1 hour each. The prompt says \"早中晚各3次\", which likely means 3 times per period, totaling ~9-12 times/day, which is generally normal but needs context. I'll note it as within normal range but suggest standard counting method if needed.)\n   - **Task:** Analyze trends and provide recommendations using SOAP format. Role: Professional Obstetric Nurse (小护).\n\n2.  **Understand SOAP Format:**\n   - **S (Subjective):** Patient's reported symptoms, history, complaints.\n   - **O (Objective):** Measurable data, vital signs, lab results, physical exam findings.\n   - **A (Assessment):** Clinical interpretation, diagnosis, trend analysis, risk assessment.\n   - **P (Plan):** Interventions, education, follow-up, referrals.\n\n3.  **Map Data to SOAP Components:**\n   - *S:* Patient reports BP readings over the past week, weight gain of 0.8kg this week, fetal movement pattern (3x morning, noon, evening). No other symptoms mentioned (e.g., headache, visual disturbances, edema, epigastric pain). I'll assume she's asymptomatic based on the prompt, but will note the need to ask about symptoms.\n   - *O:* \n     - Gestational age: 32 weeks\n     - BP trend: 130/85 → 132/87 → 135/90 → 138/92 mmHg (progressive increase, diastolic approaching/exceeding 90)\n     - Weight gain: 0.8 kg/week (at 32 weeks, recommended is ~0.3-0.5 kg/week; 0.8 is slightly high)\n     - Fetal movement: 3x/period (morning, noon, evening) - roughly 9-12x/day, generally acceptable but needs standardization\n   - *A:* \n     - BP shows an upward trend, with the latest reading (138/92) meeting criteria for gestational hypertension (≥140/90 is diagnostic, but ≥130/80 or progressive rise warrants monitoring; actually, Chinese guidelines define gestational hypertension as BP ≥140/90 after 20 weeks. However, a consistent rise above 130/80 with diastolic ≥90 is concerning for early preeclampsia/hypertensive disorder of pregnancy). I'll classify it as \"血压进行性升高，需警惕妊娠期高血压疾病（早期）\".\n     - Weight gain 0.8kg/week exceeds recommended 0.3-0.5kg/week for 2nd/3rd trimester, suggesting possible fluid retention or excessive intake.\n     - Fetal movement is currently adequate but requires standardized counting.\n     - Overall risk: Moderate for hypertensive disorders of pregnancy, potential for preeclampsia if proteinuria or symptoms develop.\n   - *P:* \n     - Monitoring: Daily BP, weekly weight, urine protein, symptom screening.\n     - Education: Proper BP measurement technique, fetal movement counting (10 times in 2 hours), diet (low salt, balanced), rest (left lateral position), warning signs.\n     - Follow-up: Next visit in 3-7 days or sooner if symptoms arise. Consider lab tests (urinalysis, liver/kidney function, uric acid).\n     - Referral: If BP ≥140/90 or symptoms appear, refer to OB/GYN immediately.\n\n4.  **Draft SOAP Response (Mental Refinement - aligning with professional nursing standards & Chinese guidelines):**\n   *(Note: I'll ensure medical accuracy according to current Chinese obstetric guidelines, e.g., 《妊娠高血压疾病诊治指南》)*\n   - **S:** 孕妇自述近一周血压逐步上升，本周体重增加0.8kg。胎动规律为早、中、晚各计数3次。无头痛、头晕、视物模糊、上腹痛、水肿等不适主诉。（需补充询问）\n   - **O:** \n     - 孕周：32周\n     - 血压趋势：130/85 → 132/87 → 135/90 → 138/92 mmHg（收缩压持续上升，舒张压已达92mmHg）\n     - 体重变化：本周+0.8kg（孕晚期推荐增速0.3~0.5kg/周）\n     - 胎动：早中晚各3次（约9~12次/日，目前属正常范围，但计数方法未标准化）\n     - 其他：暂未提供尿蛋白、水肿程度、实验室检查数据\n   - **A:** \n     - 血压呈进行性升高趋势，最新值138/92mmHg已接近妊娠期高血压诊断标准（≥140/90mmHg），结合孕周及体重增速偏快，高度警惕妊娠期高血压疾病（早期）或子痫前期风险。\n     - 体重单周增长0.8kg超出孕晚期推荐范围，提示可能存在水钠潴留或摄入过量。\n     - 胎动目前可接受，但需规范计数以防漏诊胎儿宫内窘迫。\n     - 综合评估：中等风险，需密切监测并干预以预防病情进展。\n   - **P:** \n     1. **监测与随访：** 每日早晚固定时间测量血压并记录；每周称重1次；3日内复查尿常规（重点查尿蛋白）、肝肾功能、尿酸；若血压≥140/90mmHg或出现症状，立即就诊。\n     2. **健康指导：** \n        - 血压管理：静息5分钟后测量，避免情绪激动/憋尿；保持左侧卧位休息。\n        - 饮食调整：限盐（<5g/日），控制总热量，保证优质蛋白，多食蔬菜；避免高脂高糖食物。\n        - 胎动监测：改为“早中晚各1小时，3次相加×4=12小时胎动”，≥10次/12小时为正常；＜6次或骤减及时就医。\n        - 识别危险信号：头痛、眼花、胸闷、上腹痛、阴道流血/流水、胎动异常等，立即急诊。\n     3. **多学科协作：** 建议产科门诊复诊，必要时转上级医院高危妊娠管理；遵医嘱决定是否启动低剂量阿司匹林（若尚未使用且符合指征）或降压治疗。\n     4. **心理支持：** 缓解焦虑，强调规律产检的重要性，提供书面指导材料。\n\n5.  **Self-Correction/Verification during drafting:**\n   - *BP Criteria:* Chinese guideline defines gestational hypertension as BP ≥140/90 on two occasions ≥4h apart after 20w. Current max is 138/92. Diastolic ≥90 is already elevated. So it's \"血压偏高/临界妊娠期高血压\", warranting close monitoring. I'll phrase it accurately.\n   - *Weight:* Recommended weight gain in 3rd trimester is ~0.3-0.5 kg/week depending on pre-pregnancy BMI. 0.8 is indeed high. Correct.\n   - *Fetal Movement:* Standard is 10 movements in 2 hours, or 3x1hr method ×4. I'll clarify the standard method.\n   - *SOAP Structure:* Strictly followed. Professional tone, nursing-focused interventions, evidence-based.\n   - *Role:* \"小护\" - I'll maintain a professional, caring, clinical nurse persona. Add a brief introductory/concluding remark if appropriate, but keep it concise.\n   - *Guidelines Reference:* Implicitly aligns with 《妇产科学》第9版 & 中华医学会妊娠高血压疾病指南.\n   - *Check for completeness:* S, O, A, P all covered. Trends analyzed. Actionable advice. Risk stratified. Follow-up clear.\n\n   Everything looks solid. I'll generate the response now. \n   Structure in output:\n   【S】主观资料\n   【O】客观资料\n   【A】评估分析\n   【P】护理计划与建议\n   Add professional disclaimer/note if needed, but keep it within scope. Ensure tone matches \"专业产科护士\".✅\n   Proceed. \n   *Self-Correction/Refinement during thought:* \n   - Make sure not to overdiagnose. Use \"警惕妊娠期高血压疾病\" rather than \"确诊\".\n   - Clarify that BP ≥140/90 is diagnostic threshold, so current is \"临界/进行性升高\".\n   - Weight gain recommendation should mention pre-pregnancy BMI dependency, but general rule applies.\n   - Fetal movement: specify standard counting method clearly.\n   - Plan should be prioritized: monitoring first, then education, then follow-up/referral.\n   All aligned. Output matches response. \n   Generate. \n   *(Output Generation matches the final refined version)*",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 105,
+          "completion_tokens": 3262,
+          "total_tokens": 3367,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2122,
+            "text_tokens": 3262
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 105
+          }
+        },
+        "created": 1779863441,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-427ee717-1ba6-96d8-b29d-3075df0d99a2"
+      },
+      "measured_latency_s": 22.9657,
+      "prompt_tokens": 105,
+      "completion_tokens": 3262,
+      "total_tokens": 3367,
+      "tokens_per_sec": 142.04,
+      "output_text": "您好，我是产科护士小护。根据您提供的信息，我已按SOAP格式为您进行系统分析与护理评估。以下内容供临床参考，具体诊疗请以主治医生面诊为准。\n\n---\n### 📋 【S】主观资料（Subjective）\n- 孕妇自述近一周血压呈逐步上升趋势，本周体重增加0.8kg。\n- 胎动记录方式：早、中、晚各计数3次。\n- 暂未主诉头痛、头晕、视物模糊、上腹部不适、胸闷、下肢明显水肿等症状。（*注：临床需进一步询问有无上述子痫前期预警症状及既往史、家族史*）\n\n### 📊 【O】客观资料（Objective）\n- **孕周**：32周（孕晚期）\n- **血压趋势**：130/85 → 132/87 → 135/90 → 138/92 mmHg（收缩压持续攀升，舒张压已达92mmHg）\n- **体重变化**：本周+0.8kg（孕中晚期推荐增速一般为0.3～0.5kg/周，受孕前BMI影响略有浮动）\n- **胎动情况**：早中晚各3次（日均约9～12次，目前数量在可接受范围，但计数时段与方法未标准化）\n- **缺失关键指标**：尿蛋白、水肿程度、肝肾功能、尿酸、血常规等实验室数据暂未提供。\n\n### 🔍"
+    },
+    {
+      "timestamp": "2026-05-27T22:31:29.575486",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "护士-数据分析",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "您好，我是小护。根据您提供的孕期数据，我已按临床护理常用的SOAP格式为您整理分析如下。请注意，本分析供健康管理与就诊参考，最终诊疗需由产科医师结合面诊与辅助检查确认。\n\n---\n### **S（Subjective 主观资料）**\n- 孕妇张某，32岁，孕32周。\n- 主诉近一周自测血压呈上升趋势，本周体重增加0.8kg。\n- 自觉胎动规律，早、中、晚各计数3次，无头痛、眼花、胸闷、上腹痛、阴道流血流液等不适。\n- 未提及下肢水肿、尿量变化或既往妊娠合并症/家族史。\n\n### **O（Objective 客观资料）**\n- **生命体征趋势**：近7日血压记录为 130/85 → 132/87 → 135/90 → 138/92 mmHg（收缩压与舒张压均呈进行性升高）。\n- **体重变化**：单周增长 0.8 kg。\n- **胎儿活动**：胎动计数 9次/日（分时段各3次）。\n- **孕周**：32周（属孕晚期）。\n\n### **A（Assessment 评估与趋势分析）**\n1. **血压趋势**：血压连续上升，舒张压已达92mmHg，已接近我国《妊娠期高血压疾病诊治指南》诊断阈值（≥140/90mmHg）。虽尚未达确诊标准，但进行性升高提示**妊娠期高血压疾病（HDP）高风险**，需警惕子痫前期早期表现。\n2. **体重增长**：孕晚期推荐体重增速为 ≤0.5kg/周。本周0.8kg略超标，结合血压升高，需考虑**隐性水肿/水钠潴留**可能。\n3. **胎动情况**：目前频次在可接受范围，但现代产科更强调“胎动模式稳定性”。单次计数受测量方法影响较大，需转为标准化监测以准确反映胎儿宫内储备。\n4. **综合判断**：当前处于**妊娠期高血压高危观察期**，胎儿宫内状况暂稳定，但需尽快排除蛋白尿及靶器官受累迹象，防止病情进展。\n\n### **P（Plan 护理干预与随访计划）**\n#### 🔹 立即执行（24-48小时内）\n- 规范复测血压：静坐休息5分钟后，使用合适袖带、同一侧上肢、固定时间测量，连续2次间隔≥4小时记录。\n- 留取晨尿送检尿常规（重点查看尿蛋白定性/定量）。\n- 产科门诊预约：建议3-5天内完成血液检查（肝肾功能、血常规、尿酸）、胎儿超声及脐动脉多普勒血流评估。\n\n#### 🔹 居家监测与自我管理\n- **血压监测**：每日早、晚固定时间测量并记录，波动＞20/10mmHg或单次≥140/90mmHg及时就医。\n- **胎动计数**：改为“2小时法”或“12小时法”（早中晚各1小时，3次之和×4≥30次为正常；或2小时≥10次）。若胎动较平时减少/增多＞50%，或消失，立即就诊。\n- **生活方式**：左侧卧位休息（改善胎盘灌注），低盐饮食（食盐＜5g/日），保证优质蛋白摄入，避免久站久坐与情绪激动。\n\n#### 🔹 健康教育与预警识别\n- 明确告知子痫前期危险信号：**持续头痛、视物模糊/眼前闪光、上腹或右上腹痛、恶心呕吐、尿量明显减少、面部/手部突发水肿**。出现任一症状，勿等待，立即前往医院急诊产科。\n- 心理支持：血压波动易引发焦虑，家属应陪同监测，保持沟通，避免过度紧张影响血压。\n\n#### 🔹 多学科协作\n- 若复测血压持续≥140/90mmHg或尿蛋白阳性，请产科医师评估是否启动降压药物（如拉贝洛尔、硝苯地平缓释片等，需遵医嘱）及硫酸镁预防抽搐方案。\n- 后续产检频率调整为每周1次，必要时缩短至每3天1次，直至分娩。\n\n---\n📌 **小护温馨提示**：孕32周是血压管理的关键窗口期。您目前的胎动尚可，但血压与体重的同步变化值得重视。请严格按上述计划落实监测与复查，有任何异常变化随时联系您的产检团队。祝您和宝宝平安顺利！如有具体检查报告或新发症状，可随时补充，我将为您进一步解读。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** 张某 (Zhang), Female, 32 years old\n   - **Gestational Age:** 32 weeks\n   - **Blood Pressure (BP) Trend (last week):** 130/85, 132/87, 135/90, 138/92 mmHg\n   - **Weight Gain:** 0.8 kg this week\n   - **Fetal Movement:** 3 times in the morning, afternoon, and evening (total 9 times/day)\n   - **Request:** Analyze trends and provide recommendations using SOAP format. Role: Professional Obstetric Nurse (小护).\n\n2.  **Understand SOAP Format:**\n   - **S (Subjective):** Patient's reported symptoms, history, concerns.\n   - **O (Objective):** Measurable data, vital signs, lab results, physical exam findings.\n   - **A (Assessment):** Clinical interpretation, diagnosis, risk assessment, trend analysis.\n   - **P (Plan):** Interventions, education, follow-up, referrals.\n\n3.  **Map Data to SOAP Components:**\n   - *S:* Patient reports BP readings over the past week, weight gain of 0.8kg this week, fetal movement count (3x morning, afternoon, evening). No other symptoms mentioned (assume none for now, but note if any were present).\n   - *O:* \n     - Age: 32\n     - GA: 32 weeks\n     - BP trend: 130/85 → 132/87 → 135/90 → 138/92 mmHg\n     - Weight gain: 0.8 kg/week\n     - Fetal movement: 9 times/day (3x3)\n   - *A:* \n     - BP is trending upward, approaching/presuming gestational hypertension range (≥140/90 is diagnostic, but consistent rise >130/80 warrants monitoring). At 32 weeks, this is a red flag for possible preeclampsia or gestational hypertension.\n     - Weight gain 0.8 kg/week is slightly above recommended (usually ~0.5 kg/week in 2nd/3rd trimester), suggesting possible fluid retention.\n     - Fetal movement is within normal range (typically ≥10 times/2 hours or consistent pattern; 3x3=9 is acceptable but needs context of baseline).\n     - Overall: High risk for hypertensive disorders of pregnancy (HDP). Needs close monitoring for proteinuria, edema, symptoms (headache, visual changes, epigastric pain).\n   - *P:* \n     - Immediate: Recheck BP properly, check urine protein, assess for symptoms of severe features.\n     - Education: Low-salt diet, rest (left lateral position), monitor BP at home, count fetal movements accurately, recognize warning signs.\n     - Follow-up: Frequent prenatal visits (weekly or biweekly), possibly ultrasound/Doppler, lab tests (CBC, LFTs, creatinine, uric acid).\n     - Referral: OB/GYN evaluation promptly.\n\n4.  **Draft SOAP Note (Mental Refinement - aligning with professional nursing standards):**\n   *(S)* 孕妇主诉近一周自测血压呈上升趋势，本周体重增加0.8kg。自觉胎动规律，早、中、晚各计数3次。未提及头痛、眼花、上腹痛、水肿加重等不适。\n   *(O)* 孕32周，年龄32岁。近7日血压记录：130/85mmHg→132/87mmHg→135/90mmHg→138/92mmHg；本周体重增长0.8kg；胎动计数9次/日（分时段各3次）。\n   *(A)* 趋势分析：①血压呈进行性升高，已接近妊娠期高血压诊断标准（≥140/90mmHg），需高度警惕妊娠期高血压疾病（如子痫前期）风险；②体重单周增长0.8kg略超推荐值（孕晚期建议≤0.5kg/周），提示可能存在隐性水肿或水钠潴留；③胎动频次在正常范围内，但需结合基线评估，目前胎儿宫内状况暂稳定。综合评估为“妊娠期高血压高风险”，需排除蛋白尿及靶器官损害。\n   *(P)* 护理与干预建议：①立即复测规范血压（静息5分钟，双上肢对比），留取晨尿查尿常规（重点看蛋白）；②指导左侧卧位休息，低盐饮食（<5g/d），避免劳累与情绪波动；③加强居家监测：每日早晚固定时间测血压并记录，胎动计数改为“2小时≥10次”或关注胎动模式变化；④健康教育：识别子痫前期预警症状（持续头痛、视物模糊、上腹/右上腹痛、恶心呕吐、尿量骤减、面部/手部突发水肿），出现任一症状立即就诊；⑤预约产科门诊复查（建议3-5天内），完善血液检查（肝肾功能、血常规、尿酸）及胎儿超声/脐血流多普勒评估；⑥若血压持续≥140/90mmHg或出现蛋白尿/症状，遵医嘱启动降压治疗及密切监护方案。\n\n5.  **Check Against Requirements & Medical/Nursing Standards:**\n   - SOAP format? Yes.\n   - Professional tone? Yes, uses appropriate medical/nursing terminology.\n   - Accurate clinical reasoning? \n     - BP trend: Correctly identifies progression toward HDP threshold. Notes that ≥140/90 is diagnostic, but rising trend + weight gain = high risk.\n     - Weight: 0.8kg/week is indeed higher than typical 0.3-0.5kg in 3rd trimester. Suggests fluid retention.\n     - Fetal movement: 3x3=9 is generally acceptable, but standard advice is often ≥10 per 2 hours or consistent pattern. I'll adjust to standard Chinese obstetric guidance (usually ≥10 times/2h or 30+ times/12h, but modern guidelines accept individualized baseline; I'll frame it as \"currently within acceptable range but requires standardized counting\").\n     - Plan covers immediate actions, education, monitoring, follow-up, red flags. Aligns with ACOG/Chinese guidelines for HDP management.\n   - Role: \"小护\" (professional obstetric nurse) - tone should be caring, precise, structured, and patient-centered.\n   - Language: Chinese, as requested.\n\n   Minor adjustments during drafting:\n   - Clarify fetal movement standard: In China, common teaching is ≥10 times/2 hours or ≥30 times/12 hours. I'll note it's currently acceptable but recommend standardized counting.\n   - Emphasize that BP measurement technique matters (rested, proper cuff, same arm/time).\n   - Ensure all recommendations are actionable and tiered (immediate vs. follow-up).\n   - Add nursing-specific focus: health education, self-monitoring, psychological support, coordination with OB team.\n\n6.  **Final Output Generation:** (Structure exactly as SOAP, maintain professional yet accessible language, ensure clinical accuracy per current guidelines.) \n   - S: Subjective data from patient\n   - O: Objective measurements\n   - A: Assessment/trend analysis + risk stratification\n   - P: Nursing interventions, education, follow-up plan\n   - Add brief professional closing if needed, but keep it concise. All within SOAP framework.✅\n   Ready. Output matches the refined draft. \n   Self-Correction/Verification during thought:\n   - BP threshold: Chinese guideline defines gestational hypertension as SBP≥140 or DBP≥90 on two occasions ≥4h apart. The trend shows DBP hitting 92, so it's critical to recheck properly.\n   - Weight: Recommended total gain for normal BMI is 11.5-16kg for whole pregnancy; weekly gain in 3rd trimester ~0.3-0.5kg. 0.8 is elevated.\n   - Fetal movement: Current data is okay, but pattern matters more than absolute number. I'll phrase it carefully.\n   - Plan includes both nursing scope and necessary medical referral (nurses don't diagnose or prescribe, but coordinate and educate).\n   All clinically sound. Proceed. \n   Output Generation. \n   *(Self-Correction/Note during output prep)*: I will make sure the tone reflects a professional obstetric nurse (\"小护\"), use precise SOAP structure, and explicitly state that this is for educational/reference purposes and requires physician confirmation. This aligns with nursing practice standards.✅\n   Output matches the final refined version. \n   [Done.] \n   *Output Generation* (matches the response)\n   “**S（主观资料）**：……” etc. structured properly.✅\n   All steps verified. Proceeds. \n   *(Output Generation)* -> *See response.* \n   *(Self-Correction/Verification during output generation prep)*: \n   - Check SOAP labels: S, O, A, P clearly marked.\n   - Clinical accuracy: BP trend analysis correct, weight gain context correct, fetal movement interpretation balanced, plan follows nursing scope + multidisciplinary coordination.\n   - Tone: Professional, empathetic, structured, guideline-aligned.\n   - Format: Strictly SOAP as requested.\n   Ready.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 105,
+          "completion_tokens": 3110,
+          "total_tokens": 3215,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2078,
+            "text_tokens": 3110
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 105
+          }
+        },
+        "created": 1779863466,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-3babc828-5610-99f9-a4f0-8bec86e6d5de"
+      },
+      "measured_latency_s": 24.7466,
+      "prompt_tokens": 105,
+      "completion_tokens": 3110,
+      "total_tokens": 3215,
+      "tokens_per_sec": 125.67,
+      "output_text": "您好，我是小护。根据您提供的孕期数据，我已按临床护理常用的SOAP格式为您整理分析如下。请注意，本分析供健康管理与就诊参考，最终诊疗需由产科医师结合面诊与辅助检查确认。\n\n---\n### **S（Subjective 主观资料）**\n- 孕妇张某，32岁，孕32周。\n- 主诉近一周自测血压呈上升趋势，本周体重增加0.8kg。\n- 自觉胎动规律，早、中、晚各计数3次，无头痛、眼花、胸闷、上腹痛、阴道流血流液等不适。\n- 未提及下肢水肿、尿量变化或既往妊娠合并症/家族史。\n\n### **O（Objective 客观资料）**\n- **生命体征趋势**：近7日血压记录为 130/85 → 132/87 → 135/90 → 138/92 mmHg（收缩压与舒张压均呈进行性升高）。\n- **体重变化**：单周增长 0.8 kg。\n- **胎儿活动**：胎动计数 9次/日（分时段各3次）。\n- **孕周**：32周（属孕晚期）。\n\n### **A（Assessment 评估与趋势分析）**\n1. **血压趋势**：血压连续上升，舒张压已达92mmHg，已接近我国《妊娠期高血压疾病诊治指南》诊断阈"
+    },
+    {
+      "timestamp": "2026-05-27T22:31:58.625151",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "您好。作为产科医生，我将基于国内外妊娠高血压疾病诊疗指南（如ACOG 2020、中华医学会妇产科学分会《妊娠高血压疾病诊治指南（2020）》），为您梳理该病例的鉴别诊断、临床推理链及规范化处理建议。\n\n---\n### 🔍 一、初步诊断\n**重度子痫前期（伴中枢神经系统受累表现）**  \n*诊断依据：*\n1. 孕周＞20周（34周）新发高血压：BP 155/100 mmHg（≥140/90 mmHg）\n2. 蛋白尿：尿蛋白++（提示肾小球内皮损伤）\n3. 靶器官受累症状：头痛2天、视物模糊1天（提示脑血管痉挛/脑水肿或后部可逆性脑病综合征PRES倾向）\n4. 双下肢水肿++（妊娠晚期常见，特异性低，但结合上述指标支持病理状态）\n\n---\n### 🧩 二、鉴别诊断\n| 疾病 | 鉴别要点 | 与本例不符/需排除之处 |\n|------|----------|------------------------|\n| **慢性高血压合并子痫前期** | 孕前或孕20周前已存在高血压；或有慢性肾病、自身免疫病史 | 本例为初产妇，未提供既往血压史，需追问并查基线资料；若确诊则按“重叠型”管理 |\n| **妊娠期高血压** | 仅血压升高，无蛋白尿及靶器官损害 | 本例有明确蛋白尿及神经视觉症状，可排除 |\n| **继发性高血压/肾脏疾病** | 慢性肾炎、狼疮肾炎、嗜铬细胞瘤等 | 需查血肌酐、尿酸、自身抗体、儿茶酚胺代谢物；突发头痛+视物模糊需警惕脑血管意外或PRES |\n| **偏头痛/紧张性头痛/眼源性病变** | 头痛性质不同，多无持续高血压及蛋白尿 | 本例症状与血压波动同步，且伴蛋白尿，不支持单纯原发性头痛 |\n| **先兆子痫进展为先兆子痫（Eclampsia）** | 出现抽搐或昏迷 | 目前尚无抽搐，但属极高危状态，需紧急干预防恶化 |\n\n---\n### 🧠 三、临床推理链（Diagnostic Reasoning Chain）\n1. **时间窗定位**：孕34周（＞20周）→ 首先考虑妊娠特异性疾病（子痫前期谱系）。\n2. **血压评估**：155/100 mmHg ≥ 140/90 mmHg → 符合妊娠期高血压诊断标准。\n3. **蛋白尿确认**：尿蛋白++ → 提示肾小球滤过屏障受损，支持子痫前期诊断（现代指南已不将蛋白尿作为唯一标准，但阳性结果强化诊断）。\n4. **症状定性**：头痛+视物模糊 → 中枢神经系统缺血/水肿表现，属于**重度特征（Severe Features）**，即使血压未达160/110 mmHg，亦按重度管理。\n5. **病理生理推演**：全身小动脉痉挛 → 血管内皮损伤 → 蛋白漏出+脑灌注异常 → 头痛/视力障碍 → 若不干预，可进展为子痫、HELLP综合征、胎盘早剥、胎儿窘迫。\n6. **综合判断**：符合“重度子痫前期”诊断，处于子痫发作前窗口期，需立即启动母胎保护及终止妊娠准备。\n\n---\n### 🏥 四、处理建议（分阶段）\n#### ✅ 1. 紧急评估与监测（入院即刻）\n- **母体**：生命体征每15-30min监测；严格记录出入量；眼底检查；神经系统查体（腱反射、病理征）；实验室：血常规、肝肾功能、凝血功能、尿酸、LDH、24h尿蛋白或尿蛋白/肌酐比值。\n- **胎儿**：胎心监护（NST）+ B超生物物理评分（BPP）+ 脐血流S/D值评估。\n- **影像学**：若头痛剧烈或意识改变，行头颅MRI（首选）或CT排除出血/梗死/PRES。\n\n#### 💊 2. 药物治疗\n- **降压治疗**：目标收缩压140-150 mmHg，舒张压90-100 mmHg（避免过低影响胎盘灌注）\n  - 一线：拉贝洛尔 100-200mg po tid 或 静滴；硝苯地平控释片 30mg po qd；或肼屈嗪静滴。\n  - 禁忌：ACEI/ARB、利尿剂（除非肺水肿）、β受体阻滞剂单用。\n- **解痉防痫**：**硫酸镁**为首选\n  - 负荷量：4-6g 静脉滴注（15-20min内）\n  - 维持量：1-2g/h 持续泵入，至产后24h\n  - 监测：膝反射、呼吸≥16次/分、尿量≥25ml/h；备钙剂（10%葡萄糖酸钙10ml iv）拮抗中毒。\n- **促胎肺成熟**：地塞米松 6mg im q12h ×4次，或倍他米松 12mg im q24h ×2次（孕34周仍推荐，尤其预计7天内分娩者）。\n\n#### 🚑 3. 分娩决策\n- **原则**：孕≥34周且伴重度特征，**母体稳定后应尽快终止妊娠**。不推荐期待疗法。\n- **方式选择**：\n  - 宫颈条件好、胎儿耐受 → 引产试产\n  - 宫颈不成熟、胎儿窘迫、病情不稳定 → 剖宫产\n- **术中术后**：继续硫酸镁24h；严密监测血压、尿量、血小板、肝酶；警惕产后子痫（约25%发生于产后48h内）。\n\n#### 📋 4. 多学科协作与患者沟通\n- 请麻醉科、新生儿科、ICU会诊待命。\n- 向家属充分告知：病情进展风险（子痫、胎盘早剥、早产儿并发症）、治疗方案必要性、预后预期。\n- 签署知情同意书，建立高危妊娠绿色通道。\n\n---\n### ⚠️ 五、关键提醒\n1. **勿因血压“仅155/100”而低估病情**：神经系统症状是重度子痫前期的独立预警指标。\n2. **硫酸镁不可替代**：对预防子痫发作的疗效优于苯二氮䓬类或丙泊酚，且具一定血管扩张作用。\n3. **产后非终点**：子痫前期病理过程可持续至产后2-6周，出院后仍需门诊随访血压、尿蛋白及肾功能。\n4. **长期健康**：该孕妇未来患心血管疾病、2型糖尿病、慢性肾病风险显著升高，建议产后6-12周行心血管代谢风险评估，并指导避孕与下次妊娠管理（建议间隔≥18个月，孕前控制体重及基础疾病）。\n\n如需我协助制定具体用药剂量表、胎监判读要点或产后随访路径，可提供进一步信息。本建议基于当前循证指南，实际临床请以主管医师面诊及医院规范为准。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** Li, female, 28 years old\n   - **Obstetric History:** Primipara (初产妇), 34 weeks pregnant (孕34周)\n   - **Chief Complaint:** Headache for 2 days, blurred vision for 1 day\n   - **Physical Examination:** BP 155/100 mmHg, bilateral lower extremity edema ++, Urine protein ++\n   - **Request:** Differential diagnosis and management recommendations, with reasoning chain.\n\n2.  **Identify Key Clinical Features:**\n   - Gestational age: 34 weeks (third trimester)\n   - Hypertension: BP 155/100 mmHg (≥140/90 mmHg meets criteria for hypertension in pregnancy)\n   - Proteinuria: Urine protein ++ (≥0.3g/24h or dipstick ≥++ suggests significant proteinuria)\n   - Symptoms: Headache, blurred vision (neurological/visual symptoms suggesting severe features)\n   - Edema: Lower extremity ++ (common in pregnancy, but less specific now; still noted)\n   - Diagnosis so far: Preeclampsia with severe features (重度子痫前期) based on Chinese/international guidelines (BP ≥160/110 is severe, but symptoms like headache/blurred vision + proteinuria at 34 weeks strongly point to preeclampsia with severe features or at least moderate/severe preeclampsia requiring urgent evaluation). Actually, according to ACOG/Chinese guidelines, new-onset hypertension after 20 weeks + proteinuria = preeclampsia. Presence of cerebral/visual symptoms (headache, blurred vision) classifies it as *preeclampsia with severe features* regardless of BP threshold (though BP here is 155/100, which is stage 2 hypertension in pregnancy).\n\n3.  **Formulate Differential Diagnosis:**\n   Need to consider other causes of hypertension, proteinuria, headache, and visual changes in pregnancy:\n   - **Preeclampsia with severe features** (Most likely)\n   - Chronic hypertension with superimposed preeclampsia (Need history of pre-pregnancy BP or chronic kidney disease)\n   - Gestational hypertension (Ruled out due to proteinuria and symptoms)\n   - Eclampsia (No seizures yet, but high risk)\n   - Secondary hypertension causes: Renal disease (chronic glomerulonephritis, lupus nephritis), Endocrine disorders (pheochromocytoma, hyperthyroidism), Cerebrovascular events (stroke, TIA, reversible cerebral vasoconstriction syndrome)\n   - Other neurological/ophthalmological causes of headache/blurred vision: Migraine, hypertensive encephalopathy, posterior reversible encephalopathy syndrome (PRES), retinal detachment, optic neuritis.\n   - Physiological edema vs. pathological.\n\n   Structure the differential logically: Primary obstetric vs. Non-obstetric, acute vs. chronic.\n\n4.  **Develop Reasoning Chain (推理链):**\n   - Step 1: Confirm gestational age & timing (>20 weeks → points to pregnancy-specific conditions)\n   - Step 2: Assess BP (155/100 ≥140/90 → hypertension in pregnancy)\n   - Step 3: Assess proteinuria (++ → indicates renal involvement, supports preeclampsia)\n   - Step 4: Evaluate symptoms (headache, blurred vision → central nervous system involvement, indicates severe features/potential impending eclampsia or PRES)\n   - Step 5: Synthesize → Meets diagnostic criteria for Preeclampsia with Severe Features (重度子痫前期)\n   - Step 6: Rule out mimics → Check history, labs, imaging if needed.\n\n5.  **Formulate Management Recommendations (处理建议):**\n   Based on guidelines (ACOG, Chinese Medical Association Obstetrics & Gynecology Branch):\n   - **Immediate Assessment:** Vitals, fetal monitoring (NST/BPP), lab tests (CBC, LFTs, renal function, coagulation, uric acid, 24h urine protein or protein/creatinine ratio), fundoscopic exam, neuro assessment.\n   - **Antihypertensive Therapy:** Target BP 140-150/90-100 mmHg. Drugs: Labetalol, Nifedipine ER, Hydralazine (IV). Avoid ACEi/ARBs.\n   - **Seizure Prophylaxis:** Magnesium sulfate (loading dose 4-6g IV over 15-20 min, then maintenance 1-2g/hr). Monitor reflexes, respiratory rate, urine output.\n   - **Corticosteroids for Fetal Lung Maturity:** Betamethasone or Dexamethasone (given <34+6 weeks, but at 34 weeks, some guidelines say still beneficial up to 36+6, especially if delivery within 7 days).\n   - **Delivery Decision:** At 34 weeks with severe features, delivery is indicated after maternal stabilization. Expectant management is generally not recommended beyond 34 weeks for severe preeclampsia. Plan for cesarean or induction depending on cervical status/fetal condition.\n   - **Monitoring:** ICU/step-down unit, strict I/O, daily labs, continuous fetal monitoring.\n   - **Postpartum:** Continue MgSO4 for 24h post-delivery, monitor BP, watch for complications (HELLP, pulmonary edema, stroke).\n\n6.  **Structure the Response:**\n   - Acknowledge role (资深产科医生)\n   - Provide clear, structured output:\n     1. 初步诊断与诊断依据 (Initial Diagnosis & Basis)\n     2. 鉴别诊断 (Differential Diagnosis)\n     3. 推理链 (Reasoning Chain)\n     4. 处理建议 (Management Recommendations)\n     5. 注意事项/随访 (Follow-up/Precautions)\n   - Use professional medical terminology, cite guidelines implicitly/explicitly.\n   - Ensure logical flow and clinical safety emphasis.\n\n   Draft structure:\n   **【初步诊断】** 重度子痫前期（伴先兆子痫症状）\n   **【鉴别诊断】** (List with brief rationale)\n   **【推理链】** (Step-by-step clinical reasoning)\n   **【处理建议】** (Immediate, pharmacological, obstetric, monitoring, delivery timing)\n   **【重要提示】** (Emphasize urgency, multidisciplinary care, patient counseling)\n\n7.  **Refine Content (Self-Correction/Verification during drafting):**\n   - *BP threshold:* 155/100 is ≥140/90, qualifies for hypertension. Severe features are defined by symptoms (headache, visual changes) OR BP ≥160/110 OR labs (thrombocytopenia, elevated LFTs, renal impairment, pulmonary edema). Here, symptoms alone classify it as severe features per ACOG 2013/2019 and Chinese 2020 guidelines.\n   - *Proteinuria:* ++ is roughly 1-2 g/L, but modern guidelines de-emphasize proteinuria for diagnosis; symptoms + HTN are sufficient. Still, it supports the diagnosis.\n   - *Edema:* Not required for diagnosis, common in normal pregnancy, but noted.\n   - *Magnesium sulfate:* Indicated for seizure prophylaxis in severe preeclampsia.\n   - *Steroids:* At 34 weeks, benefit is still recognized if delivery anticipated within 7 days. Some guidelines say ≤34+6, others extend to 36+6. I'll note it appropriately.\n   - *Delivery timing:* ≥34 weeks with severe features → deliver after stabilization. Do not delay for steroids if maternal/fetal condition deteriorates.\n   - *Differentials:* Must include chronic hypertension, renal disease, pheochromocytoma, CNS pathology, migraines, etc. Keep it concise.\n   - *Tone:* Professional, authoritative, guideline-based, emphasizes urgency without causing panic.\n\n   Check accuracy:\n   - Diagnosis: 重度子痫前期 (Preeclampsia with severe features)\n   - Criteria met: GA>20w, HTN, proteinuria, cerebral/visual symptoms\n   - Management aligns with ACOG Practice Bulletin No. 222 (2020) & Chinese guidelines (2020)\n   - MgSO4 dosing standard\n   - Antihypertensive targets standard\n   - Delivery indication correct\n   - Fetal lung maturity steroids appropriate\n   - Monitoring parameters comprehensive\n\n   All clinically sound. Will structure response clearly. Add disclaimer if needed (standard for AI medical advice), but maintain professional tone as requested.\n\n   Final output generation matches the refined structure.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 91,
+          "completion_tokens": 3582,
+          "total_tokens": 3673,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1950,
+            "text_tokens": 3582
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 91
+          }
+        },
+        "created": 1779863495,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-932ab30d-217a-9206-b2a0-d346c20df5c3"
+      },
+      "measured_latency_s": 29.0494,
+      "prompt_tokens": 91,
+      "completion_tokens": 3582,
+      "total_tokens": 3673,
+      "tokens_per_sec": 123.31,
+      "output_text": "您好。作为产科医生，我将基于国内外妊娠高血压疾病诊疗指南（如ACOG 2020、中华医学会妇产科学分会《妊娠高血压疾病诊治指南（2020）》），为您梳理该病例的鉴别诊断、临床推理链及规范化处理建议。\n\n---\n### 🔍 一、初步诊断\n**重度子痫前期（伴中枢神经系统受累表现）**  \n*诊断依据：*\n1. 孕周＞20周（34周）新发高血压：BP 155/100 mmHg（≥140/90 mmHg）\n2. 蛋白尿：尿蛋白++（提示肾小球内皮损伤）\n3. 靶器官受累症状：头痛2天、视物模糊1天（提示脑血管痉挛/脑水肿或后部可逆性脑病综合征PRES倾向）\n4. 双下肢水肿++（妊娠晚期常见，特异性低，但结合上述指标支持病理状态）\n\n---\n### 🧩 二、鉴别诊断\n| 疾病 | 鉴别要点 | 与本例不符/需排除之处 |\n|------|----------|------------------------|\n| **慢性高血压合并子痫前期** | 孕前或孕20周前已存在高血压；或有慢性肾病、自身免疫病史 | 本例为初产妇，未提供既往血压史，需追问并查基线资料；若确诊则按“重叠型”管理 |\n"
+    },
+    {
+      "timestamp": "2026-05-27T22:32:29.888921",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "您好。作为产科医师，我将基于您提供的病史与查体信息，结合现行《妊娠期高血压疾病诊治指南（2020）》及国际共识，为您梳理鉴别诊断逻辑与临床处理路径。\n\n---\n### 🩺 一、初步诊断\n**重度子痫前期（伴先兆子痫神经系统症状）**  \n**诊断依据：**\n1. 孕周＞20周（34周）新发高血压：BP 155/100 mmHg（≥140/90 mmHg）\n2. 蛋白尿：尿蛋白++（提示≥0.3g/24h或UPC≥0.3）\n3. 严重表现（Severe features）：头痛2天、视物模糊1天（中枢神经系统受累征象）\n4. 水肿++（虽非诊断必需，但符合全身血管内皮损伤的临床表现）\n\n---\n### 🔍 二、鉴别诊断与推理链\n| 鉴别疾病 | 支持点 | 不支持/排除点 | 推理逻辑 |\n|----------|--------|----------------|----------|\n| **妊娠期高血压** | 孕晚期新发高血压 | 无蛋白尿、无靶器官损害症状 | 本例蛋白尿++且伴头痛/视物模糊，已超出单纯妊娠期高血压范畴 |\n| **慢性高血压合并子痫前期** | 高血压+蛋白尿 | 需追问孕前或孕20周前血压史；若既往正常，则不支持 | 初产妇28岁，无基础病史提示，暂按妊娠20周后新发处理，但需补问病史 |\n| **子痫** | 同属子痫前期谱系 | 目前无抽搐发作 | 头痛+视物模糊为“先兆子痫”表现，提示即将进展为子痫，属高危预警 |\n| **HELLP综合征** | 可并发于重度子痫前期 | 需实验室证实溶血、肝酶升高、血小板减少 | 必须完善血常规、肝肾功能、LDH排查；可与本病共存 |\n| **原发性肾脏疾病** | 蛋白尿、水肿 | 多伴血尿、管型尿、病程较长；血压常早期升高 | 本例急性起病于孕晚期，伴典型脑血管症状，更符合妊娠特异性血管内皮病变 |\n| **后部可逆性脑病综合征（PRES）** | 头痛、视物模糊、高血压 | 影像学可见顶枕叶白质水肿 | 重度子痫前期常见并发症；若降压后症状不缓解或出现局灶神经体征，需头颅MRI |\n| **颅内器质性病变（出血/肿瘤）** | 头痛、视力改变 | 罕见；多伴进行性加重、意识障碍、偏瘫等 | 仅在对标准治疗无反应或出现定位体征时考虑影像排查 |\n\n**推理链总结：**  \n孕晚期新发高血压 + 蛋白尿 → 确立子痫前期诊断 → 出现头痛/视物模糊 → 提示脑血管痉挛/脑水肿/视网膜缺血 → 符合“重度”标准 → 需紧急干预防子痫及母胎并发症 → 同时排查HELLP、慢性高血压重叠及PRES。\n\n---\n### 📋 三、紧急评估与辅助检查\n1. **母体实验室检查**  \n   - 血常规（重点看PLT）、凝血功能、肝肾功能（ALT/AST、Cr、BUN、UA）、LDH、电解质  \n   - 24小时尿蛋白定量或尿蛋白/肌酐比值（UPC）  \n   - 眼底检查（视网膜动脉痉挛、渗出、出血）\n2. **胎儿评估**  \n   - 胎心监护（NST）+ 生物物理评分（BPP）  \n   - 超声：胎儿生长、羊水量、脐动脉/大脑中动脉多普勒血流\n3. **必要时**  \n   - 头颅MRI（若头痛/视力障碍持续或加重）  \n   - 眼科会诊（排除视网膜脱离等独立病因）\n\n---\n### 💊 四、处理建议（分阶段）\n#### 1️⃣ 母体稳定与对症处理\n- **住院严密监护**：左侧卧位休息，持续胎心监护，记录出入量，每日体重/血压监测（至少q4h）\n- **降压治疗**（目标收缩压130~155 mmHg，舒张压80~105 mmHg，避免骤降影响胎盘灌注）  \n  ✅ 首选：拉贝洛尔 口服/静滴，或硝苯地平控释片 口服  \n  ⚠️ 禁用：ACEI/ARB、利尿剂（除非肺水肿）\n- **硫酸镁解痉预防子痫**（核心措施）  \n  ✅ 负荷量：4~6g 静脉缓慢推注（20~30min）  \n  ✅ 维持量：1~2g/h 持续泵入，疗程至产后24h  \n  🔍 监测：膝反射、呼吸≥16次/分、尿量≥25ml/h；备10%葡萄糖酸钙10ml静注解毒\n- **糖皮质激素促胎肺成熟**  \n  ✅ 因孕34周且计划近期终止妊娠，给予地塞米松 6mg im q12h ×4次 或 倍他米松 12mg im q24h ×2次\n\n#### 2️⃣ 终止妊娠时机与方式\n- **原则**：子痫前期唯一根治手段是分娩。孕34周伴重度表现，应在母体病情稳定后尽快终止妊娠。\n- **时机**：  \n  ✅ 若生命体征平稳、无进行性恶化：给予硫酸镁+激素后观察24~48小时促胎肺成熟，随后引产/剖宫产  \n  ❗ 若出现以下任一情况，立即终止妊娠：血压持续≥160/110 mmHg、血小板进行性下降、肝酶显著升高、少尿/肾功能恶化、胎儿窘迫、症状加重\n- **分娩方式**：宫颈条件好者优先阴道试产（催产素引产），产程中持续硬膜外镇痛可降低血压波动；若宫颈不成熟、胎儿窘迫或病情不稳定，行剖宫产。\n\n#### 3️⃣ 产后管理\n- 继续硫酸镁至产后24小时（产后24~48h仍为子痫高发期）\n- 产后血压可能反跳，需继续降压治疗并逐步减量\n- 监测尿量、肝肾功能、血小板至恢复正常\n- 出院后随访：产后6~12周复查血压及尿蛋白，评估是否转为慢性高血压；告知远期心血管代谢风险，建议生活方式干预及定期体检。\n\n---\n### 🚨 五、临床警示（Red Flags）\n出现以下任一表现，提示病情急剧恶化，需启动多学科抢救（ICU/麻醉科/新生儿科）：\n- 血压≥160/110 mmHg且药物难控\n- 剧烈头痛、呕吐、意识模糊、抽搐（子痫）\n- 右上腹痛、恶心呕吐（肝包膜牵拉/HELLP）\n- 少尿（<400ml/24h）、呼吸困难、血氧下降（肺水肿/肾衰）\n- 胎动明显减少、NST无反应型、脐动脉S/D比值异常\n\n---\n📖 **指南依据**：中华医学会妇产科学分会《妊娠期高血压疾病诊治指南（2020）》、ACOG Practice Bulletin No.222 (2020)、WHO Pregnancy Hypertension Guidelines (2023)。\n\n如需我根据补充化验结果（如PLT、肝肾功能、尿蛋白定量）进一步细化用药剂量或分娩决策，请随时提供。祝母婴平安。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** Li, female, 28 years old, primipara (first pregnancy), gestational age 34 weeks.\n   - **Chief Complaint:** Headache for 2 days, blurred vision for 1 day.\n   - **Physical Examination:** BP 155/100 mmHg, bilateral lower extremity edema ++, urine protein ++.\n   - **Request:** Differential diagnosis and management recommendations, with reasoning chain.\n\n2.  **Identify Key Clinical Features:**\n   - Gestational age: 34 weeks (>20 weeks)\n   - Hypertension: BP 155/100 mmHg (≥140/90 mmHg)\n   - Proteinuria: Urine protein ++ (≥0.3g/24h or dipstick ≥++)\n   - Symptoms: Headache, blurred vision (cerebral/visual symptoms)\n   - Edema: Lower extremity ++ (non-specific, but common in preeclampsia)\n   - Primipara, 28yo (risk factors: first pregnancy, though age is not high-risk)\n\n3.  **Formulate Primary Diagnosis:**\n   - The combination of new-onset hypertension after 20 weeks gestation + proteinuria + severe features (headache, visual disturbances) strongly points to **Preeclampsia with severe features** (重度子痫前期).\n   - Diagnostic criteria (ACOG/Chinese guidelines): BP ≥160/110 mmHg OR BP ≥140/90 mmHg with proteinuria ≥0.3g/24h or dipstick ≥++ OR severe features (thrombocytopenia, impaired liver function, renal insufficiency, pulmonary edema, cerebral/visual symptoms). Here, BP is 155/100 (meets ≥140/90), proteinuria ++, and has cerebral/visual symptoms → Preeclampsia with severe features.\n\n4.  **Develop Differential Diagnosis:**\n   Need to consider other conditions that can cause hypertension, proteinuria, headache, and visual changes in pregnancy:\n   - *Gestational Hypertension:* No proteinuria, no severe features. Ruled out due to proteinuria and symptoms.\n   - *Chronic Hypertension with superimposed preeclampsia:* Pre-existing HTN before 20 weeks or known chronic HTN. Need history. If no prior history, less likely, but must be ruled out.\n   - *Eclampsia:* Seizures. Not present yet, but high risk given symptoms.\n   - *HELLP Syndrome:* Hemolysis, Elevated Liver enzymes, Low Platelets. Needs lab workup. Can coexist with preeclampsia.\n   - *Renal Disease:* Pre-existing or new-onset glomerulonephritis. Proteinuria may be heavier, hematuria, casts, normal BP initially. Less likely given acute onset at 34w with classic preeclampsia picture.\n   - *Migraine/Tension Headache + Unrelated HTN:* Unlikely given concurrent proteinuria and edema.\n   - *Posterior Reversible Encephalopathy Syndrome (PRES):* Often associated with severe preeclampsia/eclampsia. Causes headache, visual changes, seizures. Should be considered if neurological symptoms worsen.\n   - *Retinal detachment/Vitreous hemorrhage:* Could cause blurred vision, but wouldn't explain HTN/proteinuria.\n   - *Intracranial pathology (tumor, bleed):* Rare, but possible. MRI if symptoms persist/worsen despite BP control.\n\n   I'll structure the differential diagnosis logically, prioritizing based on likelihood and urgency.\n\n5.  **Construct Reasoning Chain (鉴别诊断推理链):**\n   - Step 1: Confirm pregnancy-related hypertensive disorder (onset >20w, HTN + proteinuria).\n   - Step 2: Assess severity (BP ≥140/90, proteinuria ++, plus cerebral/visual symptoms → severe features).\n   - Step 3: Rule out mimics/comorbidities (chronic HTN, renal disease, HELLP, eclampsia imminent).\n   - Step 4: Correlate symptoms with pathophysiology (endothelial dysfunction, vasospasm, cerebral edema/PRES, retinal changes).\n   - Step 5: Conclude primary diagnosis: 重度子痫前期 (Preeclampsia with severe features).\n\n6.  **Formulate Management Recommendations (处理建议):**\n   Based on Chinese guidelines (中华医学会妇产科学分会产科学组《妊娠期高血压疾病诊治指南（2020）》) and ACOG:\n   - *Immediate Actions:* Hospitalization, continuous monitoring (maternal & fetal), strict bed rest (left lateral), oxygen if needed.\n   - *Diagnostic Workup:* \n     - Labs: CBC (platelets), LFTs, renal function (Cr, BUN, uric acid), LDH, coagulation profile, 24h urine protein or protein/creatinine ratio.\n     - Fetal assessment: NST/BPP, ultrasound (growth, amniotic fluid, Doppler).\n     - Ophthalmology consult if visual symptoms persist.\n     - Neuroimaging (MRI brain) if symptoms don't resolve with BP control or if focal deficits/seizures occur.\n   - *Pharmacological Treatment:*\n     - Antihypertensives: Target BP 130-155/80-105 mmHg (avoid rapid drop). Options: Labetalol, Nifedipine ER, Hydralazine (IV if severe). Avoid ACEi/ARBs.\n     - Magnesium Sulfate: First-line for seizure prophylaxis in severe preeclampsia. Loading dose 4-6g IV over 20-30 min, maintenance 1-2g/hr. Monitor reflexes, respiratory rate, urine output. Have calcium gluconate ready.\n     - Corticosteroids: For fetal lung maturity (betamethasone/dexamethasone) since <34 weeks? Wait, she's exactly 34 weeks. Guidelines say give steroids up to 34+6 weeks if delivery anticipated within 7 days. So yes, administer.\n   - *Delivery Planning:* \n     - Definitive treatment for preeclampsia. At 34 weeks with severe features, delivery is indicated after maternal stabilization. Usually wait 24-48 hours for steroids/magnesium if stable, but if unstable, deliver immediately.\n     - Route: Vaginal preferred if cervix favorable, otherwise cesarean. Induction/augmentation as appropriate.\n   - *Postpartum Care:* Continue MgSO4 for 24h postpartum, monitor BP, watch for delayed eclampsia, plan long-term CV risk follow-up.\n\n7.  **Structure the Response:**\n   - Acknowledge role (资深产科医生)\n   - Provide clear, structured output:\n     1. 初步诊断与核心依据\n     2. 鉴别诊断与推理链\n     3. 紧急评估与检查建议\n     4. 处理方案（母体、胎儿、分娩时机与方式）\n     5. 随访与长期管理\n   - Use professional terminology, cite guidelines implicitly/explicitly, maintain clinical reasoning flow.\n   - Ensure safety warnings (e.g., magnesium toxicity signs, when to escalate to delivery).\n\n   Draft structure:\n   **【初步诊断】** 重度子痫前期（伴先兆子痫症状）\n   **【鉴别诊断与推理链】** (Step-by-step logic)\n   **【关键辅助检查】** (Labs, imaging, fetal monitoring)\n   **【处理建议】** (Stabilization, meds, delivery planning, postpartum)\n   **【重要提醒】** (Red flags, guideline references)\n\n8.  **Self-Correction/Refinement during drafting:**\n   - *BP threshold:* 155/100 meets ≥140/90, so qualifies. Severe feature is the symptom (headache/blurred vision), not necessarily BP ≥160/110. Correct.\n   - *Steroids:* At 34w0d, guidelines recommend antenatal corticosteroids for fetal lung maturity if delivery expected within 7 days. Yes.\n   - *Magnesium:* Essential for seizure prophylaxis in severe preeclampsia. Must emphasize monitoring.\n   - *Delivery timing:* 34 weeks with severe features → deliver after 24-48h stabilization if possible, but don't delay if worsening. Clarify.\n   - *Differential:* Make sure to explicitly rule out chronic HTN, renal disease, HELLP, eclampsia, PRES.\n   - *Tone:* Professional, authoritative, clinically precise, aligned with current Chinese/international guidelines.\n   - *Check accuracy:* \n     - Preeclampsia diagnostic criteria: correct.\n     - MgSO4 dosing: correct.\n     - Antihypertensive targets: correct (avoid hypotension).\n     - Fetal lung maturity steroids: ≤34+6 wks, correct.\n     - Postpartum MgSO4: 24h, correct.\n   - All aligns with 《妊娠期高血压疾病诊治指南（2020）》 and ACOG 2019/2023 updates.\n\n   Ready to generate response. I'll structure it clearly with medical reasoning, actionable steps, and safety considerations. Ensure language is precise and professional. Include reasoning chain explicitly as requested. Mention guideline basis. Highlight red flags. Provide comprehensive but concise management plan.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 91,
+          "completion_tokens": 3839,
+          "total_tokens": 3930,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2128,
+            "text_tokens": 3839
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 91
+          }
+        },
+        "created": 1779863526,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-cc54ac83-40d1-9ece-a122-b7efd0eddcd7"
+      },
+      "measured_latency_s": 31.2635,
+      "prompt_tokens": 91,
+      "completion_tokens": 3839,
+      "total_tokens": 3930,
+      "tokens_per_sec": 122.79,
+      "output_text": "您好。作为产科医师，我将基于您提供的病史与查体信息，结合现行《妊娠期高血压疾病诊治指南（2020）》及国际共识，为您梳理鉴别诊断逻辑与临床处理路径。\n\n---\n### 🩺 一、初步诊断\n**重度子痫前期（伴先兆子痫神经系统症状）**  \n**诊断依据：**\n1. 孕周＞20周（34周）新发高血压：BP 155/100 mmHg（≥140/90 mmHg）\n2. 蛋白尿：尿蛋白++（提示≥0.3g/24h或UPC≥0.3）\n3. 严重表现（Severe features）：头痛2天、视物模糊1天（中枢神经系统受累征象）\n4. 水肿++（虽非诊断必需，但符合全身血管内皮损伤的临床表现）\n\n---\n### 🔍 二、鉴别诊断与推理链\n| 鉴别疾病 | 支持点 | 不支持/排除点 | 推理逻辑 |\n|----------|--------|----------------|----------|\n| **妊娠期高血压** | 孕晚期新发高血压 | 无蛋白尿、无靶器官损害症状 | 本例蛋白尿++且伴头痛/视物模糊，已超出单纯妊娠期高血压范畴 |\n| **慢性高血压合并子痫前期** | 高血压+蛋白"
+    },
+    {
+      "timestamp": "2026-05-27T22:33:00.619784",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "您好，我是产科医生。根据您提供的病史与查体信息，该孕妇目前高度提示**重度子痫前期**。以下按临床思维路径为您梳理鉴别诊断、推理链及规范化处理建议。内容参考《妊娠高血压疾病诊治指南（2020）》及ACOG相关共识。\n\n---\n### 🔍 一、初步诊断\n**重度子痫前期（孕34周，初产妇）**  \n*注：单纯下肢水肿已不再作为子痫前期的诊断标准，但可作为临床观察指标；当前核心依据为孕晚期新发高血压+蛋白尿+中枢神经系统受累症状。*\n\n---\n### 🧠 二、临床推理链\n1. **时间窗与高危因素**：孕34周（≥20周后发病），初产妇，均为子痫前期明确高危因素。\n2. **血压达标**：BP 155/100 mmHg，舒张压≥100 mmHg，符合妊娠期高血压诊断阈值。\n3. **靶器官受累证据**：\n   - 尿蛋白++（提示肾小球内皮损伤/滤过屏障破坏）\n   - 头痛2天+视物模糊1天（典型中枢神经系统缺血/水肿表现，属“重度特征”）\n4. **严重程度判定**：虽收缩压未达≥160 mmHg，但**出现持续性头痛、视觉障碍即自动归类为重度子痫前期**，无需等待血压进一步升高或蛋白尿定量结果。\n5. **病理生理基础**：全身小动脉痉挛→血管内皮损伤→血浆外渗（水肿）、蛋白漏出（蛋白尿）、脑血管调节功能失代偿（头痛/视物模糊）。若不干预，短期内有进展为子痫、HELLP综合征、胎盘早剥、胎儿窘迫的风险。\n\n---\n### 🆚 三、鉴别诊断\n| 疾病 | 关键鉴别点 | 本例支持/不支持依据 |\n|------|------------|---------------------|\n| **妊娠期高血压** | 仅血压升高，无蛋白尿及靶器官损害症状 | ❌ 本例有蛋白尿++及神经视觉症状，不支持 |\n| **慢性高血压合并子痫前期** | 孕前或孕20周前已有高血压史，或产后12周仍持续高血压 | ⚠️ 需追问既往血压史、用药史；若存在则诊断修正 |\n| **慢性肾脏病** | 长期蛋白尿/血尿史，肾功能异常，尿沉渣可见管型/红细胞 | ⚠️ 需查肌酐、eGFR、尿常规镜检；若基线肾功能正常则不支持 |\n| **HELLP综合征** | 溶血（LDH↑、胆红素↑、外周血涂片见裂红细胞）、肝酶显著升高、血小板↓ | ⚠️ 需急查血常规、肝肾功能、凝血；本例尚未排除，属同谱系重症变异 |\n| **其他致头痛/视物模糊病因** | 偏头痛、青光眼、视网膜脱离、高血压脑病/PRES、颅内占位 | ⚠️ 子痫前期所致者多在降压/解痉后缓解；若症状不随治疗改善，需眼科/神经内科会诊及头颅MRI排查 |\n\n---\n### 🏥 四、处理建议（按临床优先级）\n#### 1️⃣ 立即评估与监测\n- **母体**：生命体征每15-30分钟监测1次（稳定后改4小时/次）；记录24h尿量；眼底检查（动静脉变细、渗出、出血或视乳头水肿）；完善急诊实验室检查：血常规、肝肾功能、尿酸、凝血功能、LDH、D-二聚体、尿蛋白/肌酐比值（或24h尿蛋白）。\n- **胎儿**：立即行NST（无应激试验）+ B超评估AFI、生物物理评分、脐动脉S/D值；后续每24h复查。\n\n#### 2️⃣ 控制血压（目标：SBP 140~150 mmHg，DBP 90~100 mmHg）\n- **首选静脉用药**：拉贝洛尔 20mg iv 推注，无效可10-20min后重复，最大160-220mg；或肼屈嗪 5-10mg iv q20-30min。\n- **口服替代**：硝苯地平缓释片 30mg po q8h（避免短效制剂快速降压导致胎盘灌注骤降）。\n- ⚠️ 避免血压下降过快（24h内降幅≤25%），防止子宫胎盘血流锐减。\n\n#### 3️⃣ 硫酸镁解痉防痫（核心措施）\n- **负荷剂量**：25%硫酸镁 16g + 5%GS 500ml ivgtt（20-30min滴完）或 4-6g iv 缓慢推注（>10min）\n- **维持剂量**：1-2g/h 持续静滴，至产后24h或最后一次抽搐后24h\n- **毒性监测**：膝腱反射必须存在；呼吸≥16次/分；尿量≥25ml/h；备钙剂（10%葡萄糖酸钙10ml iv）作为解毒剂。\n\n#### 4️⃣ 终止妊娠时机与方式\n- **孕34周已达明确终止指征**（重度子痫前期≥34周建议尽快终止）。\n- **促胎肺成熟**：可单次肌注地塞米松 6mg q12h × 4次，但**不应为等待激素起效而延迟分娩**。\n- **分娩方式**：以阴道试产为主，宫颈条件成熟者予前列腺素制剂引产；若胎儿窘迫、病情恶化或引产失败，及时剖宫产。术中术后继续硫酸镁及降压治疗。\n\n#### 5️⃣ 产后管理\n- 继续硫酸镁24h（产后24-48h仍是子痫高发期）\n- 血压监测至产后至少72h；部分患者产后血压反而升高，需调整降压方案\n- 评估血栓风险（子痫前期为高凝状态），必要时低分子肝素预防\n- 出院后随访血压、尿蛋白至产后12周；指导避孕及下次妊娠预防策略（如孕12-16周起小剂量阿司匹林）\n\n---\n### 📌 五、临床提醒\n1. 本例已具备**重度子痫前期**全部核心要素，属于产科急症，需收入高危病房或ICU级别监护。\n2. 头痛与视物模糊是**即将发生子痫的预警信号**，切勿因“血压未破160”而观望。\n3. 所有处理需在具备新生儿抢救能力的三级医院完成，多学科协作（产科、麻醉科、新生儿科、重症医学科）。\n4. 向家属充分告知病情进展风险、硫酸镁副作用（潮红、乏力、呼吸抑制等）及提前分娩的必要性，签署知情同意。\n\n如需我协助制定具体用药剂量表、胎儿监护判读要点或产后随访路径，可提供更详细资料（如既往产检记录、基础疾病史、近期化验单）。祝母婴平安。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Patient:** Li, 28 years old, primipara (first pregnancy), 34 weeks gestation.\n   - **Chief Complaint:** Headache for 2 days, blurred vision for 1 day.\n   - **Physical Examination:** BP 155/100 mmHg, bilateral lower extremity edema (++), urine protein ++.\n   - **Request:** Differential diagnosis and reasoning chain, plus management recommendations.\n   - **Role:** Senior Obstetrician (智医生).\n\n2.  **Identify Key Clinical Features:**\n   - Gestational age: 34 weeks (third trimester)\n   - Primipara\n   - Symptoms: Headache, blurred vision (neurological/visual symptoms suggesting severe features)\n   - Signs: Hypertension (BP ≥140/90, here 155/100), edema (++), proteinuria (++)\n   - These findings strongly point to **Preeclampsia with severe features** (重度子痫前期).\n\n3.  **Formulate Differential Diagnosis (鉴别诊断):**\n   Need to consider conditions that can mimic or coexist with preeclampsia, especially in the third trimester with hypertension, proteinuria, and neurological symptoms.\n   - *Gestational Hypertension* (妊娠期高血压): BP elevated after 20 weeks, but no proteinuria or severe features. Ruled out due to proteinuria and symptoms.\n   - *Chronic Hypertension* (慢性高血压): Pre-existing HTN before pregnancy or before 20 weeks. Needs history check. If present, this would be chronic hypertension with superimposed preeclampsia.\n   - *Chronic Kidney Disease* (慢性肾脏病): Can cause HTN and proteinuria. Usually has long history, abnormal renal function, different urine sediment.\n   - *Essential Hypertension* (原发性高血压): Similar to chronic HTN, usually diagnosed before pregnancy or early pregnancy.\n   - *Eclampsia* (子痫): Preeclampsia + seizures. Not yet, but high risk.\n   - *HELLP Syndrome* (溶血、肝酶升高、血小板减少): A severe variant of preeclampsia. Needs labs to rule out.\n   - *Thrombotic Microangiopathies (TMA)* like TTP/HUS: Rare, but can present similarly. Check platelets, LDH, schistocytes.\n   - *Other causes of headache/blurred vision*: Migraine, hypertensive encephalopathy, posterior reversible encephalopathy syndrome (PRES), retinal detachment, glaucoma. Given the context, preeclampsia-related is most likely, but must rule out other serious causes if symptoms persist/worsen.\n\n   Structure the differential diagnosis logically: Primary suspicion vs. alternatives, with key distinguishing points.\n\n4.  **Develop Reasoning Chain (推理链):**\n   - Step 1: Confirm diagnostic criteria for preeclampsia. BP ≥140/90 after 20w + proteinuria (≥0.3g/24h or dipstick ++) OR severe features without proteinuria.\n   - Step 2: Identify severe features. Here: BP ≥160/110? No (155/100). But neurological symptoms (headache, blurred vision) are classic severe features. Also, proteinuria ++ supports it.\n   - Step 3: Assess gestational age & parity. 34w, primipara → higher risk for preeclampsia.\n   - Step 4: Rule out mimics. Check history for chronic HTN, CKD. Order labs (CBC, LFTs, renal function, uric acid, coagulation) to assess severity and rule out HELLP/TMA.\n   - Step 5: Conclude diagnosis: 重度子痫前期 (Preeclampsia with severe features).\n   - Step 6: Plan management based on guidelines (ACOG, Chinese OB/GYN guidelines).\n\n5.  **Formulate Management Recommendations (处理建议):**\n   Based on current guidelines (Chinese Medical Association Obstetrics & Gynecology Branch, ACOG):\n   - *Immediate Assessment:* Vital signs, fetal monitoring (NST/BPP), lab workup (CBC, LFTs, Cr, UA, coagulation, uric acid, 24h urine protein if possible), ophthalmology/neurology consult if needed.\n   - *Blood Pressure Control:* Target SBP 140-150, DBP 90-100. Use IV labetalol or hydralazine, or oral nifedipine. Avoid rapid drops.\n   - *Seizure Prophylaxis:* Magnesium sulfate is mandatory for severe features. Loading dose 4-6g IV over 20 min, then maintenance 1-2g/hr. Monitor reflexes, respiratory rate, urine output.\n   - *Delivery Planning:* At ≥34 weeks with severe features, delivery is indicated. Corticosteroids for fetal lung maturity if <34w+6d, but at 34w, benefits may be weighed against risks. Actually, ACOG says deliver at ≥34w for severe features. Chinese guidelines also recommend delivery at ≥34w. So, plan for delivery soon (induction or C-section depending on obstetric factors).\n   - *Fetal Monitoring:* Continuous CTG, ultrasound for growth/amniotic fluid/Doppler.\n   - *Postpartum Care:* Continue MgSO4 for 24h postpartum, monitor BP, watch for delayed eclampsia, thrombosis prophylaxis if indicated.\n   - *Patient Education:* Warn about red flags (worsening headache, visual changes, epigastric pain, decreased fetal movement).\n\n6.  **Structure the Response (as 智医生):**\n   - Acknowledge role & tone (professional, authoritative, empathetic)\n   - Provide clear sections: 诊断分析/推理链, 鉴别诊断, 处理建议, 注意事项\n   - Use precise medical terminology aligned with Chinese guidelines (《妊娠高血压疾病诊治指南（2020）》)\n   - Ensure logical flow: Clinical picture → Diagnostic criteria → Severe features identification → Differential → Lab/imaging needs → Management steps (stabilize, prevent complications, timing of delivery, postpartum)\n   - Add evidence-based rationale where appropriate.\n\n   Draft structure:\n   **【初步诊断】** 重度子痫前期（孕34周，初产妇）\n   **【推理链】** \n   1. 孕周>20周出现高血压...\n   2. 伴随蛋白尿及靶器官损害症状...\n   3. 符合重度标准...\n   4. 需完善检查排除合并症...\n   **【鉴别诊断】** (list with key differentiating points)\n   **【处理建议】** (step-by-step: 评估→降压→解痉防痫→胎儿监护→终止妊娠时机→产后管理)\n   **【重要提醒】** (guidelines reference, urgency, multidisciplinary approach)\n\n7.  **Self-Correction/Refinement during drafting:**\n   - *Check BP threshold for severe:* Chinese guidelines say BP ≥160/110 is severe, but neurological symptoms (headache, visual disturbances) alone qualify as severe features regardless of exact BP. I must clarify this.\n   - *Magnesium sulfate indication:* Absolutely indicated for severe preeclampsia, not just eclampsia.\n   - *Delivery timing:* At 34 weeks with severe features, delivery is recommended. Steroids are generally given up to 34+6, but at exactly 34w, some guidelines say benefit is marginal; however, many still give betamethasone if delivery isn't immediate. I'll state: 孕34周已达终止妊娠指征，可酌情给予促胎肺成熟药物（如地塞米松），但不应为等待激素起效而延迟分娩。\n   - *Labs needed:* CBC, LFTs, renal function, uric acid, coagulation profile, 24h urine protein or protein/creatinine ratio, fundus exam, fetal assessment.\n   - *Differential:* Make sure to distinguish from chronic hypertension with superimposed preeclampsia, gestational hypertension, CKD, HELLP, etc.\n   - *Tone:* Professional, structured, guideline-based, emphasizes urgency but calm management.\n   - *Add disclaimer:* Standard medical advice disclaimer, though as an AI doctor, I'll frame it as clinical reasoning per guidelines.\n\n   All points align with current Chinese OB/GYN guidelines (2020) and ACOG Practice Bulletin No. 222 (2020).\n\n8.  **Final Output Generation:** (Mental translation & structuring into Chinese)\n   - Start with diagnosis\n   - Detailed reasoning chain\n   - Differential diagnosis table/list\n   - Stepwise management\n   - Key precautions\n   - Reference guidelines\n   - Ensure accuracy, completeness, and clinical relevance.✅\n   Proceed. \n   Output matches the refined response. \n   *Self-Correction/Verification during thought:*\n   - BP 155/100: DBP ≥100 is already a severe feature in some contexts, but Chinese guidelines specifically list neuro symptoms as severe. I'll note both.\n   - Edema ++: No longer a diagnostic criterion for preeclampsia (removed in 2013/2020 guidelines), but still clinically noted. I'll mention this nuance.\n   - Delivery at 34w: Clear indication. MgSO4 for 24h postpartum.\n   - All consistent. Ready. \n   Output generation. \n   *(Proceeds to generate response)*",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 91,
+          "completion_tokens": 3766,
+          "total_tokens": 3857,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2144,
+            "text_tokens": 3766
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 91
+          }
+        },
+        "created": 1779863557,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-48a91e8f-7e4a-9731-9c48-06ebb4ec47ac"
+      },
+      "measured_latency_s": 30.7306,
+      "prompt_tokens": 91,
+      "completion_tokens": 3766,
+      "total_tokens": 3857,
+      "tokens_per_sec": 122.55,
+      "output_text": "您好，我是产科医生。根据您提供的病史与查体信息，该孕妇目前高度提示**重度子痫前期**。以下按临床思维路径为您梳理鉴别诊断、推理链及规范化处理建议。内容参考《妊娠高血压疾病诊治指南（2020）》及ACOG相关共识。\n\n---\n### 🔍 一、初步诊断\n**重度子痫前期（孕34周，初产妇）**  \n*注：单纯下肢水肿已不再作为子痫前期的诊断标准，但可作为临床观察指标；当前核心依据为孕晚期新发高血压+蛋白尿+中枢神经系统受累症状。*\n\n---\n### 🧠 二、临床推理链\n1. **时间窗与高危因素**：孕34周（≥20周后发病），初产妇，均为子痫前期明确高危因素。\n2. **血压达标**：BP 155/100 mmHg，舒张压≥100 mmHg，符合妊娠期高血压诊断阈值。\n3. **靶器官受累证据**：\n   - 尿蛋白++（提示肾小球内皮损伤/滤过屏障破坏）\n   - 头痛2天+视物模糊1天（典型中枢神经系统缺血/水肿表现，属“重度特征”）\n4. **严重程度判定**：虽收缩压未达≥160 mmHg，但**出现持续性头痛、视觉障碍即自动归类为重度子痫前期**，无需等待血压进一步升高或蛋白"
+    },
+    {
+      "timestamp": "2026-05-27T22:33:25.875376",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "知识检索问答",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指妊娠期间首次发生或识别的糖代谢异常。早期规范诊断与科学管理可显著降低巨大儿、早产、子痫前期、新生儿低血糖等母婴并发症风险。以下内容依据《中华医学会妊娠合并糖尿病诊治指南（2023版）》、WHO及ADA最新共识整理，供参考：\n\n---\n### 🔍 一、诊断标准\n**1. 筛查时机**\n- 所有孕妇常规在**孕24～28周**进行75g口服葡萄糖耐量试验（OGTT）。\n- 具有高危因素者（如既往GDM史、肥胖、多囊卵巢综合征、一级亲属糖尿病史等）可在**首次产检**时筛查空腹血糖或HbA1c，必要时提前行OGTT。\n\n**2. 诊断阈值（静脉血浆葡萄糖，单位：mmol/L）**\n| 检测时间点 | 诊断切点 |\n|------------|----------|\n| 空腹       | ≥ 5.1    |\n| 服糖后1小时| ≥ 10.0   |\n| 服糖后2小时| ≥ 8.5    |\n✅ **满足任意一项即可诊断为GDM**。\n\n📌 注：若孕早期空腹血糖≥7.0 mmol/L或随机血糖≥11.1 mmol/L伴典型“三多一少”症状，应直接诊断为**孕前糖尿病**，不属于GDM范畴。\n\n---\n### 🥗 二、饮食管理（医学营养治疗，MNT）\n饮食控制是GDM治疗的基石，目标是在**维持母体营养与胎儿发育需求的前提下，使血糖达标**。\n\n**1. 能量摄入**\n- 根据孕前BMI制定：\n  - 偏瘦（BMI<18.5）：孕中晚期每日额外增加约450 kcal\n  - 正常（18.5≤BMI<24）：+300 kcal\n  - 超重/肥胖（BMI≥24）：+200～250 kcal\n- ⚠️ 严禁极端节食，以免产生酮体影响胎儿神经发育。\n\n**2. 宏量营养素分配**\n| 营养素 | 比例/摄入量 | 关键建议 |\n|--------|-------------|----------|\n| 碳水化合物 | 40%～50% | 优选低GI食物（糙米、燕麦、杂豆、薯类）；避免白粥、甜点、含糖饮料；每餐定量，分散至3主餐+2～3次加餐 |\n| 蛋白质 | 1.1～1.3 g/kg/d | 优先鱼、禽、蛋、瘦肉、低脂奶制品及豆制品 |\n| 脂肪 | 25%～30% | 限制动物脂肪与反式脂肪；增加单/多不饱和脂肪（橄榄油、坚果、深海鱼） |\n| 膳食纤维 | ≥25 g/d | 每日蔬菜500g以上（深色占半），低糖水果200g左右（两餐间食用，如苹果、柚子、草莓） |\n\n**3. 血糖控制目标**\n- 空腹及餐前：**≤ 5.3 mmol/L**\n- 餐后1小时：**≤ 7.8 mmol/L**\n- 餐后2小时：**≤ 6.7 mmol/L**\n- 夜间血糖不低于3.3 mmol/L，避免低血糖。\n\n**4. 实操建议**\n- 使用食物交换份法或记录饮食日记，配合血糖仪自我监测（初期建议每日测4～7次）。\n- 强烈建议在**注册营养师**指导下制定个体化食谱，避免经验性“饿肚子”或盲目忌口。\n\n---\n### 🚶‍♀️ 三、运动建议\n规律运动可提高胰岛素敏感性，帮助控制餐后血糖峰值，且对母婴安全有益。\n\n**1. 适用条件**\n- 无产科禁忌证（见下文）的GDM孕妇均可参与。\n\n**2. 运动处方**\n- **频率**：每周≥5天，累计≥150分钟\n- **强度**：中等强度（运动时微喘但能完整说话，心率约为`（220-年龄）×50%～70%`）\n- **类型**：以有氧运动为主，可结合轻度抗阻训练\n  - ✅ 推荐：快走、孕妇瑜伽、游泳、固定自行车、弹力带训练\n  - ❌ 避免：仰卧位运动（孕中晚期）、剧烈跑跳、潜水、滑雪、对抗性/易跌倒项目\n\n**3. 最佳时机与注意事项**\n- 餐后**30～60分钟**开始运动20～30分钟，降糖效果最显著。\n- 运动前后各测一次血糖；随身携带糖果或饼干防低血糖。\n- 使用胰岛素或促泌剂者需调整用药与进食时间，遵医嘱执行。\n- 出现以下情况立即停止并就医：规律宫缩、阴道流血/流液、头晕胸闷、心悸气促、胎动明显减少。\n\n**4. 运动禁忌证**\n- 前置胎盘、宫颈机能不全、先兆早产/流产\n- 重度贫血、严重心肺疾病、未控制的高血压/甲亢\n- 多胎妊娠（≥3胎）、羊水过多/过少伴并发症\n- 活动性阴道出血、视网膜病变进展期等\n\n---\n### 📌 四、重要补充提示\n1. **药物干预指征**：经1～2周严格饮食+运动管理，血糖仍不达标者，应及时启动药物治疗。**胰岛素为孕期首选**（不通过胎盘，安全性明确）；二甲双胍/格列本脲部分国家/地区可用，但国内指南仍以胰岛素为主。\n2. **分娩与产后**：多数GDM患者可期待自然分娩；产后6～12周必须复查75g OGTT评估糖代谢恢复情况。GDM女性未来患2型糖尿病风险增加5～10倍，建议每年筛查空腹血糖或HbA1c，并保持健康生活方式。\n3. **多学科管理**：建议由产科、内分泌科、营养科联合随访，动态调整方案。\n\n> 💡 温馨提示：以上内容基于现行临床指南整理，旨在提供科普参考。孕期生理状态个体差异大，所有饮食、运动及用药方案均需在您的主治医生指导下个性化实施。如有血糖波动、胎动异常或不适，请及时就诊。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Gestational Diabetes Mellitus (GDM) / 妊娠期糖尿病\n   - **Required Content:** \n     - Diagnostic criteria (诊断标准)\n     - Dietary management (饮食管理)\n     - Exercise recommendations (运动建议)\n   - **Role/Context:** Pregnancy health knowledge assistant, based on medical knowledge.\n   - **Language:** Chinese\n\n2.  **Identify Key Medical Guidelines/References:**\n   - I need to rely on authoritative guidelines for GDM diagnosis and management. Key references include:\n     - WHO (World Health Organization)\n     - ADA (American Diabetes Association)\n     - ACOG (American College of Obstetricians and Gynecologists)\n     - Chinese Medical Association Obstetrics and Gynecology Branch / Endocrinology Branch (中华医学会妇产科学分会/内分泌学分会) - specifically the \"妊娠合并糖尿病诊治指南(2023)\" or similar recent Chinese guidelines.\n   - *Note:* China typically uses the 75g OGTT at 24-28 weeks with specific cutoff values (IADPSG/WHO criteria). Some older guidelines used stepwise screening, but current standard is one-step.\n   - Diagnosis: Fasting ≥5.1 mmol/L, 1h ≥10.0 mmol/L, 2h ≥8.5 mmol/L. Any one value met = GDM.\n   - Diet: Medical Nutrition Therapy (MNT), calorie control, balanced macros, frequent small meals, carb quality/quantity monitoring.\n   - Exercise: Moderate intensity, 150 mins/week, postprandial exercise preferred, contraindications to consider.\n\n3.  **Structure the Response:**\n   - Introduction: Brief definition/context of GDM\n   - Part 1: 诊断标准 (Diagnostic Criteria)\n   - Part 2: 饮食管理 (Dietary Management)\n   - Part 3: 运动建议 (Exercise Recommendations)\n   - Important Notes/Precautions (Monitoring, when to seek medication, etc.)\n   - Disclaimer: Standard medical disclaimer (consult healthcare provider, individualized care)\n   - Ensure tone is professional, evidence-based, clear, and tailored for pregnant women/caregivers.\n\n4.  **Draft - Section by Section (Mental Refinement in Chinese):**\n\n   *(Introduction)*\n   妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指在妊娠期间首次发生或发现的糖代谢异常。早期规范诊断与管理对母婴结局至关重要。以下依据国内外权威指南（如中华医学会《妊娠合并糖尿病诊治指南》、WHO及ADA推荐）进行详细说明：\n\n   *(Part 1: 诊断标准)*\n   - 筛查时间：孕24～28周常规进行75g口服葡萄糖耐量试验（OGTT）。高危孕妇可于首次产检时筛查。\n   - 诊断标准（静脉血浆葡萄糖值，单位mmol/L）：\n     • 空腹血糖 ≥ 5.1\n     • 服糖后1小时血糖 ≥ 10.0\n     • 服糖后2小时血糖 ≥ 8.5\n     满足上述任意一点即可诊断为GDM。\n   - 补充说明：若孕早期空腹血糖≥7.0 mmol/L或随机血糖≥11.1 mmol/L伴典型症状，可直接诊断为孕前糖尿病而非GDM。\n\n   *(Part 2: 饮食管理)*\n   - 核心原则：医学营养治疗（MNT）是GDM的基石，目标是维持血糖达标同时保证母胎营养需求。\n   - 具体建议：\n     1. 能量控制：根据孕前BMI制定。一般建议孕中晚期每日增加约300 kcal（偏瘦者+450，超重/肥胖者+200~250），避免过度节食导致酮症。\n     2. 碳水化合物：占总热量40%~50%，优选低GI食物（全谷物、杂豆、蔬菜），避免精制糖和含糖饮料。每餐分配均匀，采用“少量多餐”（3主餐+2~3加餐）。\n     3. 蛋白质：1.1~1.3 g/kg/d，优先鱼禽蛋瘦肉及豆制品。\n     4. 脂肪：25%~30%，限制饱和脂肪与反式脂肪，增加不饱和脂肪酸（如坚果、深海鱼）。\n     5. 膳食纤维：≥25 g/d，多吃绿叶蔬菜、低糖水果（两餐之间食用，控制分量）。\n     6. 监测与调整：记录饮食与血糖（空腹≤5.3，餐后1h≤7.8，餐后2h≤6.7 mmol/L），由营养师个体化调整。\n\n   *(Part 3: 运动建议)*\n   - 适用人群：无产科禁忌证的GDM孕妇。\n   - 强度与频率：中等强度有氧运动为主，每周≥150分钟，分3~5次完成。运动时心率控制在（220-年龄）×50%~70%，或“微喘但能正常交谈”。\n   - 推荐项目：快走、孕妇瑜伽、游泳、固定自行车、上肢抗阻训练等。\n   - 最佳时机：餐后30~60分钟开始，每次20~30分钟，有助于降低餐后血糖峰值。\n   - 注意事项：\n     • 避免仰卧位运动（孕中晚期）、剧烈跳跃、接触性运动及易跌倒项目。\n     • 出现宫缩、阴道流血/流液、头晕、胸痛、气促等立即停止并就医。\n     • 使用胰岛素或磺脲类药物者需防低血糖，运动前后监测血糖，随身携带糖果。\n     • 有前置胎盘、宫颈机能不全、重度贫血、严重心肺疾病等属禁忌证。\n\n   *(Additional/Important Notes)*\n   - 血糖未达标时（经1~2周饮食运动干预仍不达标），需及时启动胰岛素治疗（目前首选，不通过胎盘）。\n   - 产后随访：GDM患者产后6~12周应复查75g OGTT，评估糖代谢恢复情况；未来患2型糖尿病风险显著升高，建议每年筛查。\n   - 强调：所有方案需在产科医生、内分泌科医生及注册营养师指导下个体化实施。\n\n   *(Disclaimer)*\n   注：以上内容基于现行临床指南整理，不能替代专业医疗建议。孕期状况个体差异大，请务必遵医嘱执行。\n\n5.  **Self-Correction & Verification (Mental Check):**\n   - *Diagnostic criteria:* Matches Chinese 2023 guideline & IADPSG/WHO. Values correct. Emphasizes any one point meets diagnosis. Correct.\n   - *Diet:* Calorie adjustment aligns with Chinese nutrition guidelines for pregnancy. Carb % 40-50%, protein 1.1-1.3g/kg, fat 25-30%. Targets: fasting ≤5.3, 1h ≤7.8, 2h ≤6.7 (standard Chinese targets). Small frequent meals, low GI, fiber. All accurate.\n   - *Exercise:* 150 min/week moderate intensity, postprandial timing, heart rate formula, contraindications listed. Matches ACOG/Chinese guidelines. Correct.\n   - *Medication note:* Insulin is first-line if diet/exercise fails. Metformin/glyburide sometimes used but insulin preferred per Chinese guidelines. Mentioned appropriately.\n   - *Postpartum follow-up:* 6-12 weeks OGTT, long-term T2DM risk. Correct.\n   - *Tone/Structure:* Professional, clear, well-organized, evidence-based, includes necessary caveats.\n   - *Potential improvements:* Clarify that diagnostic thresholds may vary slightly by region/guideline, but state clearly which standard is used (China/IADPSG). Add brief note on self-monitoring frequency. Ensure units are consistent (mmol/L). Avoid overcomplication.\n\n   All checks pass. Ready to generate response. \n   Structure in output will match the refined draft. I'll ensure precise medical terminology, cite guideline basis implicitly/explicitly, and maintain a supportive yet professional tone appropriate for a health assistant.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 41,
+          "completion_tokens": 3230,
+          "total_tokens": 3271,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1805,
+            "text_tokens": 3230
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 41
+          }
+        },
+        "created": 1779863582,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-645b2978-b5b1-9ac4-9524-e4e5429d9871"
+      },
+      "measured_latency_s": 25.2553,
+      "prompt_tokens": 41,
+      "completion_tokens": 3230,
+      "total_tokens": 3271,
+      "tokens_per_sec": 127.89,
+      "output_text": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指妊娠期间首次发生或识别的糖代谢异常。早期规范诊断与科学管理可显著降低巨大儿、早产、子痫前期、新生儿低血糖等母婴并发症风险。以下内容依据《中华医学会妊娠合并糖尿病诊治指南（2023版）》、WHO及ADA最新共识整理，供参考：\n\n---\n### 🔍 一、诊断标准\n**1. 筛查时机**\n- 所有孕妇常规在**孕24～28周**进行75g口服葡萄糖耐量试验（OGTT）。\n- 具有高危因素者（如既往GDM史、肥胖、多囊卵巢综合征、一级亲属糖尿病史等）可在**首次产检**时筛查空腹血糖或HbA1c，必要时提前行OGTT。\n\n**2. 诊断阈值（静脉血浆葡萄糖，单位：mmol/L）**\n| 检测时间点 | 诊断切点 |\n|------------|----------|\n| 空腹       | ≥ 5.1    |\n| 服糖后1小时| ≥ 10.0   |\n| 服糖后2小时| ≥ 8.5    |\n✅ **满足任意一项即可诊断为GDM**。\n\n📌 注：若孕早期空腹血糖≥7.0 mmol/L或随机血糖≥11.1"
+    },
+    {
+      "timestamp": "2026-05-27T22:33:46.912047",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "知识检索问答",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "作为孕期健康知识助手，以下内容为基于国内外权威指南（如中华医学会妇产科学分会《妊娠合并糖尿病诊治指南（2023）》、ADA、ACOG等）的医学总结，供参考。**实际管理需在产科医生、内分泌科医生及注册营养师指导下个体化实施。**\n\n---\n### 一、妊娠期糖尿病（GDM）的诊断标准\n目前临床普遍采用 **IADPSG/WHO推荐的标准**，于孕 **24～28周** 进行常规筛查：\n\n| 检测项目 | 诊断阈值（mmol/L） |\n|----------|------------------|\n| 空腹血糖 | ≥ 5.1 |\n| 服糖后1小时 | ≥ 10.0 |\n| 服糖后2小时 | ≥ 8.5 |\n\n🔹 **诊断规则**：75g口服葡萄糖耐量试验（OGTT）中，**任意一项达到或超过上述阈值即可确诊GDM**。  \n🔹 **注意事项**：\n- OGTT前需禁食8～14小时，试验期间静坐、不吸烟、不剧烈活动。\n- 若孕早期（<24周）发现空腹血糖 ≥7.0 mmol/L 或随机血糖 ≥11.1 mmol/L，应直接诊断为**孕前糖尿病合并妊娠**，而非GDM。\n- 孕早期空腹血糖在5.1～6.9 mmol/L者，建议动态监测或按高危GDM管理。\n\n---\n### 二、饮食管理（医学营养治疗，MNT）\n饮食控制是GDM治疗的基石，目标是维持母体血糖平稳、保障胎儿正常生长发育，**切忌盲目节食或极端低碳水**。\n\n#### 1. 能量分配\n- 根据孕前BMI制定每日总热量：\n  - 正常体重（18.5≤BMI<24）：约 30～35 kcal/kg/d\n  - 超重/肥胖（BMI≥24）：适当减少 20%～30%，但每日不低于 1800 kcal，避免酮症影响胎儿神经发育。\n- 孕期增重建议（IOM标准）：正常BMI增重11.5～16 kg；超重7～11.5 kg；肥胖5～9 kg。\n\n#### 2. 宏量营养素比例\n| 营养素 | 占比/摄入量 | 建议来源 |\n|--------|-------------|----------|\n| 碳水化合物 | 40%～50% | 全谷物、杂豆、薯类、蔬菜；严格限制添加糖、含糖饮料、精白米面 |\n| 蛋白质 | 1.5～2.0 g/kg/d | 鱼、禽、蛋、瘦肉、低脂奶制品、豆制品 |\n| 脂肪 | 20%～30% | 橄榄油、坚果、深海鱼；限制动物脂肪、油炸食品、反式脂肪 |\n\n#### 3. 进餐模式\n- **少食多餐**：每日3顿正餐 + 2～3次加餐（如上午10点、下午3点、睡前），避免单次碳水负荷过大。\n- **主食搭配**：每餐主食量相对固定，优先选择低升糖指数（GI）食物，粗细搭配。\n- **膳食纤维**：每日25～30 g，有助于延缓糖分吸收。\n- **监测反馈**：配合自我血糖监测（空腹+三餐后2小时），由营养师动态调整食谱。\n\n---\n### 三、运动建议\n规律运动可显著提高胰岛素敏感性，帮助控制餐后血糖峰值。\n\n#### 1. 适用条件\n- 无产科或内科禁忌证（见下文）。\n- 经产科医生评估许可后方可开始。\n\n#### 2. 运动处方\n- **类型**：中等强度有氧运动为主，如快走、游泳、孕妇操、固定自行车、弹力带训练。\n- **频率与时长**：每周 ≥150 分钟，分3～5次完成，每次20～40分钟。\n- **最佳时机**：**餐后30～60分钟**开始，此时血糖上升期运动降糖效果最显著。\n- **强度判断**：\n  - 心率控制在 `(170－年龄)` 次/分以内（仅供参考）\n  - 更推荐“谈话测试”：运动时能正常交谈但不能唱歌\n  - RPE自觉用力程度评分：11～13分（稍累）\n\n#### 3. 安全注意事项\n- ✅ 穿防滑运动鞋，保持室内通风或户外阴凉处运动，及时补水。\n- ✅ 随身携带快速升糖食品（如葡萄糖片、果汁、饼干），预防低血糖。\n- ❌ 避免：仰卧位运动（孕中晚期易压迫下腔静脉）、剧烈跑跳、对抗性运动、潜水、高海拔运动、有跌倒风险的项目。\n- 🚨 立即停止并就医的信号：阴道流血、规律宫缩、头晕头痛、胸痛、呼吸困难、胎动明显减少或异常。\n\n#### 4. 运动禁忌证（需医生严格评估）\n前置胎盘、宫颈机能不全、早产/流产高风险、重度贫血、未控制的高血压/心脏病、严重甲状腺功能异常、多胎妊娠伴并发症等。\n\n---\n### 四、关键补充说明\n1. **血糖控制目标**（中华医学会推荐）：\n   - 空腹 ≤ 5.3 mmol/L\n   - 餐后1小时 ≤ 7.8 mmol/L\n   - 餐后2小时 ≤ 6.7 mmol/L\n2. **药物治疗指征**：若规范饮食+运动干预 **3～5天** 后，仍有 >20% 的血糖值超标，应在医生指导下启动胰岛素治疗（胰岛素不透过胎盘，为孕期首选降糖药）。口服降糖药（如二甲双胍、格列本脲）仅在特定情况下谨慎使用。\n3. **产后随访**：分娩后GDM通常自行缓解，但产后 **6～12周** 必须复查75g OGTT。此后建议每1～3年筛查一次血糖，因GDM女性未来患2型糖尿病风险显著升高。\n4. **心理支持**：GDM并非“吃错东西”导致，而是孕期胎盘激素引起的胰岛素抵抗所致。保持积极心态、家属支持同样重要。\n\n> ⚠️ **免责声明**：以上内容为通用医学知识科普，不能替代个体化临床诊疗。每位孕妇的孕周、基础疾病、胎儿状况不同，请务必在产科/内分泌科医生及专业营养师指导下制定管理方案。如有血糖波动、不适症状，请及时就医。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Gestational Diabetes Mellitus (GDM) / 妊娠期糖尿病\n   - **Required Content:** \n     - Diagnostic criteria (诊断标准)\n     - Dietary management (饮食管理)\n     - Exercise recommendations (运动建议)\n   - **Role/Context:** Pregnancy health knowledge assistant, based on medical knowledge.\n   - **Language:** Chinese\n\n2.  **Identify Key Medical Guidelines/Standards:**\n   - I need to rely on authoritative guidelines for GDM diagnosis and management. Common ones include:\n     - WHO (World Health Organization)\n     - ADA (American Diabetes Association)\n     - ACOG (American College of Obstetricians and Gynecologists)\n     - Chinese guidelines: 《妊娠合并糖尿病诊治指南（2023）》(Chinese Medical Association Obstetrics and Gynecology Branch) or similar recent versions.\n   - For diagnosis: The most widely accepted standard in China and internationally is the 75g OGTT at 24-28 weeks gestation. Thresholds (IADPSG/WHO criteria): Fasting ≥5.1 mmol/L, 1-hour ≥10.0 mmol/L, 2-hour ≥8.5 mmol/L. Any one value met/exceeded confirms GDM.\n   - For diet: Medical Nutrition Therapy (MNT), carbohydrate control, balanced macros, frequent small meals, glycemic index/load considerations.\n   - For exercise: Moderate-intensity aerobic exercise, 150 mins/week, timing (postprandial), precautions (contraindications, monitoring).\n\n3.  **Structure the Response:**\n   - Introduction: Brief definition/context of GDM\n   - Part 1: 诊断标准 (Diagnostic Criteria)\n   - Part 2: 饮食管理 (Dietary Management)\n   - Part 3: 运动建议 (Exercise Recommendations)\n   - Important Notes/Precautions (注意事项)\n   - Disclaimer: Standard medical disclaimer (consult healthcare provider, individualized care)\n\n4.  **Draft - Section by Section (Mental Refinement in Chinese):**\n\n   **(1) 诊断标准 (Diagnostic Criteria)**\n   - 时间：孕24～28周常规筛查\n   - 方法：75g口服葡萄糖耐量试验（OGTT）\n   - 阈值（符合任一即诊断）：\n     - 空腹血糖 ≥ 5.1 mmol/L\n     - 服糖后1小时血糖 ≥ 10.0 mmol/L\n     - 服糖后2小时血糖 ≥ 8.5 mmol/L\n   - 补充说明：若孕早期发现空腹血糖≥7.0 mmol/L或随机血糖≥11.1 mmol/L，可直接诊断为孕前糖尿病合并妊娠；若孕早期空腹5.1～6.9 mmol/L，需随访或按GDM管理。\n   - 依据：中国《妊娠合并糖尿病诊治指南（2023）》及国际IADPSG标准。\n\n   **(2) 饮食管理 (Dietary Management)**\n   - 原则：控制总热量、均衡营养、少食多餐、低GI/GL\n   - 具体建议：\n     - 能量需求：根据孕前BMI制定（正常体重约30 kcal/kg/d，超重/肥胖适当减少，避免过度节食影响胎儿发育）\n     - 碳水化合物：占总热量40%～50%，优选全谷物、杂豆、薯类，避免精制糖和含糖饮料\n     - 蛋白质：1.5～2.0 g/kg/d，保证优质蛋白（鱼、禽、蛋、瘦肉、豆制品）\n     - 脂肪：20%～30%，限制饱和脂肪和反式脂肪，增加不饱和脂肪酸（如深海鱼、坚果）\n     - 进餐方式：每日3主餐+2～3次加餐，避免单次大量进食导致餐后血糖骤升\n     - 监测与调整：配合血糖监测（空腹及三餐后2h），由营养师个体化调整食谱\n   - 注意：孕期不可盲目低碳水或生酮饮食，需保证胎儿脑发育所需葡萄糖。\n\n   **(3) 运动建议 (Exercise Recommendations)**\n   - 适用人群：无产科/内科禁忌证的GDM孕妇\n   - 强度与频率：中等强度有氧运动，每周≥150分钟，分3～5次进行（如快走、游泳、孕妇瑜伽、固定自行车）\n   - 时机：餐后30～60分钟开始，每次20～40分钟，有助于降低餐后血糖峰值\n   - 安全要点：\n     - 运动时心率控制在（170-年龄）次/分以内，或采用“谈话测试”（运动时可正常交谈但不能唱歌）\n     - 避免仰卧位运动（孕中晚期）、剧烈跳跃、对抗性运动及有跌倒风险的项目\n     - 随身携带糖果/饼干防低血糖，穿舒适鞋袜，保持水分\n     - 出现阴道流血、规律宫缩、头晕、胸痛、胎动异常等立即停止并就医\n   - 禁忌证：前置胎盘、宫颈机能不全、早产风险、严重贫血、心肺疾病等（需医生评估）\n\n   **(4) 综合管理与注意事项**\n   - 血糖目标：空腹 ≤5.3 mmol/L，餐后1h ≤7.8 mmol/L，餐后2h ≤6.7 mmol/L\n   - 药物治疗：若饮食+运动控制不达标（连续数日超标），需在医生指导下使用胰岛素（首选，不透过胎盘）\n   - 产后随访：产后6～12周复查75g OGTT，长期关注2型糖尿病风险\n   - 强调：所有方案需个体化，必须在产科医生/内分泌科医生及注册营养师指导下执行。\n\n5.  **Self-Correction & Verification (Mental Check):**\n   - *Diagnostic criteria:* Matches current Chinese guidelines (2023) and IADPSG. Correct thresholds. Mentioned early pregnancy screening caveat. Good.\n   - *Diet:* Energy calculation based on BMI is standard. Carb/protein/fat ratios align with MNT for GDM. Emphasized avoiding keto/extreme low-carb. Added meal frequency. All evidence-based.\n   - *Exercise:* 150 min/week moderate intensity matches ACOG/ADA. Postprandial timing is key for glucose control. Safety precautions and contraindications included. Heart rate formula is acceptable but I'll note it's approximate; \"talk test\" is safer. Added red flags.\n   - *Targets:* Fasting ≤5.3, 1h ≤7.8, 2h ≤6.7 are standard Chinese/ACOG targets. Insulin as first-line pharmacotherapy is correct. Postpartum follow-up emphasized.\n   - *Tone/Disclaimer:* Professional, clear, structured, includes necessary medical disclaimer. Aligns with role.\n   - *Potential improvements:* Clarify that OGTT should be done after overnight fast (8-14h). Mention that dietary/exercise plans must be individualized. Add reference to guidelines for credibility. Ensure units are consistent (mmol/L). Avoid absolute statements; use “通常”“建议”等。\n\n   All points are medically sound and up-to-date as of 2023/2024 guidelines. No major corrections needed.\n\n6.  **Final Output Generation:** (Translate mental draft into polished Chinese response, ensuring structure, accuracy, and professional tone.) \n   - Structure: \n     - 引言\n     - 一、诊断标准\n     - 二、饮食管理\n     - 三、运动建议\n     - 四、关键注意事项\n     - 免责声明\n   - Use precise medical terminology, cite guidelines implicitly/explicitly, maintain clarity for pregnant women/caregivers while keeping clinical accuracy.\n   - Check numbers, units, ranges against standards.\n   - Ready.✅",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 41,
+          "completion_tokens": 3176,
+          "total_tokens": 3217,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1728,
+            "text_tokens": 3176
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 41
+          }
+        },
+        "created": 1779863603,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-7631a433-d2ab-924d-a4af-58057c64f8aa"
+      },
+      "measured_latency_s": 21.0364,
+      "prompt_tokens": 41,
+      "completion_tokens": 3176,
+      "total_tokens": 3217,
+      "tokens_per_sec": 150.98,
+      "output_text": "作为孕期健康知识助手，以下内容为基于国内外权威指南（如中华医学会妇产科学分会《妊娠合并糖尿病诊治指南（2023）》、ADA、ACOG等）的医学总结，供参考。**实际管理需在产科医生、内分泌科医生及注册营养师指导下个体化实施。**\n\n---\n### 一、妊娠期糖尿病（GDM）的诊断标准\n目前临床普遍采用 **IADPSG/WHO推荐的标准**，于孕 **24～28周** 进行常规筛查：\n\n| 检测项目 | 诊断阈值（mmol/L） |\n|----------|------------------|\n| 空腹血糖 | ≥ 5.1 |\n| 服糖后1小时 | ≥ 10.0 |\n| 服糖后2小时 | ≥ 8.5 |\n\n🔹 **诊断规则**：75g口服葡萄糖耐量试验（OGTT）中，**任意一项达到或超过上述阈值即可确诊GDM**。  \n🔹 **注意事项**：\n- OGTT前需禁食8～14小时，试验期间静坐、不吸烟、不剧烈活动。\n- 若孕早期（<24周）发现空腹血糖 ≥7.0 mmol/L 或随机血糖 ≥11.1 mmol/L，应直接诊断为**孕前糖尿病合并妊娠**，而非GDM。\n- 孕早期空腹血糖"
+    },
+    {
+      "timestamp": "2026-05-27T22:34:11.683404",
+      "backend": "cloud",
+      "model": "qwen3.6-35b-a3b",
+      "test_case": "知识检索问答",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-a3b",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "message": {
+              "content": "作为孕期健康知识助手，以下内容为基于国内外权威指南（中华医学会《妊娠合并糖尿病诊治指南》、ACOG、ADA及IADPSG共识）的医学总结，供参考。**实际诊疗请务必在产科医生、内分泌科医生及注册营养师指导下个体化执行。**\n\n---\n### 一、妊娠期糖尿病（GDM）的诊断标准\n目前中国及国际主流指南均采用 **IADPSG/WHO 标准**，于孕 **24～28周** 常规行 **75g 口服葡萄糖耐量试验（OGTT）**。静脉血浆葡萄糖值任一达到或超过以下阈值即可诊断GDM：\n| 检测时间点 | 诊断切点（mmol/L） |\n|------------|------------------|\n| 空腹       | ≥ 5.1            |\n| 服糖后1小时 | ≥ 10.0           |\n| 服糖后2小时 | ≥ 8.5            |\n\n📌 **补充说明：**\n- 若孕早期（首次产检）空腹血糖 ≥ 7.0 mmol/L 或随机血糖 ≥ 11.1 mmol/L 伴典型症状，可直接诊断为 **孕前糖尿病**，而非GDM。\n- 存在高危因素（如既往GDM史、肥胖、多囊卵巢综合征、一级亲属糖尿病史等）者，建议在首次产检时即筛查空腹血糖或HbA1c，必要时提前行OGTT。\n- 诊断一旦成立，需按GDM路径管理，直至分娩。\n\n---\n### 二、饮食管理（医学营养治疗，MNT）\n饮食控制是GDM的一线干预手段，核心目标是：**维持母体血糖平稳、保障胎儿正常生长发育、避免酮症**。\n\n#### 1. 总热量控制\n根据孕前BMI制定（单位：kcal/kg·d）：\n- 偏瘦（BMI＜18.5）：35～40\n- 正常（18.5～23.9）：30～35\n- 超重（24.0～27.9）：25～30\n- 肥胖（≥28.0）：20～25  \n孕中、晚期分别在上述基础上增加约 300 kcal/d 和 450 kcal/d。\n\n#### 2. 宏量营养素分配\n| 营养素 | 推荐比例/摄入量 | 临床要点 |\n|--------|----------------|----------|\n| 碳水化合物 | 占总热量 40%～50% | 优选低GI食物（燕麦、糙米、杂豆、薯类）；严格限制添加糖、含糖饮料、精白面点；每日主食定量分配至三餐+加餐 |\n| 蛋白质 | 1.1～1.3 g/kg·d | 以优质蛋白为主（鱼禽蛋瘦肉、奶制品、大豆）；孕晚期可适当增加 |\n| 脂肪 | 占总热量 20%～30% | 以单/多不饱和脂肪酸为主（橄榄油、坚果、深海鱼）；限制动物脂肪、油炸食品及反式脂肪 |\n| 膳食纤维 | 25～30 g/d | 每日蔬菜≥500g（深色占半），适量低GI水果（两餐之间食用，每次≤150g，如苹果、梨、柚子、草莓） |\n\n#### 3. 进餐模式与监测\n- **少量多餐**：3次主餐 + 2～3次加餐（如上午10点、下午3点、睡前），避免长时间空腹导致酮体升高。\n- **血糖控制目标**（指尖血）：\n  - 空腹 ＜ 5.3 mmol/L\n  - 餐后1小时 ＜ 7.8 mmol/L\n  - 餐后2小时 ＜ 6.7 mmol/L\n- 记录饮食-血糖日记，每1～2周复诊调整方案。**严禁极端节食**，尿酮体持续阳性需警惕营养不良及胎儿神经发育风险。\n\n---\n### 三、运动建议\n规律运动可显著提高胰岛素敏感性，约70%～90%的GDM孕妇可通过“饮食+运动”达标。\n\n#### 1. 适用人群与禁忌\n- ✅ 适合：无产科并发症、血流动力学稳定的GDM孕妇。\n- ❌ 禁忌：前置胎盘、宫颈机能不全、早产风险、严重贫血、心脏病、重度子痫前期、多胎妊娠（≥3胎）等。运动前需经产科评估。\n\n#### 2. 运动处方\n| 项目 | 推荐内容 |\n|------|----------|\n| 类型 | 中等强度有氧运动为主：快走、孕妇瑜伽、游泳、固定自行车、弹力带抗阻训练 |\n| 强度 | 心率控制在 `(220-年龄)×50%～70%`；或采用“谈话测试”（运动时可正常交谈但不能唱歌） |\n| 频率与时长 | 每周 ≥ 150 分钟，分 3～5 次完成；每次 20～40 分钟 |\n| 最佳时机 | **餐后 30～60 分钟** 开始，可有效削峰餐后血糖 |\n\n#### 3. 安全注意事项\n- 运动前后测量血糖，防低血糖（随身备糖果/饼干）；\n- 穿着支撑性好的运动鞋，注意足部保护；\n- 避免：仰卧位运动（孕16周后）、剧烈跳跃、潜水、高温环境运动、有跌倒/碰撞风险的项目；\n- 出现以下情况立即停止并就医：规律宫缩、阴道流血/流液、头晕胸闷、胎动明显减少、呼吸困难。\n\n---\n### 四、重要临床提示\n1. **药物干预指征**：若严格执行饮食+运动 1～2 周后，仍有 >30% 的血糖监测点超标，应及时启动药物治疗。国内首选 **胰岛素**（不通过胎盘，安全性明确）；部分国家/地区可使用二甲双胍或格列本脲，但需充分知情同意。\n2. **胎儿与母体监测**：GDM孕妇需加强超声监测胎儿生长、羊水量及脐血流；孕晚期建议自数胎动，必要时行NST监护。\n3. **产后随访**：分娩后GDM通常缓解，但 **产后6～12周** 必须复查 75g OGTT，评估糖代谢状态。此后每1～3年筛查糖尿病，并保持健康生活方式以降低远期2型糖尿病风险。\n\n💡 **温馨提示**：妊娠期代谢变化个体差异大，以上为通用医学框架。请携带近期血糖记录、产检报告及身高体重数据，至医院“妊娠糖尿病门诊”或临床营养科制定专属方案。祝您孕期平稳、母婴安康。",
+              "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Gestational Diabetes Mellitus (GDM) / 妊娠期糖尿病\n   - **Required Content:** \n     - Diagnostic criteria (诊断标准)\n     - Dietary management (饮食管理)\n     - Exercise recommendations (运动建议)\n   - **Role/Context:** Pregnancy health knowledge assistant, based on medical knowledge.\n   - **Language:** Chinese\n\n2.  **Identify Key Medical Guidelines/Standards:**\n   - I need to rely on authoritative guidelines for GDM diagnosis and management. The most widely recognized ones are:\n     - WHO (World Health Organization)\n     - ADA (American Diabetes Association)\n     - ACOG (American College of Obstetricians and Gynecologists)\n     - Chinese guidelines: 《妊娠合并糖尿病诊治指南（2014）》 or updated versions like 《中国2型糖尿病防治指南》 or specific GDM guidelines from the Chinese Medical Association Obstetrics & Gynecology Branch. Actually, China adopted the IADPSG (International Association of Diabetes and Pregnancy Study Groups) criteria in 2014, which is now standard.\n   - I'll base the response on current mainstream standards (IADPSG/WHO/Chinese guidelines), clearly stating the diagnostic thresholds, dietary principles, and exercise guidelines, while emphasizing that individualized medical advice is essential.\n\n3.  **Structure the Response:**\n   - Introduction: Briefly define GDM and its importance.\n   - Part 1: Diagnostic Criteria (诊断标准)\n     - Timing of screening\n     - OGTT procedure & thresholds\n     - Note on alternative methods if any\n   - Part 2: Dietary Management (饮食管理)\n     - Principles (calorie control, macronutrient distribution, meal timing, food choices)\n     - Specific recommendations (carbs, protein, fat, fiber, hydration)\n     - Monitoring blood glucose\n   - Part 3: Exercise Recommendations (运动建议)\n     - Benefits, types, intensity, duration, frequency, precautions\n     - Contraindications\n   - Important Notes/Disclaimer: Emphasize consulting healthcare providers, individualized plans, medication if needed.\n   - Keep it evidence-based, clear, and practical.\n\n4.  **Draft - Section by Section (Mental Refinement in Chinese):**\n\n   **(1) 诊断标准 (Diagnostic Criteria)**\n   - 筛查时间：孕24~28周常规进行75g口服葡萄糖耐量试验（OGTT）。\n   - 诊断标准（采用IADPSG/中国指南标准，任一指标达标即可诊断）：\n     - 空腹血糖 ≥ 5.1 mmol/L\n     - 服糖后1小时血糖 ≥ 10.0 mmol/L\n     - 服糖后2小时血糖 ≥ 8.5 mmol/L\n   - 补充说明：若孕早期空腹血糖≥7.0 mmol/L或随机血糖≥11.1 mmol/L伴症状，可直接诊断为孕前糖尿病；高危孕妇可在首次产检时筛查。\n   - 依据：中华医学会妇产科学分会《妊娠合并糖尿病诊治指南》、WHO及IADPSG标准。\n\n   **(2) 饮食管理 (Dietary Management)**\n   - 核心原则：控制总热量、保证营养均衡、稳定血糖、满足母胎需求。\n   - 具体建议：\n     - 总热量：根据孕前BMI计算。一般推荐：孕前正常体重者约30-35 kcal/kg/d，超重/肥胖者25-30 kcal/kg/d，消瘦者35-40 kcal/kg/d。中晚期适当增加（孕中+300kcal，孕晚+450kcal）。\n     - 碳水化合物：占总热量40%-50%，选择低GI食物（全谷物、杂豆、蔬菜），避免精制糖和含糖饮料。每日主食定量分配至三餐+加餐。\n     - 蛋白质：1.1-1.3 g/kg/d（优质蛋白为主：鱼、禽、蛋、瘦肉、豆制品）。\n     - 脂肪：20%-30%，以不饱和脂肪酸为主，限制饱和脂肪和反式脂肪。\n     - 膳食纤维：25-30 g/d，多吃绿叶蔬菜、适量水果（两餐之间吃，每次≤150g，选低GI如苹果、梨、柚子）。\n     - 进餐模式：少量多餐（3主餐+2-3加餐），避免长时间空腹，睡前可加餐防酮症。\n     - 监测与调整：配合血糖监测（空腹<5.3，餐后1h<7.8，餐后2h<6.7 mmol/L），由营养师个体化调整。\n   - 注意：严禁极端节食，防止酮体升高影响胎儿神经发育。\n\n   **(3) 运动建议 (Exercise Recommendations)**\n   - 适用人群：无产科禁忌证的GDM孕妇（约70%-90%可通过生活方式干预控制）。\n   - 推荐类型：中等强度有氧运动为主，如快走、孕妇瑜伽、游泳、固定自行车、上肢抗阻训练。\n   - 强度：心率控制在（220-年龄）×50%-70%，或“谈话测试”（运动时可正常交谈但不唱歌）。\n   - 频率与时长：每周≥150分钟，分3-5次进行，每次20-40分钟。建议在餐后30-60分钟开始运动，有助于降低餐后血糖。\n   - 注意事项：\n     - 运动前评估：确认无前置胎盘、宫颈机能不全、早产风险、严重贫血、心脏病等禁忌证。\n     - 避免：仰卧位运动（孕中期后）、剧烈跳跃、潜水、高温环境运动、有跌倒/碰撞风险的项目。\n     - 监测：运动前后测血糖，防低血糖；随身携带糖果/饼干；穿舒适鞋袜，注意足部护理。\n     - 出现宫缩、阴道流血/流液、头晕、胸痛、胎动异常等立即停止并就医。\n   - 效果：规律运动可提高胰岛素敏感性，辅助控制血糖，改善妊娠结局。\n\n   **(4) 重要提示**\n   - 生活方式干预是GDM一线治疗，若血糖仍不达标（连续1周>30%时间点超标），需及时启用胰岛素治疗（口服降糖药在部分国家可用，但国内仍以胰岛素为首选）。\n   - 所有方案需在产科医生、内分泌科医生及注册营养师指导下个体化制定。\n   - 产后6-12周需复查OGTT，评估糖代谢恢复情况，并长期随访糖尿病风险。\n\n5.  **Self-Correction & Verification (Mental Check):**\n   - *Diagnostic criteria:* IADPSG/China 2014 standard is correct: FPG ≥5.1, 1h ≥10.0, 2h ≥8.5 mmol/L. Any one positive = GDM. Screening at 24-28 weeks. Correct.\n   - *Diet:* Calorie ranges align with Chinese Nutrition Society & ACOG. Carb 40-50%, protein 1.1-1.3g/kg, fat 20-30%. Low GI, small frequent meals, fruit between meals, avoid ketosis. Blood glucose targets: fasting <5.3, 1h <7.8, 2h <6.7 (consistent with Chinese guidelines). All accurate.\n   - *Exercise:* ≥150 min/week moderate intensity, post-meal timing, contraindications listed, hypoglycemia prevention. Matches ACOG & Chinese obstetric guidelines.\n   - *Medication note:* Insulin is first-line in China; metformin/glibenclamide used elsewhere but not standard in China due to limited long-term safety data. Correct.\n   - *Postpartum:* 75g OGTT at 6-12 weeks, long-term follow-up. Standard.\n   - *Tone/Disclaimer:* Emphasize professional guidance, avoid absolute statements, cite guidelines implicitly/explicitly.\n   - *Structure:* Clear, logical, medically sound, practical for pregnant women.\n\n   Potential improvements: \n   - Clarify that diagnostic thresholds may vary slightly by region/guideline, but IADPSG/China standard is mainstream.\n   - Specify that diet/exercise should be adjusted based on weight gain trajectory (IOM guidelines).\n   - Add note about monitoring fetal growth and amniotic fluid.\n   - Keep it concise but comprehensive.\n\n   All points are medically accurate per current standards (as of 2023/2024). No outdated info (e.g., old Carpenter-Coustan criteria replaced by IADPSG in China since 2014).\n\n6.  **Final Output Generation:** (Translate mental draft into polished Chinese response, ensuring professional tone, clear structure, and appropriate disclaimers.) \n   - Structure: \n     - 引言\n     - 一、诊断标准\n     - 二、饮食管理\n     - 三、运动建议\n     - 四、重要注意事项\n     - 免责声明/就医提示\n   - Use precise medical terms, cite guideline sources implicitly, keep it actionable.\n   - Check units: mmol/L, kcal, kg/d, etc.\n   - Ensure compliance with Chinese clinical practice context.\n\n   Ready. Output matches the refined response. \n   *Self-Correction/Verification during drafting:*\n   - Double-checked glucose targets: Chinese guidelines use fasting <5.3, 1h <7.8, 2h <6.7. Correct.\n   - Diet calories: IOM + Chinese guidelines recommend ~30-35 for normal BMI, adjusted for pre-pregnancy status. Correct.\n   - Exercise: ACOG 2020 & Chinese 2023 guidelines support same recommendations. Correct.\n   - Added emphasis on avoiding ketosis and individualized planning. All solid.✅\n   Proceed. \n   Output Generation. \n   *(Note: I will generate the response exactly as structured above, in professional yet accessible Chinese.)*",
+              "role": "assistant"
+            },
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null
+          }
+        ],
+        "object": "chat.completion",
+        "usage": {
+          "prompt_tokens": 41,
+          "completion_tokens": 3690,
+          "total_tokens": 3731,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2206,
+            "text_tokens": 3690
+          },
+          "prompt_tokens_details": {
+            "text_tokens": 41
+          }
+        },
+        "created": 1779863628,
+        "system_fingerprint": null,
+        "model": "qwen3.6-35b-a3b",
+        "id": "chatcmpl-33cf9fa3-f64d-9ccb-ba0e-99b448a72cb1"
+      },
+      "measured_latency_s": 24.7711,
+      "prompt_tokens": 41,
+      "completion_tokens": 3690,
+      "total_tokens": 3731,
+      "tokens_per_sec": 148.96,
+      "output_text": "作为孕期健康知识助手，以下内容为基于国内外权威指南（中华医学会《妊娠合并糖尿病诊治指南》、ACOG、ADA及IADPSG共识）的医学总结，供参考。**实际诊疗请务必在产科医生、内分泌科医生及注册营养师指导下个体化执行。**\n\n---\n### 一、妊娠期糖尿病（GDM）的诊断标准\n目前中国及国际主流指南均采用 **IADPSG/WHO 标准**，于孕 **24～28周** 常规行 **75g 口服葡萄糖耐量试验（OGTT）**。静脉血浆葡萄糖值任一达到或超过以下阈值即可诊断GDM：\n| 检测时间点 | 诊断切点（mmol/L） |\n|------------|------------------|\n| 空腹       | ≥ 5.1            |\n| 服糖后1小时 | ≥ 10.0           |\n| 服糖后2小时 | ≥ 8.5            |\n\n📌 **补充说明：**\n- 若孕早期（首次产检）空腹血糖 ≥ 7.0 mmol/L 或随机血糖 ≥ 11.1 mmol/L 伴典型症状，可直接诊断为 **孕前糖尿病**，而非GDM。\n- 存在高危因素（如既往G"
+    },
+    {
+      "timestamp": "2026-05-27T22:34:35.808131",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，头晕和血压波动是比较常见的现象，但我们需要谨慎对待。\n\n针对你提到的**血压 135/88 mmHg** 和 **经常头晕** 的情况，我为你做以下详细分析和建议：\n\n### 1. 关于血压 135/88 mmHg 是否正常？\n\n*   **医学标准判断：**\n    根据目前的临床指南，收缩压（高压）≥140 mmHg 或舒张压（低压）≥90 mmHg 通常被定义为妊娠期高血压。\n    你的血压 **135/88 mmHg** 处于**正常高值**或**临界范围**。虽然还没有达到“高血压”的诊断标准（140/90），但已经接近警戒线了。\n*   **孕期特点：**\n    在孕中期，由于血管扩张，孕妇血压通常会比孕前低。到了孕晚期（28周后），血压可能会逐渐回升。如果这个数值比你孕早期的基础血压明显升高，就需要引起重视。\n\n### 2. 为什么你会经常头晕？\n\n头晕的原因有很多，除了血压因素外，孕28周常见的生理原因包括：\n\n*   **仰卧位低血压综合征：** 孕晚期子宫增大，平躺时压迫下腔静脉，导致回心血量减少，引起脑供血不足。\n*   **贫血：** 孕期血容量增加，红细胞稀释，加上铁需求量大，很容易出现缺铁性贫血，导致头晕、乏力。\n*   **低血糖：** 孕晚期代谢快，如果两餐间隔时间过长或饮食不规律，容易低血糖。\n*   **脑供血不足/体位性低血压：** 突然从坐着或躺着站起来时，血液未能及时供应到大脑。\n*   **睡眠不足或精神紧张：** 孕期激素变化影响睡眠质量。\n\n### 3. 你需要立即注意和采取的行动\n\n#### ✅ 第一步：监测与记录（非常重要）\n1.  **规范测量血压：**\n    *   每天早晚各测一次血压，静坐休息5-10分钟后测量。\n    *   记录数值，观察趋势。如果连续几天血压都超过 **140/90 mmHg**，或者舒张压持续在 **90 mmHg** 以上，请**立即就医**。\n2.  **关注胎动：**\n    *   28周开始要正式数胎动。如果头晕伴随胎动异常（过多或过少），也要及时去医院。\n\n#### ✅ 第二步：生活方式调整\n1.  **改变体位要慢：**\n    *   起床或从椅子上站起时，动作要缓慢，给身体适应血压变化的时间。\n    *   睡觉时尽量采取**左侧卧位**，这样可以减轻子宫对下腔静脉的压迫，改善脑部供血。\n2.  **预防贫血和低血糖：**\n    *   **少食多餐：** 避免一顿吃太饱，也避免长时间空腹。随身携带一些苏打饼干、坚果或水果，感觉头晕时立即补充一点糖分。\n    *   **补铁饮食：** 多吃红肉（牛肉、猪肉）、动物肝脏（适量）、血制品、深绿色蔬菜。\n3.  **保证充足水分：**\n    *   脱水也会导致血压波动和头晕，每天保证足够的饮水量。\n4.  **避免长时间站立或闷热环境：**\n    *   不要长时间站在原地，避免去人多拥挤、空气不流通的地方。\n\n#### ✅ 第三步：何时必须去医院？\n\n如果出现以下任何一种情况，请**不要等待**，立即前往医院产科就诊：\n\n*   **血压升高：** 家庭自测血压连续多次 ≥140/90 mmHg。\n*   **头晕严重：** 头晕到无法站立、眼前发黑、晕厥，或者伴有**头痛、视力模糊、恶心呕吐**。\n*   **水肿明显：** 脸部、手部突然严重水肿，或者体重短时间内快速增长。\n*   **其他不适：** 出现胸闷、心悸、腹痛或阴道流血/流液。\n\n### 🩺 小安的建议\n\n鉴于你目前血压处于临界值且伴有频繁头晕，**建议你近期（最好本周内）去医院产检时，主动告诉医生你的情况。**\n\n医生可能会为你安排以下检查：\n1.  **血常规：** 排查是否贫血。\n2.  **尿常规：** 检查是否有尿蛋白（排除子痫前期的早期迹象）。\n3.  **胎心监护：** 评估胎儿宫内状况。\n\n**总结：** 目前血压虽未超标但偏高，头晕需警惕贫血或体位问题。请保持左侧卧、动作缓慢、少食多餐，并尽快通过产检排除病理因素。\n\n祝你和宝宝健康平安！如果有其他不适，随时告诉我。"
+            }
+          }
+        ],
+        "created": 1779892475,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1046,
+          "prompt_tokens": 61,
+          "total_tokens": 1107
+        },
+        "id": "chatcmpl-ChYma0t6ZSeYB6p5Z1Rp0QUemi5cVeun",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 61,
+          "prompt_ms": 165.252,
+          "prompt_per_token_ms": 2.709049180327869,
+          "prompt_per_second": 369.1332026238714,
+          "predicted_n": 1046,
+          "predicted_ms": 23908.653,
+          "predicted_per_token_ms": 22.85722084130019,
+          "predicted_per_second": 43.74985073395812
+        }
+      },
+      "measured_latency_s": 24.1244,
+      "prompt_tokens": 61,
+      "completion_tokens": 1046,
+      "total_tokens": 1107,
+      "tokens_per_sec": 43.36,
+      "output_text": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，头晕和血压波动是比较常见的现象，但我们需要谨慎对待。\n\n针对你提到的**血压 135/88 mmHg** 和 **经常头晕** 的情况，我为你做以下详细分析和建议：\n\n### 1. 关于血压 135/88 mmHg 是否正常？\n\n*   **医学标准判断：**\n    根据目前的临床指南，收缩压（高压）≥140 mmHg 或舒张压（低压）≥90 mmHg 通常被定义为妊娠期高血压。\n    你的血压 **135/88 mmHg** 处于**正常高值**或**临界范围**。虽然还没有达到“高血压”的诊断标准（140/90），但已经接近警戒线了。\n*   **孕期特点：**\n    在孕中期，由于血管扩张，孕妇血压通常会比孕前低。到了孕晚期（28周后），血压可能会逐渐回升。如果这个数值比你孕早期的基础血压明显升高，就需要引起重视。\n\n### 2. 为什么你会经常头晕？\n\n头晕的原因有很多，除了血压因素外，孕28周常见的生理原因包括：\n\n*   **仰卧位低血压综合征：** 孕晚期子宫增大，平躺时压迫下腔静脉，"
+    },
+    {
+      "timestamp": "2026-05-27T22:34:57.121382",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，出现头晕和血压波动是比较常见的现象，但我们需要认真对待，确保你和宝宝的安全。\n\n针对你提到的**血压 135/88 mmHg** 和 **经常头晕** 的情况，以下是专业的分析和建议：\n\n### 1. 血压情况分析\n*   **数值解读**：根据目前的临床指南，收缩压（高压）≥140 mmHg 和/或 舒张压（低压）≥90 mmHg 通常被定义为妊娠期高血压。\n    *   你的血压 **135/88 mmHg** 处于**正常高值**或**临界高血压**的范围。虽然还没有达到确诊“妊娠期高血压疾病”的标准（≥140/90），但这已经是一个**警示信号**。\n*   **头晕与血压的关系**：\n    *   如果血压突然升高，可能会导致头晕。\n    *   但更多时候，孕晚期头晕是因为**仰卧位低血压综合征**（子宫压迫下腔静脉）、**贫血**、**低血糖**或**体位性低血压**引起的，而不仅仅是因为血压偏高。\n\n### 2. 你需要立即注意的“红色警报”\n如果出现以下任何一种情况，请**立即前往医院急诊**，不要等待：\n*   头晕伴有**剧烈头痛**、视力模糊、眼前发黑或看到闪光。\n*   出现**上腹部疼痛**（特别是右上腹）或恶心呕吐。\n*   面部、手部或脚部出现**突然的水肿**（尤其是按压后凹陷不回弹）。\n*   胎动明显减少或异常频繁。\n*   血压持续升高，超过 **140/90 mmHg**，甚至达到 **160/110 mmHg**。\n\n### 3. 日常护理与监测建议\n\n#### A. 正确测量血压\n*   **静息测量**：测量前请安静休息5-10分钟，不要说话，保持心情平静。\n*   **固定时间**：建议每天早晚各测一次，并记录下来。\n*   **姿势正确**：坐着测量时，背部要有支撑，双脚平放地面，手臂与心脏处于同一水平线。\n\n#### B. 缓解头晕的生活调整\n*   **改变体位要慢**：从躺着或坐着站起来时，动作一定要缓慢，给身体适应血压变化的时间，预防体位性低血压。\n*   **避免仰卧**：孕晚期尽量采取**左侧卧位**睡觉，这样可以减轻子宫对下腔静脉的压迫，改善脑部供血，缓解头晕。\n*   **少食多餐**：避免长时间空腹，防止低血糖引起头晕。随身携带一些苏打饼干或坚果，感觉头晕时及时补充能量。\n*   **保持通风**：避免去人多、空气不流通的地方，防止缺氧。\n\n#### C. 饮食建议\n*   **适度限盐**：虽然不需要严格无盐，但应避免过咸的食物（如腌制食品、加工肉类），以免加重水钠潴留，导致血压升高。\n*   **优质蛋白**：多吃鱼、虾、瘦肉、蛋类和豆制品。\n*   **补铁防贫血**：头晕也可能是缺铁性贫血引起的。建议多吃红肉、动物肝脏（适量）、菠菜等富含铁的食物，并配合维生素C促进吸收。\n\n### 4. 下一步行动建议\n鉴于你目前血压处于临界值且伴有频繁头晕，建议你：\n1.  **尽快产检**：在下一次常规产检前，如果头晕频繁，建议**提前去医院产科就诊**。\n2.  **检查项目**：医生可能会建议你做以下检查以排除风险：\n    *   **尿常规**：检查是否有尿蛋白（排除子痫前期）。\n    *   **血常规**：检查是否有贫血。\n    *   **肝肾功能**：评估身体代谢情况。\n    *   **胎心监护**：确保宝宝在宫内状况良好。\n\n**总结：** 你的血压目前虽未超标，但已接近警戒线，加上头晕症状，**不能掉以轻心**。请务必重视，调整生活方式，并尽快联系你的产检医生进行评估。\n\n祝你和宝宝平安健康！如果有其他不适，随时告诉我。"
+            }
+          }
+        ],
+        "created": 1779892497,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 924,
+          "prompt_tokens": 61,
+          "total_tokens": 985
+        },
+        "id": "chatcmpl-beNfcQGn9O4ChhoKF40GLcdCPaxhtPFW",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 61,
+          "prompt_ms": 165.452,
+          "prompt_per_token_ms": 2.712327868852459,
+          "prompt_per_second": 368.6869907888693,
+          "predicted_n": 924,
+          "predicted_ms": 21108.763,
+          "predicted_per_token_ms": 22.8449816017316,
+          "predicted_per_second": 43.7732897943854
+        }
+      },
+      "measured_latency_s": 21.313,
+      "prompt_tokens": 61,
+      "completion_tokens": 924,
+      "total_tokens": 985,
+      "tokens_per_sec": 43.35,
+      "output_text": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，出现头晕和血压波动是比较常见的现象，但我们需要认真对待，确保你和宝宝的安全。\n\n针对你提到的**血压 135/88 mmHg** 和 **经常头晕** 的情况，以下是专业的分析和建议：\n\n### 1. 血压情况分析\n*   **数值解读**：根据目前的临床指南，收缩压（高压）≥140 mmHg 和/或 舒张压（低压）≥90 mmHg 通常被定义为妊娠期高血压。\n    *   你的血压 **135/88 mmHg** 处于**正常高值**或**临界高血压**的范围。虽然还没有达到确诊“妊娠期高血压疾病”的标准（≥140/90），但这已经是一个**警示信号**。\n*   **头晕与血压的关系**：\n    *   如果血压突然升高，可能会导致头晕。\n    *   但更多时候，孕晚期头晕是因为**仰卧位低血压综合征**（子宫压迫下腔静脉）、**贫血**、**低血糖**或**体位性低血压**引起的，而不仅仅是因为血压偏高。\n\n### 2. 你需要立即注意的“红色警报”\n如果出现以下任何一种情况，请**立即前往"
+    },
+    {
+      "timestamp": "2026-05-27T22:35:20.725425",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "孕妇-健康咨询",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小安，一位温柔专业的孕期健康助手。请用中文回答。"
+          },
+          {
+            "role": "user",
+            "content": "我现在怀孕28周，最近经常感觉头晕，血压在家量是135/88，这正常吗？需要注意什么？"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，头晕和血压波动是比较常见的现象，但我们需要认真对待，确保你和宝宝的安全。\n\n针对你的情况，我为你做以下详细分析和建议：\n\n### 1. 关于血压：135/88 mmHg 正常吗？\n\n**结论：这个数值处于“正常高值”或“临界高血压”的范围，需要警惕，但暂时不必恐慌。**\n\n*   **医学标准**：在孕期，通常认为收缩压（高压）≥140 mmHg 和/或 舒张压（低压）≥90 mmHg 才诊断为妊娠期高血压。\n*   **你的情况**：135/88 mmHg 虽然未达到高血压的诊断标准，但已经接近临界值。特别是舒张压88 mmHg，提示血管阻力可能略有增加。\n*   **风险**：如果血压持续升高或伴有其他症状，可能会发展为**妊娠期高血压疾病**或**子痫前期**。\n\n### 2. 为什么会出现头晕？\n\n头晕在孕晚期很常见，原因可能包括：\n\n1.  **生理性低血压/体位性低血压**：子宫增大压迫下腔静脉，导致回心血量减少，脑部供血暂时不足（尤其是从蹲位或卧位突然站起时）。\n2.  **贫血**：孕晚期血容量增加，血液稀释，加上铁储备消耗，很容易出现缺铁性贫血，导致脑供氧不足。\n3.  **低血糖**：如果两餐间隔时间过长，或饮食不规律，容易引发低血糖头晕。\n4.  **睡眠不足或疲劳**：孕晚期身体负担重，睡眠质量下降。\n5.  **血压波动**：虽然135/88不算高，但如果比平时的基础血压明显升高，也可能引起头晕。\n\n### 3. 你现在需要注意什么？（行动指南）\n\n#### ✅ 立即要做的事：\n1.  **监测血压**：\n    *   每天早晚各测一次血压，并记录下来。\n    *   测量时保持安静、坐姿正确，手臂与心脏同高。\n    *   如果连续几天血压都超过 **140/90 mmHg**，或者头晕加重，请**立即就医**。\n2.  **检查血常规**：\n    *   如果你最近一次产检（24-28周糖耐量测试时）没有查血常规，或者当时血红蛋白偏低，建议近期去医院复查一下**血常规**，排除贫血。\n3.  **注意头晕时的应对**：\n    *   一旦感觉头晕，**立即坐下或躺下**（最好左侧卧位），防止跌倒受伤。\n    *   避免突然改变体位（如起床、蹲下站起要慢）。\n\n#### 🥗 生活调整建议：\n1.  **饮食均衡**：\n    *   **补铁**：多吃红肉（牛肉、猪肉）、动物肝脏（每周1次即可）、血制品（鸭血、猪血），搭配富含维生素C的水果（橙子、猕猴桃）促进铁吸收。\n    *   **少食多餐**：避免低血糖，随身携带小零食（如苏打饼干、坚果）。\n    *   **控制盐分**：虽然不需要严格限盐，但避免过咸的食物（如咸菜、加工肉类），以防血压进一步升高。\n2.  **保证休息**：\n    *   每天保证8-9小时睡眠，中午尽量午休30分钟。\n    *   左侧卧位有助于改善子宫胎盘血流。\n3.  **适度活动**：\n    *   避免长时间站立或久坐。\n    *   散步等轻度运动有助于血液循环，但避免剧烈运动。\n\n#### 🚨 出现以下情况，请立即去医院：\n*   头晕频繁发作，甚至出现眼前发黑、晕厥。\n*   血压持续 ≥140/90 mmHg。\n*   出现**头痛**（尤其是后脑勺持续性胀痛）、**视力模糊**、**眼花**。\n*   出现**水肿**（尤其是面部、手部突然明显肿胀，或脚踝水肿按压后不回弹）。\n*   胎动异常（过多或过少）。\n\n### 小安的温馨提醒：\n你现在的血压值还在可控范围内，很多孕妈妈都会有类似的波动。**关键在于监测和预防**。建议你下次产检时（通常是32周左右，但如果头晕严重可提前）主动告诉医生你的血压记录和头晕症状，医生可能会给你开一些补充铁剂或钙镁片的建议。\n\n保持心情放松，情绪紧张也会引起血压波动哦。祝你和宝宝健康平安！如果有其他不适，随时来问我。"
+            }
+          }
+        ],
+        "created": 1779892520,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1021,
+          "prompt_tokens": 61,
+          "total_tokens": 1082
+        },
+        "id": "chatcmpl-TIot7HNGbiavuWgt9LiTvH55RrEpLVro",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 61,
+          "prompt_ms": 165.289,
+          "prompt_per_token_ms": 2.7096557377049177,
+          "prompt_per_second": 369.0505720283867,
+          "predicted_n": 1021,
+          "predicted_ms": 23400.318,
+          "predicted_per_token_ms": 22.91901860920666,
+          "predicted_per_second": 43.631885686339814
+        }
+      },
+      "measured_latency_s": 23.6038,
+      "prompt_tokens": 61,
+      "completion_tokens": 1021,
+      "total_tokens": 1082,
+      "tokens_per_sec": 43.26,
+      "output_text": "你好！我是小安。首先请不要过度焦虑，怀孕28周进入孕晚期，身体确实会发生很多变化，头晕和血压波动是比较常见的现象，但我们需要认真对待，确保你和宝宝的安全。\n\n针对你的情况，我为你做以下详细分析和建议：\n\n### 1. 关于血压：135/88 mmHg 正常吗？\n\n**结论：这个数值处于“正常高值”或“临界高血压”的范围，需要警惕，但暂时不必恐慌。**\n\n*   **医学标准**：在孕期，通常认为收缩压（高压）≥140 mmHg 和/或 舒张压（低压）≥90 mmHg 才诊断为妊娠期高血压。\n*   **你的情况**：135/88 mmHg 虽然未达到高血压的诊断标准，但已经接近临界值。特别是舒张压88 mmHg，提示血管阻力可能略有增加。\n*   **风险**：如果血压持续升高或伴有其他症状，可能会发展为**妊娠期高血压疾病**或**子痫前期**。\n\n### 2. 为什么会出现头晕？\n\n头晕在孕晚期很常见，原因可能包括：\n\n1.  **生理性低血压/体位性低血压**：子宫增大压迫下腔静脉，导致回心血量减少，脑部供血暂时不足（尤其是从蹲位或卧位突然站起时）。\n2.  **贫血**：孕晚期"
+    },
+    {
+      "timestamp": "2026-05-27T22:35:53.748330",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "护士-数据分析",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好，我是小护。针对孕妇张某目前的孕产期数据，我为你整理了以下 **SOAP** 格式的专业护理评估与建议。\n\n### **S (Subjective Data) 主观资料**\n*   **患者信息**：张某，32岁，孕32周（妊娠晚期）。\n*   **主诉/现病史**：\n    *   近一周自我监测血压，数值呈逐渐上升趋势。\n    *   本周体重增加 0.8kg。\n    *   胎动情况：早、中、晚各计数3次（主观感觉胎动规律）。\n*   **既往史/其他**：需确认既往是否有高血压病史、肾脏疾病史或妊娠期糖尿病史（此处假设既往无特殊异常，仅基于当前数据）。\n\n### **O (Objective Data) 客观资料**\n*   **生命体征趋势（血压）**：\n    *   记录值：130/85 mmHg → 132/87 mmHg → 135/90 mmHg → 138/92 mmHg。\n    *   **分析**：收缩压（SBP）从130升至138 mmHg，舒张压（DBP）从85升至92 mmHg。\n    *   **临界值判断**：根据《妊娠期高血压疾病诊治指南》，收缩压 ≥140 mmHg 和/或 舒张压 ≥90 mmHg 可诊断为妊娠期高血压。目前患者最后一次记录舒张压已达 **92 mmHg**，且呈持续上升态势，已触及高血压诊断标准下限，处于**临界高血压或轻度妊娠期高血压**风险区。\n*   **体重变化**：\n    *   本周增长 0.8kg。\n    *   **分析**：孕晚期（28周后）建议每周体重增长控制在 0.3-0.5kg。0.8kg/周属于**增长过快**，提示可能存在水钠潴留或隐性水肿，与血压升高有相关性。\n*   **胎儿情况**：\n    *   胎动计数：早3次、中3次、晚3次。\n    *   **分析**：虽然主观描述为“规律”，但需结合具体时长判断。通常胎动计数标准为“每小时3-5次”或“12小时≥10次”。若每次计数是在1小时内完成的，则目前胎动频率尚可；若是在更短时间内计数，则需警惕。目前数据暂示胎儿宫内状况相对稳定，但需结合血压升高背景综合评估胎盘灌注情况。\n\n### **A (Assessment) 评估/诊断**\n1.  **妊娠期高血压风险（高度疑似/早期妊娠期高血压）**：\n    *   依据：连续监测血压进行性升高，最后一次舒张压 ≥90 mmHg。\n    *   风险：若不加干预，可能发展为重度子痫前期，影响母体器官功能及胎儿供血。\n2.  **体重增长过快**：\n    *   依据：孕晚期周增重 0.8kg > 推荐值 0.5kg。\n    *   关联：体重快速增加常伴随隐性水肿，是子痫前期的早期信号之一。\n3.  **胎儿宫内安危现状**：\n    *   目前胎动记录显示基本正常，但鉴于母体血压升高，需警惕胎儿生长受限（FGR）或胎盘功能减退的潜在风险。\n\n### **P (Plan) 护理计划与建议**\n\n#### **1. 医疗干预建议（立即执行）**\n*   **尽快就医复查**：建议**24小时内**前往产科门诊复诊。\n    *   复查血压（非同日两次测量确认）。\n    *   完善尿常规（重点看尿蛋白）、血常规、肝肾功能、尿酸等检查，以排除子痫前期。\n    *   进行胎心监护（NST）及B超检查，评估胎儿生长发育及羊水量、胎盘功能。\n*   **遵医嘱用药**：若确诊妊娠期高血压，医生可能会根据具体情况决定是否需要启动降压治疗（如拉贝洛尔等），切勿自行用药或停药。\n\n#### **2. 家庭护理与监测**\n*   **血压监测**：\n    *   每日早晚各测量一次血压，静息5分钟后测量，记录详细数值。\n    *   若出现头痛、眼花、胸闷、上腹部疼痛、恶心呕吐等症状，**立即急诊**。\n*   **体重监测**：\n    *   每日清晨空腹、排尿后、穿同样衣物称重并记录。\n    *   观察是否有下肢、面部或手部水肿（按压胫骨前是否有凹陷）。\n*   **胎动监测**：\n    *   继续坚持每日早、中、晚各1小时胎动计数。\n    *   **标准**：若12小时胎动 <10次，或胎动较平时减少/增加超过50%，或胎动突然剧烈后停止，需立即就医。\n    *   *注：建议孕妇记录每次计数的具体起止时间，确保数据准确性。*\n\n#### **3. 生活方式指导**\n*   **饮食调整**：\n    *   **限盐**：每日食盐摄入量 <5g，避免腌制食品、加工肉类。\n    *   **优质蛋白**：增加鱼、禽、蛋、瘦肉及豆制品摄入。\n    *   **控制碳水**：减少精米白面，增加粗粮，控制总热量摄入，以减缓体重过快增长。\n    *   **充足水分**：适量饮水，避免一次性大量饮水加重心脏负担。\n*   **休息与体位**：\n    *   **左侧卧位**：休息时尽量采取左侧卧位，以改善子宫胎盘血液循环，降低血压，增加胎儿供氧。\n    *   保证充足睡眠，避免劳累和精神紧张。\n*   **适度活动**：\n    *   避免剧烈运动，可进行散步等轻度活动，但若血压持续升高或出现不适，应卧床休息。\n\n#### **4. 健康教育与心理支持**\n*   向孕妇及家属解释血压升高的潜在风险，消除过度焦虑，但强调重视程度。\n*   告知子痫前期的预警症状（头痛、视力模糊、上腹痛等），提高自我识别能力。\n\n---\n**小护温馨提示**：\n张某目前处于**关键转折期**，血压的持续上升和体重过快增长是身体发出的警示信号。请务必重视，**不要等待下次产检时间**，建议尽快去医院完善检查，确保母婴安全。如有任何不适，随时急诊！"
+            }
+          }
+        ],
+        "created": 1779892553,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1437,
+          "prompt_tokens": 107,
+          "total_tokens": 1544
+        },
+        "id": "chatcmpl-NgBJYGSjfkbCnfziyjcBTB5BelzxCSIN",
+        "timings": {
+          "cache_n": 103,
+          "prompt_n": 4,
+          "prompt_ms": 35.555,
+          "prompt_per_token_ms": 8.88875,
+          "prompt_per_second": 112.50175783996625,
+          "predicted_n": 1437,
+          "predicted_ms": 32935.908,
+          "predicted_per_token_ms": 22.919908141962424,
+          "predicted_per_second": 43.63019231168607
+        }
+      },
+      "measured_latency_s": 33.0226,
+      "prompt_tokens": 107,
+      "completion_tokens": 1437,
+      "total_tokens": 1544,
+      "tokens_per_sec": 43.52,
+      "output_text": "你好，我是小护。针对孕妇张某目前的孕产期数据，我为你整理了以下 **SOAP** 格式的专业护理评估与建议。\n\n### **S (Subjective Data) 主观资料**\n*   **患者信息**：张某，32岁，孕32周（妊娠晚期）。\n*   **主诉/现病史**：\n    *   近一周自我监测血压，数值呈逐渐上升趋势。\n    *   本周体重增加 0.8kg。\n    *   胎动情况：早、中、晚各计数3次（主观感觉胎动规律）。\n*   **既往史/其他**：需确认既往是否有高血压病史、肾脏疾病史或妊娠期糖尿病史（此处假设既往无特殊异常，仅基于当前数据）。\n\n### **O (Objective Data) 客观资料**\n*   **生命体征趋势（血压）**：\n    *   记录值：130/85 mmHg → 132/87 mmHg → 135/90 mmHg → 138/92 mmHg。\n    *   **分析**：收缩压（SBP）从130升至138 mmHg，舒张压（DBP）从85升至92 mmHg。\n    *   **临界值判断**：根据《妊娠期高血压疾病诊治指"
+    },
+    {
+      "timestamp": "2026-05-27T22:36:26.419488",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "护士-数据分析",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好，我是小护。针对张某（32岁，孕32周）的近期产检数据，我为你整理了以下 **SOAP** 格式的专业分析与建议。\n\n### **S (Subjective) 主观资料**\n*   **患者基本信息**：张某，32岁，孕32周（进入孕晚期，属高龄产妇临界值，需重点关注）。\n*   **主诉/现病史**：\n    *   近一周自我监测血压，数值呈上升趋势。\n    *   本周体重增加0.8kg。\n    *   胎动计数：早、中、晚各3次（主观感觉胎动规律，无减少或剧烈躁动描述）。\n*   **既往史/风险因素**：32岁，需排除既往是否有高血压病史、肾脏疾病或糖尿病史（若未提及，需进一步询问）。\n\n### **O (Objective) 客观资料**\n*   **生命体征（血压趋势）**：\n    *   第1天：130/85 mmHg\n    *   第2天：132/87 mmHg\n    *   第3天：135/90 mmHg\n    *   第4天：138/92 mmHg\n    *   **分析**：收缩压（SBP）从130升至138 mmHg，舒张压（DBP）从85升至92 mmHg。\n    *   **临界值判断**：根据妊娠期高血压疾病诊断标准，**舒张压 ≥90 mmHg** 或收缩压 ≥140 mmHg 可诊断为妊娠期高血压。目前患者最新血压 **138/92 mmHg**，舒张压已达标，收缩压接近临界值。\n*   **体重变化**：\n    *   本周增长 0.8 kg。\n    *   **分析**：孕晚期（28周后）平均每周体重增长建议为 0.3-0.5 kg。0.8 kg/周 略高于推荐范围，提示可能存在水钠潴留或摄入过量。\n*   **胎儿情况**：\n    *   胎动记录：早3次、中3次、晚3次。\n    *   **分析**：胎动次数在正常范围内（通常认为每小时3-5次为正常，或12小时累计>30次），且分布均匀，提示目前胎儿宫内储备能力尚可，暂无急性缺氧迹象。\n\n### **A (Assessment) 评估/诊断**\n1.  **妊娠期高血压倾向/妊娠期高血压（疑似）**：\n    *   患者血压呈进行性升高趋势，且最新一次测量舒张压已达92 mmHg（≥90 mmHg）。\n    *   虽未达重度子痫前期标准（如蛋白尿、严重头痛、视力模糊等），但属于**高危预警状态**。\n2.  **体重增长过快**：\n    *   本周体重增长超出孕晚期理想范围，可能与血压升高相关（水钠潴留）。\n3.  **胎儿宫内状况目前稳定**：\n    *   胎动规律，暂无胎儿窘迫证据。\n4.  **风险评估**：\n    *   若不干预，进展为重度子痫前期、胎盘功能减退、胎儿生长受限（FGR）的风险增加。\n\n### **P (Plan) 计划与建议**\n\n#### **1. 医疗干预建议（需立即执行）**\n*   **尽快就医复查**：\n    *   建议**24小时内**前往医院产科门诊复查。\n    *   **必查项目**：\n        *   正式血压测量（非同日两次）。\n        *   **尿常规**：重点查看尿蛋白（+/- 或 +++），排除子痫前期。\n        *   **血液检查**：血常规（看血小板、血红蛋白）、肝肾功能、尿酸、凝血功能。\n        *   **产科超声**：评估胎儿生长发育（估重、羊水指数、脐血流S/D值），排查胎儿生长受限。\n*   **遵医嘱用药**：若确诊妊娠期高血压，医生可能会根据情况开具降压药（如拉贝洛尔、硝苯地平等），**切勿自行服药或停药**。\n\n#### **2. 家庭监测与自我管理**\n*   **血压监测**：\n    *   每日早晚各测1次血压，静坐5分钟后测量，记录数值。\n    *   若出现 **收缩压≥140 mmHg** 或 **舒张压≥90 mmHg**，或伴有头痛、眼花、胸闷、上腹痛等症状，**立即急诊**。\n*   **体重监测**：\n    *   每周称重1-2次，固定时间、固定衣着。\n    *   目标：孕晚期每周体重增长控制在 **0.3-0.5 kg**。\n*   **胎动监测**：\n    *   继续坚持每日早、中、晚各数1小时胎动。\n    *   若胎动**明显减少**（<3次/小时）或**突然剧烈增加后减少**，立即就医。\n\n#### **3. 生活方式指导**\n*   **饮食调整**：\n    *   **低盐饮食**：每日食盐摄入量 <5g，避免腌制食品、加工肉类、酱油等高钠食物。\n    *   **优质蛋白**：适量摄入鱼、禽、蛋、瘦肉、豆制品。\n    *   **控制碳水与脂肪**：减少甜食、油炸食品，避免体重过快增长。\n    *   **多喝水**：保证充足饮水，促进代谢，但避免一次性大量饮水。\n*   **休息与体位**：\n    *   **左侧卧位**：睡眠或休息时尽量采取左侧卧位，以改善子宫胎盘血液循环，降低血压。\n    *   **避免劳累**：保证充足睡眠，避免情绪激动和剧烈运动。\n*   **心理支持**：\n    *   保持心情舒畅，焦虑和紧张会升高血压。家属应给予充分陪伴和支持。\n\n---\n\n**⚠️ 重要提醒**：\n张某目前血压已触及妊娠期高血压诊断阈值，**请务必重视，不要仅靠居家观察**。及时就医评估是保障母婴安全的关键。如有任何不适（头痛、视物模糊、恶心呕吐、上腹疼痛），请**立即前往医院急诊**。\n\n祝母婴平安！如有其他问题，随时咨询。"
+            }
+          }
+        ],
+        "created": 1779892586,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1405,
+          "prompt_tokens": 107,
+          "total_tokens": 1512
+        },
+        "id": "chatcmpl-9HvgwpXmmmTOB2xbizV33nZOHZueS0wZ",
+        "timings": {
+          "cache_n": 103,
+          "prompt_n": 4,
+          "prompt_ms": 35.64,
+          "prompt_per_token_ms": 8.91,
+          "prompt_per_second": 112.2334455667789,
+          "predicted_n": 1405,
+          "predicted_ms": 32582.361,
+          "predicted_per_token_ms": 23.190292526690392,
+          "predicted_per_second": 43.121491410643934
+        }
+      },
+      "measured_latency_s": 32.6709,
+      "prompt_tokens": 107,
+      "completion_tokens": 1405,
+      "total_tokens": 1512,
+      "tokens_per_sec": 43.0,
+      "output_text": "你好，我是小护。针对张某（32岁，孕32周）的近期产检数据，我为你整理了以下 **SOAP** 格式的专业分析与建议。\n\n### **S (Subjective) 主观资料**\n*   **患者基本信息**：张某，32岁，孕32周（进入孕晚期，属高龄产妇临界值，需重点关注）。\n*   **主诉/现病史**：\n    *   近一周自我监测血压，数值呈上升趋势。\n    *   本周体重增加0.8kg。\n    *   胎动计数：早、中、晚各3次（主观感觉胎动规律，无减少或剧烈躁动描述）。\n*   **既往史/风险因素**：32岁，需排除既往是否有高血压病史、肾脏疾病或糖尿病史（若未提及，需进一步询问）。\n\n### **O (Objective) 客观资料**\n*   **生命体征（血压趋势）**：\n    *   第1天：130/85 mmHg\n    *   第2天：132/87 mmHg\n    *   第3天：135/90 mmHg\n    *   第4天：138/92 mmHg\n    *   **分析**：收缩压（SBP）从130升至138 mmHg，舒张压（DBP）从85升"
+    },
+    {
+      "timestamp": "2026-05-27T22:36:59.682068",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "护士-数据分析",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是小护，一位专业产科护士。请用SOAP格式分析以下数据。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇张某，32岁，孕32周。近一周血压记录：130/85, 132/87, 135/90, 138/92。体重增长本周0.8kg。胎动记录：早中晚各3次。请分析趋势并给出建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "您好，我是小护。针对张某（32岁，孕32周）的近期产检数据，我为您整理了以下 **SOAP** 格式的专业分析与护理建议。\n\n---\n\n### **SOAP 记录分析**\n\n#### **S (Subjective) - 主观资料**\n*   **患者主诉/背景**：孕妇张某，32岁，目前孕32周。\n*   **自我监测数据**：\n    *   **血压**：近一周内连续监测，数值呈现上升趋势，从 130/85 mmHg 升至 138/92 mmHg。\n    *   **体重**：本周体重增长 0.8 kg。\n    *   **胎动**：早、中、晚各计数3次，共计9次/日（注：通常胎动计数标准建议早中晚各1小时，或关注胎动规律性，此处需结合具体计数方法判断，但患者自述“各3次”，需确认是否达到正常范围下限或存在计数误差，通常正常胎动为每小时3-5次以上，或12小时大于30次。若仅指总共9次，则明显偏少；若指每时段3次，则需进一步评估）。\n\n#### **O (Objective) - 客观资料**\n*   **生命体征趋势**：\n    *   血压呈**进行性升高**趋势：\n        *   D1: 130/85 mmHg\n        *   D2: 132/87 mmHg\n        *   D3: 135/90 mmHg\n        *   D4: 138/92 mmHg\n    *   **关键指标**：舒张压（低压）已多次 ≥90 mmHg，收缩压（高压）接近但未超过140 mmHg。\n*   **体重变化**：\n    *   周增重 0.8 kg。孕晚期（28周后）建议每周体重增长控制在 0.3-0.5 kg 左右，0.8 kg 略高于推荐值，提示可能存在水钠潴留或摄入过多。\n*   **胎儿情况**：\n    *   胎动记录需核实具体计数方法。若为“每小时3次”，则属正常；若为“全天共3次”或“每时段仅3次且无其他描述”，需警惕胎动异常。*（基于常规护理逻辑，假设患者描述的是每时段计数，但需警惕血压升高对胎盘灌注的影响）*。\n\n#### **A (Assessment) - 评估/诊断**\n1.  **妊娠期高血压疾病风险（高度疑似）**：\n    *   孕32周出现血压进行性升高，舒张压持续 ≥90 mmHg，符合**妊娠期高血压**或**轻度子痫前期**的早期表现。\n    *   体重增长过快（0.8kg/周）提示可能存在隐性水肿或水钠潴留，这是子痫前期的重要伴随症状。\n2.  **胎儿监护需求增加**：\n    *   母体血压升高可能影响子宫胎盘血流灌注，需密切监测胎儿宫内状况，排除胎儿生长受限（FGR）或胎儿窘迫风险。\n3.  **健康认知需求**：\n    *   患者需加强血压自我监测、体重管理及胎动计数的规范性教育。\n\n#### **P (Plan) - 计划与建议**\n\n##### **1. 医疗干预建议（需立即联系产科医生）**\n*   **复诊评估**：建议**24-48小时内**返院复查。\n    *   检查项目：血压复测、尿常规（重点查尿蛋白）、血常规、肝肾功能、尿酸、凝血功能。\n    *   目的：明确是否诊断为“妊娠期高血压”或“子痫前期”，评估靶器官损害情况。\n*   **药物治疗**：若确诊为妊娠期高血压或子痫前期，医生可能会根据具体情况启动降压治疗（如拉贝洛尔、硝苯地平等），**切勿自行用药**。\n\n##### **2. 护理与家庭监测**\n*   **血压监测**：\n    *   每日早晚固定时间测量血压，静息5分钟后测量，记录数值。\n    *   **警戒线**：若收缩压 ≥140 mmHg 或舒张压 ≥90 mmHg，或出现头痛、眼花、胸闷、上腹痛等症状，**立即急诊**。\n*   **体重管理**：\n    *   继续每日晨起空腹、排尿后称重并记录。\n    *   若周增重持续 >0.5 kg，需警惕水肿，检查是否有下肢凹陷性水肿。\n*   **胎动监测**：\n    *   **规范计数**：建议采用“早中晚各1小时，3次之和×4=12小时胎动”的方法。\n    *   **警戒线**：若12小时胎动 <10次，或每小时 <3次，或胎动较平时减少/增加超过50%，需立即就医。\n    *   *注：鉴于血压升高，建议增加胎动关注度，必要时行胎心监护（NST）。*\n\n##### **3. 生活方式指导**\n*   **饮食调整**：\n    *   **低盐饮食**：每日食盐摄入量 <5g，避免腌制食品、加工肉类。\n    *   **优质蛋白**：增加鱼、禽、蛋、奶、豆制品摄入，保证胎儿营养。\n    *   **控制碳水**：减少甜食、精米白面，避免体重增长过快。\n    *   **充足饮水**：不要盲目限水，除非医生要求，但避免一次性大量饮水。\n*   **休息与体位**：\n    *   **左侧卧位**：睡眠和休息时尽量采取左侧卧位，以改善子宫胎盘血流灌注。\n    *   **避免劳累**：保证充足睡眠，避免情绪激动和剧烈活动。\n*   **心理支持**：\n    *   缓解焦虑情绪，紧张和压力会导致血压进一步升高。家属应给予陪伴和支持。\n\n---\n\n### **⚠️ 重要提醒**\n> **张某目前的血压趋势和体重增长是妊娠期高血压疾病的警示信号。**  \n> 请务必**尽快就医**进行专业评估，不要等待至下次常规产检时间。早期干预可有效预防病情进展为重度子痫前期，保障母婴安全。\n\n如有任何不适（头痛、视力模糊、上腹痛、阴道流血/流液、胎动异常），请**立即前往医院急诊**。"
+            }
+          }
+        ],
+        "created": 1779892619,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1437,
+          "prompt_tokens": 107,
+          "total_tokens": 1544
+        },
+        "id": "chatcmpl-ugsac0KoQMBMB44a0yZEwJAYRKVaUsTm",
+        "timings": {
+          "cache_n": 103,
+          "prompt_n": 4,
+          "prompt_ms": 37.402,
+          "prompt_per_token_ms": 9.3505,
+          "prompt_per_second": 106.94615261215978,
+          "predicted_n": 1437,
+          "predicted_ms": 33172.56,
+          "predicted_per_token_ms": 23.084592901878914,
+          "predicted_per_second": 43.31893589159233
+        }
+      },
+      "measured_latency_s": 33.2624,
+      "prompt_tokens": 107,
+      "completion_tokens": 1437,
+      "total_tokens": 1544,
+      "tokens_per_sec": 43.2,
+      "output_text": "您好，我是小护。针对张某（32岁，孕32周）的近期产检数据，我为您整理了以下 **SOAP** 格式的专业分析与护理建议。\n\n---\n\n### **SOAP 记录分析**\n\n#### **S (Subjective) - 主观资料**\n*   **患者主诉/背景**：孕妇张某，32岁，目前孕32周。\n*   **自我监测数据**：\n    *   **血压**：近一周内连续监测，数值呈现上升趋势，从 130/85 mmHg 升至 138/92 mmHg。\n    *   **体重**：本周体重增长 0.8 kg。\n    *   **胎动**：早、中、晚各计数3次，共计9次/日（注：通常胎动计数标准建议早中晚各1小时，或关注胎动规律性，此处需结合具体计数方法判断，但患者自述“各3次”，需确认是否达到正常范围下限或存在计数误差，通常正常胎动为每小时3-5次以上，或12小时大于30次。若仅指总共9次，则明显偏少；若指每时段3次，则需进一步评估）。\n\n#### **O (Objective) - 客观资料**\n*   **生命体征趋势**：\n    *   血压呈**进行性升高**趋势：\n "
+    },
+    {
+      "timestamp": "2026-05-27T22:37:41.135371",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为紧急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 初步诊断印象\n**重度子痫前期（Severe Preeclampsia）**\n*   **依据**：\n    1.  **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg或舒张压≥90 mmHg，且舒张压≥90 mmHg提示病情较重）。\n    2.  **蛋白尿**：尿蛋白++（提示肾脏受损）。\n    3.  **中枢神经系统症状**：头痛、视物模糊（这是重度子痫前期的典型警示症状，提示脑血管痉挛或脑水肿可能）。\n    4.  **水肿**：双下肢水肿++（虽水肿特异性不高，但结合高血压和蛋白尿具有参考意义）。\n\n---\n\n### 二、 鉴别诊断与推理链\n\n我们需要排除其他引起妊娠期高血压、蛋白尿或神经系统症状的疾病。\n\n#### 1. 妊娠期高血压疾病谱系内的鉴别\n*   **轻度子痫前期**：\n    *   *鉴别点*：轻度通常无自觉症状，血压虽升高但无靶器官损害表现。\n    *   *推理*：李某出现头痛、视物模糊，属于“重度特征”，故排除轻度，诊断为重度。\n*   **慢性高血压并发子痫前期**：\n    *   *鉴别点*：需询问孕前或孕20周前是否有高血压病史。\n    *   *推理*：若既往无高血压史，孕20周后首次出现高血压+蛋白尿+症状，则诊断为子痫前期。若孕前有高血压，则为此型。处理原则相似，但需评估慢性高血压对胎儿的长期影响。\n*   **妊娠合并慢性肾脏病**：\n    *   *鉴别点*：需询问孕前是否有蛋白尿、高血压或肾脏病史。\n    *   *推理*：若无既往史，且此次发病伴有明显的神经系统症状（头痛、视物模糊），更符合子痫前期的急性血管内皮损伤表现。\n\n#### 2. 非妊娠期特异性疾病的鉴别\n*   **原发性高血压**：\n    *   *鉴别点*：通常无蛋白尿，或蛋白尿程度较轻，且无头痛、视物模糊等急性靶器官损害症状（除非发生高血压脑病）。\n    *   *推理*：李某尿蛋白++且伴有明显神经系统症状，单纯原发性高血压难以解释全部病情，需考虑合并子痫前期。\n*   **脑血管意外（脑出血/脑梗死）**：\n    *   *鉴别点*：子痫前期严重时可并发脑血管意外。需通过头颅CT/MRI鉴别。\n    *   *推理*：头痛、视物模糊是子痫前期的先兆，但也可能是脑出血的前驱症状。必须警惕，若症状持续加重或出现意识障碍、偏瘫，需立即行影像学检查。\n*   **颅内占位性病变（如垂体瘤、脑膜瘤）**：\n    *   *鉴别点*：病程较长，逐渐加重，影像学可确诊。\n    *   *推理*：急性起病（2天），结合高血压和蛋白尿，首先考虑产科急症，但不能完全排除合并颅内病变的可能，若降压治疗后症状不缓解，需排查。\n*   **偏头痛或紧张性头痛**：\n    *   *鉴别点*：通常无高血压和蛋白尿。\n    *   *推理*：李某有明确的高血压和蛋白尿，故排除单纯性头痛。\n\n---\n\n### 三、 紧急处理建议\n\n李某目前处于**孕34周**，胎儿已接近足月（晚期早产），且出现**重度子痫前期的警示症状**，处理原则为：**控制病情、预防子痫、适时终止妊娠**。\n\n#### 1. 立即评估与监测\n*   **生命体征监测**：每15-30分钟监测血压、脉搏、呼吸、血氧饱和度。\n*   **胎儿监护**：立即进行胎心监护（NST），评估胎儿宫内状况。若NST无反应型，需行生物物理评分（BPP）。\n*   **实验室检查**：\n    *   血常规（关注血小板计数，排除HELLP综合征）。\n    *   肝肾功能（ALT、AST、肌酐、尿酸）。\n    *   凝血功能。\n    *   24小时尿蛋白定量或尿蛋白/肌酐比值（确认蛋白尿程度）。\n    *   眼底检查（评估视网膜病变程度）。\n*   **影像学检查**：若头痛剧烈、视物模糊持续不缓解，或出现意识改变，**必须行头颅CT或MRI**，排除脑出血或脑水肿。\n\n#### 2. 药物治疗\n*   **解痉治疗（首选硫酸镁）**：\n    *   **目的**：预防子痫发作。\n    *   **用法**：负荷剂量4-6g静脉缓慢推注（>20分钟），随后维持剂量1-2g/h静脉滴注。\n    *   **注意**：监测膝腱反射、呼吸频率（>16次/分）、尿量（>25ml/h或>600ml/24h）。备好葡萄糖酸钙作为解毒剂。\n*   **降压治疗**：\n    *   **指征**：收缩压≥160 mmHg或舒张压≥110 mmHg，或伴有严重症状（如李某的头痛、视物模糊）。\n    *   **药物选择**：\n        *   **拉贝洛尔**：静脉推注或口服，首选。\n        *   **硝苯地平**：口服缓释片或短效片（需警惕低血压）。\n        *   **酚妥拉明**：静脉滴注，用于难治性高血压。\n    *   **目标**：将血压控制在140-150/90-100 mmHg左右，避免血压过低影响胎盘灌注。\n*   **镇静治疗**：\n    *   若患者焦虑、失眠，可酌情使用地西泮（安定），但需注意对胎儿呼吸抑制的风险，通常不作为首选，除非有子痫先兆或子痫发作。\n\n#### 3. 终止妊娠的决策\n*   **时机**：\n    *   孕34周，出现重度子痫前期症状（头痛、视物模糊），**不建议继续期待治疗**。\n    *   应在积极治疗24-48小时，待病情稳定后，**尽快终止妊娠**。\n    *   若出现以下情况，需**立即终止妊娠**：\n        *   子痫发作。\n        *   胎盘早剥。\n        *   HELLP综合征。\n        *   心肾功能衰竭。\n        *   胎儿窘迫。\n*   **分娩方式**：\n    *   **剖宫产**：鉴于李某有神经系统症状（头痛、视物模糊），提示颅内压可能增高，阴道分娩过程中的屏气用力可能诱发脑出血或子痫，且宫颈条件可能不成熟，**剖宫产是更安全的选择**。\n    *   **阴道分娩**：仅适用于宫颈条件成熟、病情稳定、无剖宫产指征者，且需严密监护。\n\n#### 4. 胎儿管理\n*   **促胎肺成熟**：若决定在24-48小时内终止妊娠，且无立即剖宫产指征，可给予地塞米松促胎肺成熟。但鉴于李某症状明显，**不应为了等待激素起效而延误终止妊娠的时机**。\n*   **新生儿科会诊**：提前通知新生儿科医生到场，准备早产儿复苏。\n\n### 四、 总结与警示\n1.  **核心风险**：李某有发展为**子痫**（抽搐）和**脑出血**的高风险。\n2.  **关键行动**：立即使用硫酸镁解痉，控制血压，完善头颅影像学检查排除颅内病变。\n3.  **最终决策**：在病情稳定后，**尽快剖宫产终止妊娠**，这是治疗重度子痫前期最根本的方法。\n\n**请务必立即通知上级医师，并启动产科急救流程！**"
+            }
+          }
+        ],
+        "created": 1779892661,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1810,
+          "prompt_tokens": 93,
+          "total_tokens": 1903
+        },
+        "id": "chatcmpl-ImnmuyEz3J6VNfBWwkLKqLyOby8hAatx",
+        "timings": {
+          "cache_n": 89,
+          "prompt_n": 4,
+          "prompt_ms": 35.337,
+          "prompt_per_token_ms": 8.83425,
+          "prompt_per_second": 113.19580043580382,
+          "predicted_n": 1810,
+          "predicted_ms": 41363.556,
+          "predicted_per_token_ms": 22.852793370165745,
+          "predicted_per_second": 43.758326774419494
+        }
+      },
+      "measured_latency_s": 41.4531,
+      "prompt_tokens": 93,
+      "completion_tokens": 1810,
+      "total_tokens": 1903,
+      "tokens_per_sec": 43.66,
+      "output_text": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为紧急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 初步诊断印象\n**重度子痫前期（Severe Preeclampsia）**\n*   **依据**：\n    1.  **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg或舒张压≥90 mmHg，且舒张压≥90 mmHg提示病情较重）。\n    2.  **蛋白尿**：尿蛋白++（提示肾脏受损）。\n    3.  **中枢神经系统症状**：头痛、视物模糊（这是重度子痫前期的典型警示症状，提示脑血管痉挛或脑水肿可能）。\n    4.  **水肿**：双下肢水肿++（虽水肿特异性不高，但结合高血压和蛋白尿具有参考意义）。\n\n---\n\n### 二、 鉴别诊断与推理链\n\n我们需要排除其他引起妊娠期高血压、蛋白尿或神经系统症状的疾病。\n\n#### 1. 妊娠期高血压疾病谱系内的鉴别\n*   **轻度子痫前期**：\n    *   *鉴别点*：轻度通常无自觉症状，血压虽升高但无靶器官损害表现。\n    *   *推理*"
+    },
+    {
+      "timestamp": "2026-05-27T22:38:28.135558",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为危急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 病例特点总结\n1.  **高危因素**：初产妇，孕晚期（34周）。\n2.  **核心症状**：头痛、视物模糊（提示中枢神经系统受累或眼底病变，属于重度子痫前期的**症状性表现**）。\n3.  **关键体征**：\n    *   **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg 或 舒张压≥90 mmHg，此处舒张压已达重度标准≥110 mmHg的边缘，且收缩压显著升高）。\n    *   **蛋白尿**：++（提示肾脏损害）。\n    *   **水肿**：双下肢++（虽水肿特异性不高，但结合高血压和蛋白尿具有辅助诊断意义）。\n\n### 二、 诊断推理链\n\n1.  **初步诊断方向**：妊娠期高血压疾病谱系。\n2.  **排除其他原因的高血压**：\n    *   患者既往无高血压病史（初产妇，假设孕前健康），且发病于孕20周后，首先考虑妊娠期特有疾病。\n    *   需排除慢性高血压合并妊娠（需回顾孕前或孕早期血压记录，若无可排除）。\n    *   需排除继发性高血压（如肾实质疾病、嗜铬细胞瘤等，但结合蛋白尿和典型孕晚期发病，概率较低，需通过后续检查排除）。\n3.  **确定严重程度**：\n    *   根据ACOG（美国妇产科医师学会）及中国《妊娠期高血压疾病诊治指南》：\n        *   **高血压**：BP 155/100 mmHg。\n        *   **蛋白尿**：++。\n        *   **严重特征（Severe Features）**：患者出现**头痛**和**视物模糊**。这是脑部血管痉挛、脑水肿或视网膜病变的表现，属于**重度子痫前期（Severe Preeclampsia）**的诊断标准之一。\n    *   **结论**：该患者诊断为**重度子痫前期**。\n\n### 三、 鉴别诊断\n\n虽然临床表现高度指向重度子痫前期，但仍需与以下疾病鉴别：\n\n1.  **慢性高血压合并妊娠**：\n    *   *鉴别点*：询问孕前或孕20周前是否有高血压史。若孕前血压正常，则可排除。若无法确定，需结合产后血压恢复情况判断。\n2.  **妊娠合并慢性肾脏病**：\n    *   *鉴别点*：是否有长期蛋白尿、血尿史？肾功能（肌酐、尿素氮）是否孕前即异常？眼底检查是否有高血压视网膜病变长期改变？\n3.  **HELLP综合征**：\n    *   *鉴别点*：重度子痫前期可能并发HELLP综合征（溶血、肝酶升高、血小板减少）。需立即查血常规（血小板）、肝功能（AST/ALT）、LDH、外周血涂片。若血小板<100×10⁹/L或肝酶升高，则诊断为HELLP。\n4.  **颅内病变（如脑出血、脑梗死、脑肿瘤）**：\n    *   *鉴别点*：头痛剧烈伴视物模糊需警惕。若血压控制后症状不缓解，或出现神经系统定位体征（如偏瘫、意识障碍），需行头颅CT/MRI排除。\n5.  **偏头痛或紧张性头痛**：\n    *   *鉴别点*：通常无高血压和蛋白尿，神经系统查体无阳性体征，血压正常。本例患者有明确的高血压和蛋白尿，故不支持。\n6.  **急性脂肪肝（AFLP）**：\n    *   *鉴别点*：常伴有恶心、呕吐、黄疸、低血糖、凝血功能障碍。本例未提及消化道症状和黄疸，可能性较小，但需查肝功能、血糖、凝血功能排除。\n\n### 四、 处理建议\n\n**原则**：重度子痫前期是产科急症，目标是**控制病情进展、预防子痫发作、评估母胎状况、适时终止妊娠**。孕34周已属晚期早产，胎儿存活率高，**终止妊娠是根本治疗措施**。\n\n#### 1. 紧急评估与监测\n*   **生命体征**：每4-6小时测血压，若血压持续≥160/110 mmHg，需静脉用药紧急降压。\n*   **实验室检查**：\n    *   血常规（重点关注血小板，排除HELLP）。\n    *   肝肾功能、尿酸、电解质。\n    *   凝血功能。\n    *   尿蛋白定量（24小时尿蛋白或尿蛋白/肌酐比值）。\n*   **胎儿评估**：\n    *   胎心监护（NST）：评估胎儿宫内储备。\n    *   B超：评估胎儿生长、羊水量、脐血流（S/D值）、大脑中动脉血流。\n    *   生物物理评分（BPP）。\n\n#### 2. 药物治疗\n*   **解痉治疗（首选硫酸镁）**：\n    *   **指征**：所有重度子痫前期患者均应使用硫酸镁预防子痫发作。\n    *   **用法**：负荷量4-6g静脉滴注（20-30分钟），维持量1-2g/h持续静脉泵入。\n    *   **监测**：膝腱反射存在、呼吸≥16次/分、尿量≥25ml/h。备钙剂（葡萄糖酸钙）作为解毒剂。\n*   **降压治疗**：\n    *   **指征**：收缩压≥160 mmHg 或 舒张压≥110 mmHg，或伴有严重症状（如本例头痛、视物模糊）。\n    *   **药物选择**：\n        *   **拉贝洛尔**（Labetalol）：静脉推注或口服，一线用药。\n        *   **硝苯地平**（Nifedipine）：短效或缓释片，口服。\n        *   **肼屈嗪**（Hydralazine）：静脉用药，二线。\n    *   **目标**：将血压控制在140-150/90-100 mmHg左右，避免血压过低影响胎盘灌注。\n*   **镇静治疗**：\n    *   若患者焦虑、失眠严重，可酌情使用地西泮等，但需谨慎，避免抑制胎儿呼吸。\n\n#### 3. 促胎肺成熟\n*   孕34周，若预计48小时内不能分娩，且无立即终止妊娠指征，可考虑使用**地塞米松**（6mg im q12h × 4次）或**倍他米松**促胎肺成熟。\n*   **注意**：本例患者有头痛、视物模糊等严重症状，提示病情不稳定，**促胎肺成熟不应延误终止妊娠的时机**。若病情恶化，应立即分娩。\n\n#### 4. 终止妊娠时机与方式\n*   **时机**：\n    *   重度子痫前期患者，孕周≥34周，**建议终止妊娠**。\n    *   本例已34周，且有严重症状（头痛、视物模糊），**不应期待治疗**，应在积极治疗24-48小时稳定病情后，尽快终止妊娠。若病情迅速恶化（如出现子痫、胎盘早剥、HELLP、心衰等），则**立即终止妊娠**。\n*   **方式**：\n    *   **剖宫产**：若宫颈条件不成熟（Bishop评分低）、胎儿窘迫、或病情不稳定无法耐受阴道分娩，首选剖宫产。\n    *   **阴道分娩**：若宫颈条件成熟、胎儿状况良好、母体病情稳定，可尝试引产。但需严密监护，若产程进展不顺或病情加重，转剖宫产。\n\n#### 5. 产后管理\n*   子痫前期不会因分娩立即消失，产后24-72小时仍可能发生子痫。\n*   继续硫酸镁治疗24小时。\n*   继续监测血压，产后高血压可能持续数周，需长期随访。\n*   监测尿量、肾功能，警惕产后出血和血栓形成。\n\n### 五、 给患者及家属的沟通要点\n1.  **病情严重性**：明确告知目前诊断为“重度子痫前期”，有发展为子痫（抽搐）、脑出血、胎盘早剥等危及母婴生命的风险。\n2.  **治疗必要性**：必须住院，使用硫酸镁解痉，必要时使用降压药。\n3.  **分娩决策**：孕34周胎儿已具备较好存活能力，为了母亲安全，建议尽快终止妊娠。拖延可能导致不可逆的器官损害。\n4.  **预后**：多数患者产后血压和症状会逐渐恢复，但未来患慢性高血压和心血管疾病的风险增加。\n\n**总结**：该患者为**重度子痫前期**，伴有神经系统症状。**首要任务是住院、解痉（硫酸镁）、控制血压、评估胎儿状况，并在病情稳定后尽快终止妊娠（首选剖宫产或根据宫颈条件引产）**。切勿在家观察或单纯休息。"
+            }
+          }
+        ],
+        "created": 1779892708,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 2052,
+          "prompt_tokens": 93,
+          "total_tokens": 2145
+        },
+        "id": "chatcmpl-WydhF9WdvvA0cRkdf77R32ruyByNSyH8",
+        "timings": {
+          "cache_n": 89,
+          "prompt_n": 4,
+          "prompt_ms": 35.535,
+          "prompt_per_token_ms": 8.88375,
+          "prompt_per_second": 112.5650766849585,
+          "predicted_n": 2052,
+          "predicted_ms": 46907.661,
+          "predicted_per_token_ms": 22.859483918128657,
+          "predicted_per_second": 43.745519521853794
+        }
+      },
+      "measured_latency_s": 47.0,
+      "prompt_tokens": 93,
+      "completion_tokens": 2052,
+      "total_tokens": 2145,
+      "tokens_per_sec": 43.66,
+      "output_text": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为危急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 病例特点总结\n1.  **高危因素**：初产妇，孕晚期（34周）。\n2.  **核心症状**：头痛、视物模糊（提示中枢神经系统受累或眼底病变，属于重度子痫前期的**症状性表现**）。\n3.  **关键体征**：\n    *   **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg 或 舒张压≥90 mmHg，此处舒张压已达重度标准≥110 mmHg的边缘，且收缩压显著升高）。\n    *   **蛋白尿**：++（提示肾脏损害）。\n    *   **水肿**：双下肢++（虽水肿特异性不高，但结合高血压和蛋白尿具有辅助诊断意义）。\n\n### 二、 诊断推理链\n\n1.  **初步诊断方向**：妊娠期高血压疾病谱系。\n2.  **排除其他原因的高血压**：\n    *   患者既往无高血压病史（初产妇，假设孕前健康），且发病于孕20周后，首先考虑妊娠期特有疾病。\n    *   需排除慢性高血压合并妊娠（需回顾"
+    },
+    {
+      "timestamp": "2026-05-27T22:39:08.759090",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "医生-鉴别诊断",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是智医生，一位资深产科医生。请提供鉴别诊断和推理链。"
+          },
+          {
+            "role": "user",
+            "content": "孕妇李某，28岁，初产妇，孕34周。主诉：头痛2天，视物模糊1天。查体：BP 155/100mmHg，双下肢水肿++。尿蛋白++。请给出鉴别诊断和处理建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为危急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 病例特点总结\n1.  **高危因素**：初产妇，孕晚期（34周）。\n2.  **核心症状**：头痛、视物模糊（提示中枢神经系统受累或眼底病变）。\n3.  **关键体征**：\n    *   **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg 或 舒张压≥90 mmHg）。\n    *   **蛋白尿**：尿蛋白++（提示肾脏损伤）。\n    *   **水肿**：双下肢水肿++（虽非特异性，但结合高血压和蛋白尿具有辅助诊断意义）。\n\n### 二、 诊断推理链\n\n1.  **初步诊断指向**：\n    *   根据《妊娠高血压疾病诊治指南》，妊娠期出现高血压（≥140/90 mmHg）且伴有蛋白尿（≥0.3g/24h或随机尿蛋白+），即可诊断为**子痫前期**。\n    *   该患者舒张压达100 mmHg，且伴有头痛、视物模糊等**严重特征（Severe Features）**，因此诊断为：**重度子痫前期（Severe Preeclampsia）**。\n\n2.  **鉴别诊断（排除其他引起高血压和蛋白尿的疾病）**：\n\n    *   **慢性高血压合并妊娠**：\n        *   *鉴别点*：需询问孕前或孕20周前是否有高血压病史。若孕20周前血压正常，且产后12周血压未恢复，则排除。本例为初产妇，孕34周新发，可能性小，但不能完全排除孕前未发现的慢性高血压。\n    *   **慢性肾脏病合并妊娠**：\n        *   *鉴别点*：需回顾孕前是否有蛋白尿、血肌酐升高或肾脏病史。若孕前肾功能正常，孕期新发蛋白尿伴高血压，倾向于子痫前期。\n    *   **妊娠合并原发性高血压**：\n        *   *鉴别点*：通常无蛋白尿或蛋白尿轻微，且无头痛、视物模糊等靶器官损害症状。本例症状明显，不支持单纯原发性高血压。\n    *   **子痫（Eclampsia）**：\n        *   *鉴别点*：子痫前期基础上发生不能用其他原因解释的抽搐。目前患者仅有头痛、视物模糊，尚未发生抽搐，故诊断为重度子痫前期，但需警惕随时转化为子痫。\n    *   **HELLP综合征**：\n        *   *鉴别点*：需查血常规和肝功能。若出现溶血（LDH升高、外周血涂片见破碎红细胞）、肝酶升高（AST/ALT升高）、血小板减少，则需考虑此并发症。\n\n### 三、 进一步检查建议（完善评估）\n\n在制定最终处理方案前，必须迅速完成以下检查以评估母胎状况及靶器官损害程度：\n\n1.  **实验室检查**：\n    *   **血常规**：重点看血小板计数（排除HELLP综合征）、血红蛋白（评估血液浓缩程度）。\n    *   **肝肾功能**：ALT、AST、肌酐、尿酸（尿酸升高常早于肌酐，提示肾损害）。\n    *   **凝血功能**：排除DIC风险。\n    *   **24小时尿蛋白定量**：若尿蛋白定性波动大，需定量评估严重程度。\n2.  **影像学检查**：\n    *   **眼底检查**：评估视网膜动脉痉挛、水肿或出血情况，解释视物模糊原因。\n    *   **头颅CT/MRI**：若头痛剧烈或出现神经系统定位体征，需排除脑出血或可逆性后部白质脑病综合征（RPLS）。\n3.  **产科评估**：\n    *   **胎心监护（NST）**：评估胎儿宫内储备情况。\n    *   **B超**：测量羊水指数、胎儿生物物理评分、脐动脉血流阻力（S/D值），评估胎儿生长受限（FGR）及胎盘功能。\n\n### 四、 处理建议\n\n鉴于患者孕34周，已属晚期早产，且出现重度子痫前期的严重特征（头痛、视物模糊），**终止妊娠是根本治疗措施**。但需根据母胎具体情况决定时机和方式。\n\n#### 1. 一般治疗\n*   **住院严密监护**：绝对卧床休息，左侧卧位，改善胎盘血流。\n*   **环境**：保持安静，避免声光刺激，防止诱发子痫。\n*   **监测**：每日监测体重、血压、尿量；记录24小时出入量。\n\n#### 2. 药物治疗\n*   **解痉治疗（首选硫酸镁）**：\n    *   *目的*：预防子痫发作，非降压药。\n    *   *用法*：负荷剂量4-6g静脉推注，维持量1-2g/h静脉滴注。\n    *   *注意*：监测膝腱反射、呼吸频率（>16次/分）、尿量（>25ml/h或600ml/24h），备好钙剂（葡萄糖酸钙）作为解毒剂。\n*   **降压治疗**：\n    *   *指征*：收缩压≥160 mmHg 或 舒张压≥110 mmHg 时需紧急降压，以防脑出血。\n    *   *药物*：本例BP 155/100 mmHg，若头痛持续或血压进一步升高，可使用**拉贝洛尔**（静脉或口服）或**硝苯地平**（短效或缓释片）。目标是将血压控制在安全范围（140-150/90-100 mmHg），避免过低影响胎盘灌注。\n*   **镇静治疗**：\n    *   若患者焦虑失眠严重，可酌情使用地西泮，但需谨慎，因可能抑制胎儿呼吸。\n\n#### 3. 促胎肺成熟\n*   若决定在48小时内终止妊娠，且孕周<34周（本例34周，处于临界值），可考虑使用**地塞米松**促进胎儿肺成熟，但需权衡母体病情稳定性。若母体病情不稳定，不应为了促肺成熟而延迟终止妊娠。\n\n#### 4. 终止妊娠时机与方式\n*   **时机**：\n    *   患者已出现**头痛、视物模糊**，提示中枢神经系统受累，属于**重度子痫前期的严重特征**。\n    *   根据指南，对于孕周≥34周的重度子痫前期，**建议终止妊娠**。\n    *   若经积极治疗24-48小时后病情无改善或加重，应立即终止妊娠。\n*   **方式**：\n    *   **剖宫产**：若宫颈条件不成熟、胎儿窘迫、或病情危重需迅速结束分娩，首选剖宫产。\n    *   **阴道分娩**：若宫颈条件成熟、胎儿状况良好、母体病情稳定，可尝试引产，但需严密监护，随时准备中转剖宫产。\n\n### 五、 风险提示与沟通\n1.  **母体风险**：子痫、脑出血、心力衰竭、急性肾衰竭、HELLP综合征、胎盘早剥。\n2.  **胎儿风险**：胎儿窘迫、早产儿并发症（呼吸窘迫综合征、颅内出血等）。\n3.  **医患沟通**：向家属详细告知病情的危重性，强调终止妊娠的必要性，签署知情同意书。\n\n**总结**：该患者诊断为**重度子痫前期**，伴有中枢神经系统症状。**首要任务是预防子痫发作（硫酸镁解痉）和控制血压**，并**尽快评估终止妊娠的时机**。鉴于孕34周且症状明显，建议在积极治疗24-48小时后，若病情稳定则终止妊娠；若病情恶化，则立即终止妊娠。"
+            }
+          }
+        ],
+        "created": 1779892748,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1774,
+          "prompt_tokens": 93,
+          "total_tokens": 1867
+        },
+        "id": "chatcmpl-pxwRwGkmHa3iSHnSX9rAUOcBFHnpTDAD",
+        "timings": {
+          "cache_n": 89,
+          "prompt_n": 4,
+          "prompt_ms": 36.236,
+          "prompt_per_token_ms": 9.059,
+          "prompt_per_second": 110.38745998454577,
+          "predicted_n": 1774,
+          "predicted_ms": 40527.801,
+          "predicted_per_token_ms": 22.84543461104848,
+          "predicted_per_second": 43.772421800037954
+        }
+      },
+      "measured_latency_s": 40.6233,
+      "prompt_tokens": 93,
+      "completion_tokens": 1774,
+      "total_tokens": 1867,
+      "tokens_per_sec": 43.67,
+      "output_text": "你好，我是智医生。针对这位孕34周初产妇李某的病例，病情较为危急，存在发展为重度子痫前期甚至子痫的风险。以下是详细的鉴别诊断、推理链及处理建议。\n\n### 一、 病例特点总结\n1.  **高危因素**：初产妇，孕晚期（34周）。\n2.  **核心症状**：头痛、视物模糊（提示中枢神经系统受累或眼底病变）。\n3.  **关键体征**：\n    *   **高血压**：BP 155/100 mmHg（收缩压≥140 mmHg 或 舒张压≥90 mmHg）。\n    *   **蛋白尿**：尿蛋白++（提示肾脏损伤）。\n    *   **水肿**：双下肢水肿++（虽非特异性，但结合高血压和蛋白尿具有辅助诊断意义）。\n\n### 二、 诊断推理链\n\n1.  **初步诊断指向**：\n    *   根据《妊娠高血压疾病诊治指南》，妊娠期出现高血压（≥140/90 mmHg）且伴有蛋白尿（≥0.3g/24h或随机尿蛋白+），即可诊断为**子痫前期**。\n    *   该患者舒张压达100 mmHg，且伴有头痛、视物模糊等**严重特征（Severe Features）**，因此诊断为：**重度子痫"
+    },
+    {
+      "timestamp": "2026-05-27T22:39:45.494804",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "知识检索问答",
+      "run_index": 0,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰腺功能无法代偿，血糖便会升高。\n\n以下是基于主流医学指南（如中国《妊娠期糖尿病诊治指南》、美国糖尿病协会 ADA 及国际糖尿病与妊娠研究组 IADPSG标准）的详细说明：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前国际和国内普遍采用 **75g 口服葡萄糖耐量试验（OGTT）** 进行诊断。通常在妊娠 **24～28 周** 进行筛查。\n\n#### 1. 诊断流程\n*   **第一步：初筛（可选）**\n    *   部分医院会先进行 50g 葡萄糖负荷试验（GLT）。若 1 小时血糖 ≥ 7.8 mmol/L (140 mg/dL)，则需进行第二步确诊试验。\n    *   *注：许多现代指南推荐直接进行 75g OGTT 一步法诊断，以提高效率。*\n\n*   **第二步：确诊试验（75g OGTT）**\n    *   试验前连续 3 天正常饮食（每日碳水化合物不少于 150g），禁食 8～14 小时。\n    *   抽取空腹静脉血，随后口服 75g 无水葡萄糖溶于 300ml 水中，分别在 **服糖后 1 小时** 和 **2 小时** 抽取静脉血。\n\n#### 2. 诊断切点（任何一点血糖值达到或超过以下标准即可诊断）\n\n| 时间点 | 血糖阈值 (mmol/L) | 血糖阈值 (mg/dL) |\n| :--- | :---: | :---: |\n| **空腹** | ≥ 5.1 | ≥ 92 |\n| **服糖后 1 小时** | ≥ 10.0 | ≥ 180 |\n| **服糖后 2 小时** | ≥ 8.5 | ≥ 153 |\n\n> **注意**：只要以上三个时间点中**任意一点**超标，即可诊断为妊娠期糖尿病。\n\n---\n\n### 二、 饮食管理（医学营养治疗 MNT）\n\n饮食控制是 GDM 治疗的基石，目标是在保证母婴营养需求的前提下，将血糖控制在理想范围。\n\n#### 1. 核心原则\n*   **少食多餐**：将每日食物分为 5～6 餐（3 次正餐 + 2～3 次加餐），避免一次性摄入过多碳水化合物导致血糖骤升。\n*   **控制总热量**：根据孕前 BMI 制定。一般不建议孕期过度节食，以免产生酮体影响胎儿脑发育。\n*   **均衡营养**：碳水化合物、蛋白质、脂肪比例合理。\n\n#### 2. 具体建议\n*   **碳水化合物（主食）**：\n    *   占总热量的 40%～50%。\n    *   **选择低升糖指数（Low-GI）食物**：如糙米、燕麦、荞麦、全麦面包、杂豆等。\n    *   避免精制糖和白米白面过量。\n*   **蛋白质**：\n    *   占总热量的 20%～25%。\n    *   优选鱼、禽、蛋、瘦肉、豆制品和低脂奶类。\n*   **脂肪**：\n    *   占总热量的 25%～30%。\n    *   限制饱和脂肪（肥肉、动物油），选择不饱和脂肪（橄榄油、坚果、深海鱼）。\n*   **膳食纤维**：\n    *   每日摄入 25～30g 蔬菜（尤其是绿叶蔬菜），有助于延缓血糖吸收。\n*   **水果**：\n    *   选择低 GI 水果（如苹果、梨、柚子、草莓、樱桃）。\n    *   避免高 GI 水果（如荔枝、龙眼、熟透的香蕉、西瓜）。\n    *   **时机**：建议在两餐之间食用，而非饭后立即吃。\n\n#### 3. 禁忌\n*   禁止饮用含糖饮料、果汁。\n*   限制高糖糕点、糖果、蜂蜜等。\n\n---\n\n### 三、 运动建议\n\n适度运动可增加胰岛素敏感性，帮助控制血糖。但需在医生评估无禁忌症后进行。\n\n#### 1. 适用人群与禁忌\n*   **适用**：无前置胎盘、无早产风险、无严重贫血、无心肺疾病等并发症的孕妇。\n*   **禁忌**：如有阴道出血、规律宫缩、胎膜早破、重度贫血、心脏病等，应禁止运动并遵医嘱。\n\n#### 2. 运动类型\n*   **推荐**：中等强度的有氧运动。\n    *   快走、慢跑、孕妇瑜伽、游泳、固定自行车。\n*   **避免**：有跌倒风险、腹部撞击风险或剧烈跳跃的运动。\n\n#### 3. 运动强度与频率\n*   **频率**：每周至少 5 天，最好每天进行。\n*   **时间**：每次 20～40 分钟。\n*   **时机**：**餐后 30～60 分钟**开始运动最佳（此时血糖较高，运动可有效降低餐后血糖）。\n*   **强度判断**：运动时能正常交谈但不能唱歌（“谈话测试”），心率控制在最大心率的 60%～70%（粗略计算：最大心率 = 220 - 年龄）。\n\n#### 4. 注意事项\n*   运动前后监测血糖，防止低血糖。\n*   随身携带糖果或饼干，以备低血糖发生。\n*   穿着舒适的鞋服，保持水分补充。\n*   如出现头晕、胸痛、呼吸困难、阴道流血或规律宫缩，应立即停止并就医。\n\n---\n\n### 四、 血糖控制目标\n\n饮食和运动结合后，需自我监测血糖。理想控制目标如下（参考中国指南）：\n\n| 指标 | 目标值 (mmol/L) |\n| :--- | :---: |\n| **空腹血糖** | < 5.3 |\n| **餐后 1 小时血糖** | < 7.8 |\n| **餐后 2 小时血糖** | < 6.7 |\n| **夜间血糖** | ≥ 3.3（防止低血糖） |\n\n> **注**：若通过 1～2 周的饮食和运动管理，血糖仍达不到上述标准，应及时就医，启动胰岛素治疗。目前胰岛素是孕期控制血糖最安全、有效的药物，不会通过胎盘影响胎儿。\n\n---\n\n### 五、 重要提醒\n\n1.  **定期产检**：GDM 孕妇属于高危妊娠，需增加产检频率，监测胎儿发育、羊水量及胎盘功能。\n2.  **产后随访**：GDM 产妇未来患 2 型糖尿病的风险显著增加。建议在产后 6～12 周复查 75g OGTT，评估糖代谢恢复情况，并长期保持健康生活方式。\n3.  **个体化方案**：每位孕妇的情况不同，请务必在产科医生和营养师的指导下制定个性化方案。\n\n*免责声明：以上内容仅供参考，不能替代专业医疗建议。如有不适或疑问，请及时咨询您的主治医生。*"
+            }
+          }
+        ],
+        "created": 1779892785,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1601,
+          "prompt_tokens": 43,
+          "total_tokens": 1644
+        },
+        "id": "chatcmpl-U5G1u2T0Ve8YWgDSm26KwhGuApwcW21O",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 43,
+          "prompt_ms": 134.138,
+          "prompt_per_token_ms": 3.1194883720930235,
+          "prompt_per_second": 320.56538788411933,
+          "predicted_n": 1601,
+          "predicted_ms": 36558.268,
+          "predicted_per_token_ms": 22.83464584634603,
+          "predicted_per_second": 43.79310310871402
+        }
+      },
+      "measured_latency_s": 36.7355,
+      "prompt_tokens": 43,
+      "completion_tokens": 1601,
+      "total_tokens": 1644,
+      "tokens_per_sec": 43.58,
+      "output_text": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰腺功能无法代偿，血糖便会升高。\n\n以下是基于主流医学指南（如中国《妊娠期糖尿病诊治指南》、美国糖尿病协会 ADA 及国际糖尿病与妊娠研究组 IADPSG标准）的详细说明：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前国际和国内普遍采用 **75g 口服葡萄糖耐量试验（OGTT）** 进行诊断。通常在妊娠 **24～28 周** 进行筛查。\n\n#### 1. 诊断流程\n*   **第一步：初筛（可选）**\n    *   部分医院会先进行 50g 葡萄糖负荷试验（GLT）。若 1 小时血糖 ≥ 7.8 mmol/L (140 mg/dL)，则需进行第二步确诊试验。\n    *   *注：许多现代指南推荐直接进行 75g OGTT 一步法诊断，以提高效率。*\n\n*   **第二步：确诊试验（75g OGTT）**\n    *   试验前连续 3 天正常饮食（每日碳水化合物不少于 150g），禁食 8～14 小时。\n   "
+    },
+    {
+      "timestamp": "2026-05-27T22:40:23.054507",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "知识检索问答",
+      "run_index": 1,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指在妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰岛β细胞功能不足以代偿，则引发高血糖。\n\n以下是基于主流医学指南（如中国《妊娠期糖尿病诊治指南》、美国糖尿病协会 ADA 及国际糖尿病与妊娠研究组 IADPSG标准）的详细说明：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前临床普遍采用**75g 口服葡萄糖耐量试验（OGTT）**进行诊断。通常在妊娠 **24~28 周**进行筛查。\n\n#### 1. 诊断流程\n1.  **空腹抽血**：禁食至少 8 小时后，抽取空腹静脉血浆葡萄糖。\n2.  **喝糖水**：将 75g 无水葡萄糖溶于 300ml 水中，5 分钟内喝完。\n3.  **餐后抽血**：分别在喝糖水后 **1 小时** 和 **2 小时** 抽取静脉血浆葡萄糖。\n\n#### 2. 诊断阈值（任意一点超标即可诊断）\n| 检测时间点 | 血浆葡萄糖阈值 (mmol/L) |\n| :--- | :--- |\n| **空腹** | ≥ 5.1 |\n| **服糖后 1 小时** | ≥ 10.0 |\n| **服糖后 2 小时** | ≥ 8.5 |\n\n> **注意**：\n> *   若空腹血糖 ≥ 7.0 mmol/L，或随机血糖 ≥ 11.1 mmol/L 伴典型症状，可直接诊断为糖尿病（可能为孕前未发现的糖尿病）。\n> *   若 OGTT 结果正常，但存在高危因素（如肥胖、家族史、既往 GDM 史等），医生可能会建议提前筛查或加强监测。\n\n---\n\n### 二、 饮食管理（医学营养治疗 MNT）\n\n饮食控制是 GDM 治疗的基石，目标是在保证母婴营养需求的前提下，控制血糖在正常范围。\n\n#### 1. 基本原则\n*   **少量多餐**：将每日食物分为 **5~6 餐**（3 次正餐 + 2~3 次加餐），避免一次性摄入过多碳水化合物导致血糖骤升。\n*   **控制总热量**：根据孕前 BMI 计算每日所需热量。\n    *   正常体重：约 30~35 kcal/kg/d\n    *   超重/肥胖：适当减少 20%~30% 热量，但不得低于 1800 kcal/d。\n*   **均衡营养**：\n    *   **碳水化合物**：占总热量的 40%~50%。选择**低升糖指数（Low GI）**食物，如全麦面包、糙米、燕麦、荞麦、豆类。\n    *   **蛋白质**：占总热量的 20%~25%。优先选择鱼、禽、蛋、瘦肉、豆制品。\n    *   **脂肪**：占总热量的 25%~30%。限制饱和脂肪和反式脂肪，增加不饱和脂肪酸（如坚果、橄榄油、深海鱼）。\n    *   **膳食纤维**：每日摄入 25~30g，有助于延缓血糖吸收。\n\n#### 2. 食物选择建议\n*   **推荐多吃**：\n    *   非淀粉类蔬菜（绿叶菜、西兰花、黄瓜、番茄等）。\n    *   低糖水果（苹果、梨、柚子、草莓、猕猴桃），建议在两餐之间食用，每次约 100~150g。\n*   **限制/避免**：\n    *   精制糖（白糖、红糖、蜂蜜、糖果、蛋糕、含糖饮料）。\n    *   高 GI 主食（白米饭、白馒头、白面条、糯米制品）。\n    *   高脂肪、油炸食品。\n\n#### 3. 加餐策略\n*   睡前加餐尤为重要，可预防夜间低血糖和酮体生成。\n*   推荐：一杯无糖牛奶/豆浆 + 几片全麦饼干，或一个小苹果。\n\n---\n\n### 三、 运动建议\n\n规律运动可提高胰岛素敏感性，帮助控制血糖。\n\n#### 1. 适用人群\n*   无产科禁忌证（如前置胎盘、先兆流产、宫颈机能不全、严重贫血、心脏病等）的 GDM 孕妇。\n\n#### 2. 运动方式\n*   **有氧运动为主**：步行、慢跑、游泳、固定自行车、孕妇瑜伽。\n*   **避免**：有跌倒风险、腹部撞击风险或剧烈跳跃的运动。\n\n#### 3. 运动时间与频率\n*   **时机**：建议在**餐后 30~60 分钟**开始运动，此时血糖较高，运动效果最佳。\n*   **频率**：每周至少 **5 天**，最好每天进行。\n*   **时长**：每次 **20~40 分钟**，中等强度。\n\n#### 4. 运动强度判断\n*   **中等强度**：运动时心率稍快，微微出汗，能说话但不能唱歌。\n*   **简易判断法**：运动后心率增加不超过最大心率的 60%~70%（最大心率 ≈ 220 - 年龄）。\n*   **自我监测**：运动后感觉舒适，无疲劳感，次日无不适。\n\n#### 5. 注意事项\n*   运动前后监测血糖，防止低血糖。\n*   随身携带糖果或饼干，以备低血糖时急救。\n*   出现宫缩、阴道流血、头晕、胸痛、呼吸困难等应立即停止运动并就医。\n\n---\n\n### 四、 血糖控制目标\n\n通过饮食和运动管理，大多数 GDM 患者可将血糖控制在以下范围：\n\n| 指标 | 目标值 (mmol/L) |\n| :--- | :--- |\n| **空腹血糖** | < 5.3 |\n| **餐后 1 小时血糖** | < 7.8 |\n| **餐后 2 小时血糖** | < 6.7 |\n| **夜间血糖** | ≥ 3.3（防止低血糖） |\n| **糖化血红蛋白 (HbA1c)** | < 5.5%（若检测） |\n\n> **注**：若严格饮食和运动控制 1~2 周后，血糖仍不达标，需在医生指导下启动**胰岛素治疗**。口服降糖药（如二甲双胍）在某些情况下也可使用，但胰岛素仍是首选且对胎儿最安全的药物。\n\n---\n\n### 五、 产后随访\n\n*   **产后 6~12 周**：应重新进行 75g OGTT 检查，评估糖代谢是否恢复正常。\n*   **长期风险**：GDM 女性未来患 2 型糖尿病的风险显著增加（约 50% 在 10~20 年内发展为 T2DM）。\n*   **建议**：\n    *   保持健康体重。\n    *   坚持母乳喂养（有助于改善母体代谢）。\n    *   每 1~3 年进行一次血糖筛查。\n    *   再次妊娠时，应在孕早期进行血糖筛查。\n\n---\n\n**重要提示**：以上信息为通用医学知识，具体诊疗方案请严格遵循您的产科医生和内分泌科医生的个性化指导。定期产检、自我血糖监测和医患沟通是成功管理 GDM 的关键。"
+            }
+          }
+        ],
+        "created": 1779892823,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1637,
+          "prompt_tokens": 43,
+          "total_tokens": 1680
+        },
+        "id": "chatcmpl-OTwwx8k46kt6MeXDHW1r1azQMTIstv35",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 43,
+          "prompt_ms": 134.507,
+          "prompt_per_token_ms": 3.1280697674418607,
+          "prompt_per_second": 319.68596429925583,
+          "predicted_n": 1637,
+          "predicted_ms": 37385.702,
+          "predicted_per_token_ms": 22.837936469150883,
+          "predicted_per_second": 43.78679314353921
+        }
+      },
+      "measured_latency_s": 37.5595,
+      "prompt_tokens": 43,
+      "completion_tokens": 1637,
+      "total_tokens": 1680,
+      "tokens_per_sec": 43.58,
+      "output_text": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指在妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰岛β细胞功能不足以代偿，则引发高血糖。\n\n以下是基于主流医学指南（如中国《妊娠期糖尿病诊治指南》、美国糖尿病协会 ADA 及国际糖尿病与妊娠研究组 IADPSG标准）的详细说明：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前临床普遍采用**75g 口服葡萄糖耐量试验（OGTT）**进行诊断。通常在妊娠 **24~28 周**进行筛查。\n\n#### 1. 诊断流程\n1.  **空腹抽血**：禁食至少 8 小时后，抽取空腹静脉血浆葡萄糖。\n2.  **喝糖水**：将 75g 无水葡萄糖溶于 300ml 水中，5 分钟内喝完。\n3.  **餐后抽血**：分别在喝糖水后 **1 小时** 和 **2 小时** 抽取静脉血浆葡萄糖。\n\n#### 2. 诊断阈值（任意一点超标即可诊断）\n| 检测时间点 | 血浆葡萄糖阈值 (mmol/L) |\n| :--- | :--- |\n| **空腹** | ≥ 5.1 |\n| **服糖后"
+    },
+    {
+      "timestamp": "2026-05-27T22:41:04.802466",
+      "backend": "local",
+      "model": "qwen3.6-35b-q8-vl",
+      "test_case": "知识检索问答",
+      "run_index": 2,
+      "request_payload": {
+        "model": "qwen3.6-35b-q8-vl",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是孕期健康知识助手，请根据医学知识回答。"
+          },
+          {
+            "role": "user",
+            "content": "请详细说明妊娠期糖尿病(GDM)的诊断标准、饮食管理和运动建议。"
+          }
+        ],
+        "max_tokens": "unlimited",
+        "temperature": 0.3,
+        "stream": false
+      },
+      "response_status": 200,
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指在妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰岛β细胞功能不足以代偿，则引发高血糖。\n\n以下是基于主流医学指南（如中国《妊娠合并糖尿病诊治指南》、美国糖尿病协会 ADA 指南等）整理的详细解答：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前临床普遍采用**“一步法”**进行筛查和诊断。通常在妊娠 **24~28 周**进行口服葡萄糖耐量试验（OGTT）。\n\n#### 1. 诊断流程\n- **空腹抽血**：禁食至少 8 小时后，抽取空腹静脉血浆葡萄糖。\n- **喝糖水**：将 **75g** 无水葡萄糖粉溶于 300ml 水中，5 分钟内饮完。\n- **后续抽血**：分别在服糖后 **1 小时** 和 **2 小时** 抽取静脉血浆葡萄糖。\n\n#### 2. 诊断阈值（静脉血浆葡萄糖值）\n只要上述三项指标中，**任意一项**达到或超过以下标准，即可诊断为 GDM：\n\n| 检测时间点 | 诊断切点 (mmol/L) |\n| :--- | :--- |\n| **空腹** | ≥ 5.1 |\n| **服糖后 1 小时** | ≥ 10.0 |\n| **服糖后 2 小时** | ≥ 8.5 |\n\n> **注意**：\n> - 如果空腹血糖 ≥ 7.0 mmol/L，或随机血糖 ≥ 11.1 mmol/L 伴典型高血糖症状，可直接诊断为糖尿病（可能为孕前未发现的糖尿病），需进一步评估。\n> - 若 OGTT 结果正常，但存在高危因素（如肥胖、家族史、既往 GDM 史等），医生可能会建议提前筛查或加强监测。\n\n---\n\n### 二、 饮食管理（医学营养治疗，MNT）\n\n饮食控制是 GDM 治疗的基石，约 70%~90% 的 GDM 患者仅通过饮食和运动即可控制血糖。\n\n#### 1. 核心原则\n- **控制总热量**：避免体重增长过快，但**严禁节食或饥饿疗法**，以防产生酮体影响胎儿神经系统发育。\n- **少食多餐**：将每日食物分为 **5~6 餐**（3 次正餐 + 2~3 次加餐），避免餐后血糖骤升。\n- **均衡营养**：保证蛋白质、膳食纤维、维生素和矿物质的摄入。\n\n#### 2. 宏量营养素分配建议\n- **碳水化合物（40%~50%）**：\n  - 选择**低升糖指数（Low GI）**食物：如糙米、燕麦、荞麦、全麦面包、杂豆等。\n  - 避免精制糖和白米面：如白糖、蜂蜜、甜点、白粥、白面条。\n  - 每餐主食量需固定，不可随意增减。\n- **蛋白质（20%~25%）**：\n  - 优选优质蛋白：鱼、虾、瘦肉、禽肉、蛋类、低脂奶制品、豆制品。\n  - 每日保证摄入足够的蛋白质以支持胎儿生长。\n- **脂肪（<30%）**：\n  - 限制饱和脂肪和反式脂肪：少吃肥肉、动物内脏、油炸食品、奶油。\n  - 选用不饱和脂肪酸：橄榄油、亚麻籽油、坚果（适量）。\n\n#### 3. 蔬菜与水果\n- **蔬菜**：每日摄入 500g 以上，以绿叶蔬菜为主，富含膳食纤维，有助于延缓血糖上升。\n- **水果**：\n  - 血糖控制达标时，可在两餐之间适量食用（如上午 10 点、下午 3 点）。\n  - 选择低 GI 水果：苹果、梨、柚子、草莓、樱桃等。\n  - 避免高 GI 水果：荔枝、龙眼、榴莲、熟透的香蕉、西瓜等。\n  - 每次摄入量控制在 100~200g（约一个拳头大小）。\n\n#### 4. 禁忌与限制\n- 禁止饮用含糖饮料（可乐、果汁、奶茶）。\n- 限制高盐、高油食物。\n- 避免食用加工食品（如香肠、腊肉）。\n\n---\n\n### 三、 运动建议\n\n规律运动可提高胰岛素敏感性，帮助控制血糖和体重。\n\n#### 1. 适用人群与禁忌\n- **适用**：无产科并发症（如前置胎盘、先兆流产、宫颈机能不全等）、无严重内科合并症的孕妇。\n- **禁忌**：如有阴道出血、规律宫缩、胎膜早破、重度贫血、心脏病等，应禁止运动并遵医嘱。\n\n#### 2. 运动方式\n- **推荐项目**：\n  - 中等强度有氧运动：快走、慢跑、游泳、固定自行车、孕妇瑜伽。\n  - 抗阻训练：使用轻重量弹力带或哑铃（需专业指导）。\n- **避免项目**：\n  - 有跌倒风险的运动（如滑雪、骑马）。\n  - 仰卧位运动（孕中期后避免长时间平躺，以免压迫下腔静脉）。\n  - 剧烈跳跃或冲击性运动。\n\n#### 3. 运动频率与强度\n- **频率**：每周至少 **150 分钟**，分 3~5 次进行，最好每次餐后运动。\n- **强度**：中等强度，即运动时能说话但不能唱歌，心率控制在最大心率的 60%~70%（最大心率 ≈ 220 - 年龄）。\n- **时间**：每次 **20~30 分钟**，包括 5~10 分钟热身和整理活动。\n\n#### 4. 最佳运动时机\n- **餐后 30~60 分钟**开始运动，此时血糖峰值出现，运动可有效降低餐后血糖。\n- 避免空腹运动，以防低血糖。\n\n---\n\n### 四、 血糖监测与目标值\n\n饮食和运动需配合血糖监测，以评估效果并及时调整方案。\n\n#### 1. 监测频率\n- 初诊或调整治疗方案时：每日监测 **7 次**（三餐前 + 三餐后 2 小时 + 睡前）。\n- 血糖稳定后：每周至少监测 **2~3 天**，每天测 4 次（空腹 + 三餐后 2 小时）。\n\n#### 2. 血糖控制目标（推荐标准）\n| 指标 | 目标值 (mmol/L) |\n| :--- | :--- |\n| **空腹血糖** | < 5.3 |\n| **餐后 1 小时血糖** | < 7.8 |\n| **餐后 2 小时血糖** | < 6.7 |\n| **夜间血糖** | ≥ 3.3（防止低血糖） |\n\n> **注**：不同医院或指南可能略有差异，请以主治医生设定的目标为准。\n\n---\n\n### 五、 何时需要药物治疗？\n\n如果经过 **1~2 周** 严格的饮食控制和运动干预，血糖仍不达标（如空腹 ≥ 5.3 mmol/L 或餐后 2 小时 ≥ 6.7 mmol/L），则需启动药物治疗。\n\n- **首选药物**：**胰岛素**。胰岛素不通过胎盘，对胎儿安全。\n- **口服药**：在某些国家或地区，二甲双胍或格列本脲可能被使用，但在中国，胰岛素仍是首选，口服药需在医生严格评估下使用。\n\n---\n\n### 六、 产后随访\n\nGDM 患者在产后 6~12 周应重新进行 **75g OGTT** 检查，以排除持续性糖尿病或糖耐量异常。\n\n- 即使产后血糖正常，GDM 患者未来患 2 型糖尿病的风险显著增加，建议：\n  - 保持健康生活方式。\n  - 每 1~3 年进行一次血糖筛查。\n  - 母乳喂养有助于降低母亲未来患糖尿病的风险。\n\n---\n\n**重要提示**：以上信息为通用医学知识科普，不能替代个体化医疗建议。每位孕妇的情况不同，请务必在产科医生和营养师的指导下制定专属管理方案。"
+            }
+          }
+        ],
+        "created": 1779892864,
+        "model": "qwen3.6-35b-q8-vl",
+        "system_fingerprint": "b8407-312cf0332",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 1820,
+          "prompt_tokens": 43,
+          "total_tokens": 1863
+        },
+        "id": "chatcmpl-oaL7qfVljp7hq2vDPzlNAcNaQ1qvvyMC",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 43,
+          "prompt_ms": 134.611,
+          "prompt_per_token_ms": 3.130488372093023,
+          "prompt_per_second": 319.4389760123616,
+          "predicted_n": 1820,
+          "predicted_ms": 41573.51,
+          "predicted_per_token_ms": 22.842587912087915,
+          "predicted_per_second": 43.77787682589225
+        }
+      },
+      "measured_latency_s": 41.7477,
+      "prompt_tokens": 43,
+      "completion_tokens": 1820,
+      "total_tokens": 1863,
+      "tokens_per_sec": 43.6,
+      "output_text": "妊娠期糖尿病（Gestational Diabetes Mellitus, GDM）是指在妊娠期间首次发生或发现的糖代谢异常。由于孕期激素变化导致胰岛素抵抗增加，若胰岛β细胞功能不足以代偿，则引发高血糖。\n\n以下是基于主流医学指南（如中国《妊娠合并糖尿病诊治指南》、美国糖尿病协会 ADA 指南等）整理的详细解答：\n\n---\n\n### 一、 GDM 的诊断标准\n\n目前临床普遍采用**“一步法”**进行筛查和诊断。通常在妊娠 **24~28 周**进行口服葡萄糖耐量试验（OGTT）。\n\n#### 1. 诊断流程\n- **空腹抽血**：禁食至少 8 小时后，抽取空腹静脉血浆葡萄糖。\n- **喝糖水**：将 **75g** 无水葡萄糖粉溶于 300ml 水中，5 分钟内饮完。\n- **后续抽血**：分别在服糖后 **1 小时** 和 **2 小时** 抽取静脉血浆葡萄糖。\n\n#### 2. 诊断阈值（静脉血浆葡萄糖值）\n只要上述三项指标中，**任意一项**达到或超过以下标准，即可诊断为 GDM：\n\n| 检测时间点 | 诊断切点 (mmol/L) |\n| :--- | :--- |\n| **空腹"
+    }
+  ]
+}

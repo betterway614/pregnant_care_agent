@@ -148,6 +148,26 @@ export const useChatStore = defineStore('chat', () => {
     persist()
   }
 
+  /** 加载指定会话的消息 */
+  async function loadSession(pregnantId: string, targetSessionId: string) {
+    try {
+      const res = await chatApi.getConversation(pregnantId, targetSessionId)
+      const backendMessages = res.data?.messages || []
+      sessionId.value = targetSessionId
+      messages.value = backendMessages.map((m, idx) => ({
+        id: `session_${idx}_${Date.now()}`,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: m.created_at || new Date().toISOString(),
+      }))
+      loading.value = false
+      streaming.value = false
+      persist()
+    } catch {
+      // 加载失败不影响使用
+    }
+  }
+
   /** 清除当前用户的所有数据 */
   function clearAll() {
     messages.value = []
@@ -212,5 +232,6 @@ export const useChatStore = defineStore('chat', () => {
     persist,
     loadFromBackend,
     switchUser,
+    loadSession,
   }
 })

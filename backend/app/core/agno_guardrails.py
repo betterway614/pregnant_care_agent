@@ -73,23 +73,10 @@ class MedicalSafetyGuardrail:
     __name__ = "MedicalSafetyGuardrail"
 
     BLOCKED_PATTERNS = [
-        "诊断为", "诊断是", "确诊",
-        "建议用药", "建议服用", "处方",
-        "可以吃药", "应该吃药", "用药方案",
-        "治疗方案如下", "请按以下方案",
-        # 增强覆盖：药物名称和剂量
-        "推荐您服用", "您需要每天注射", "建议使用",
-        "口服.*mg", "每次.*片", "拉贝洛尔", "硝苯地平",
-        "低分子肝素", "阿司匹林", "黄体酮.*mg",
-        # 诊断变体
-        "您应该有.*病", "指标提示.*可能",
-        "根据您的.*情况.*诊断", "检查结果表明",
-        # 药物剂量模式
-        r"\d+\s*(?:片|粒|颗)\s*[,，]?\s*(?:每[日天])\s*\d+\s*次",
-        r"(?:每次|每回)\s*\d+\s*(?:ml|mg|g)",
-        r"口服\s*\d+\s*(?:片|粒|mg|g|ml)",
-        r"(?:饭前|饭后|睡前|空腹)\s*(?:服用|吃|口服)\s*\d+",
-        r"\d+\s*mg\s*(?:每日|每天|bid|tid|qd|qn)",
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)诊断为"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)确诊"),
+        re.compile(r"建议用药|建议服用|处方(?!签)"),
+        re.compile(r"可以吃药|应该吃药|用药方案"),
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -115,7 +102,7 @@ class MedicalSafetyGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if re.search(pattern, response):
+            if pattern.search(response):
                 return "小安不能提供诊断或用药建议。请咨询医生获取专业意见。"
         return None
 
@@ -132,15 +119,13 @@ class DoctorDraftGuardrail:
     __name__ = "DoctorDraftGuardrail"
 
     BLOCKED_PATTERNS = [
-        "确诊", "确定诊断", "明确诊断",
-        "无需进一步检查", "无需进一步评估",
-        "没有风险", "完全正常",
-        "诊断为", "诊断是",
-        "可以排除", "排除诊断",
-        "治疗方案为", "治疗方案确定",
-        # 增强覆盖
-        "最终确定为", "临床判断为",
-        "排除了.*疾病", "没有问题",
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)确诊"),
+        re.compile(r"(?<!不是)(?<!并非)确定诊断|明确诊断"),
+        re.compile(r"无需进一步检查|无需进一步评估"),
+        re.compile(r"(?<!不是)没有风险|完全正常"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)诊断为|诊断是"),
+        re.compile(r"可以排除(?!的可能性)"),
+        re.compile(r"治疗方案(为|确定)(?!的建议)"),
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -153,7 +138,7 @@ class DoctorDraftGuardrail:
         if not response:
             return None
         for pattern in self.BLOCKED_PATTERNS:
-            if re.search(pattern, response):
+            if pattern.search(response):
                 return "以上分析为AI辅助生成，不构成确定性诊断结论，需医生审核确认。"
         return None
 
@@ -187,12 +172,12 @@ ORDER_SAFETY_PATTERNS = [
 ]
 
 
-def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
+def check_output_safety(text: str, patterns: list) -> Optional[str]:
     """通用输出安全检查
 
     Args:
         text: 待检查文本
-        patterns: 违规关键词/正则列表
+        patterns: 违规关键词列表（支持 str 或 re.Pattern）
 
     Returns:
         违规提示词（检测到违规时）
@@ -201,8 +186,12 @@ def check_output_safety(text: str, patterns: list[str]) -> Optional[str]:
     if not text:
         return None
     for pattern in patterns:
-        if re.search(pattern, text):
-            return f"输出包含受限内容（{pattern}），已拦截"
+        if isinstance(pattern, re.Pattern):
+            if pattern.search(text):
+                return "输出包含受限内容，已拦截"
+        else:
+            if pattern in text:
+                return f"输出包含受限内容（{pattern}），已拦截"
     return None
 
 

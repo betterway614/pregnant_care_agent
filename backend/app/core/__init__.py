@@ -1,7 +1,7 @@
 from .agno_agent import create_main_agent, get_main_agent
 from .agno_client import get_agno_model, reset_agno_client
 from .agno_tools import MEDICAL_TOOLS
-from .agno_knowledge import AgnoKnowledgeAdapter, agno_knowledge
+from .agno_knowledge import knowledge
 from .agno_team import create_care_team, get_care_team
 from .agno_workflow import get_alert_analysis_workflow
 from .agno_medical_agents import (
@@ -14,8 +14,6 @@ from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient
 from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
 from .rule_engine import rule_engine, RuleEngine, Rule
-from .embedding import get_embedding_client, EmbeddingClient, MockEmbedding, HuggingFaceEmbedding, APIEmbedding
-from .agno_rag import RAGEngine, rag_engine, agno_rag_engine, AgnoRAGEngine
 from .agno_structured import extract_structured_content
 
 __all__ = [
@@ -27,9 +25,7 @@ __all__ = [
     "nlu_engine", "RuleBaseNLU", "NLUResult",
     "memory_manager", "MemoryManager",
     "rule_engine", "RuleEngine", "Rule",
-    "get_embedding_client", "EmbeddingClient", "MockEmbedding", "HuggingFaceEmbedding", "APIEmbedding",
-    "RAGEngine", "rag_engine", "agno_rag_engine", "AgnoRAGEngine",
-    "AgnoKnowledgeAdapter", "agno_knowledge",
+    "knowledge",
     "MEDICAL_TOOLS",
     "create_care_team", "get_care_team",
     "get_alert_analysis_workflow",

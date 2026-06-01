@@ -21,6 +21,7 @@ from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
 from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
+from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
     NURSE_TOOLS,
     DOCTOR_TOOLS,
@@ -216,7 +217,8 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
         tools=tools,
         session_state={},
         db=_create_nurse_db(),
-        search_knowledge=False,
+        knowledge=medical_knowledge,
+        search_knowledge=True,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
@@ -237,7 +239,8 @@ def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit:
         tools=tools,
         session_state={},
         db=_create_doctor_db(),
-        search_knowledge=False,
+        knowledge=medical_knowledge,
+        search_knowledge=True,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
@@ -410,3 +413,21 @@ def create_followup_review_agent() -> Agent:
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
     )
+
+
+@lru_cache(maxsize=1)
+def get_followup_generate_agent() -> Agent:
+    """获取随访脚本生成 Agent 单例"""
+    return create_followup_generate_agent()
+
+
+@lru_cache(maxsize=1)
+def get_followup_analysis_agent() -> Agent:
+    """获取随访分析 Agent 单例"""
+    return create_followup_analysis_agent()
+
+
+@lru_cache(maxsize=1)
+def get_followup_review_agent() -> Agent:
+    """获取随访审核辅助 Agent 单例"""
+    return create_followup_review_agent()

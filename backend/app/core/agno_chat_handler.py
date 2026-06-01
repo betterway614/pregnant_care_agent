@@ -34,7 +34,7 @@ TOOL_THINKING_MAP: dict[str, str] = {
     "agno_parse_nlu": "正在理解您的需求...",
     "agno_get_nlu_result": "正在理解您的需求...",
     "agno_check_emergency": "正在进行安全检查...",
-    "agno_search_knowledge": "正在查阅孕期知识库...",
+    "search_knowledge_base": "正在查阅孕期知识库...",
     "agno_get_patient_context": "正在了解您的健康情况...",
     "agno_analyze_health_trends": "正在分析您的健康趋势...",
     "agno_evaluate_vital_rules": "正在评估健康指标...",
@@ -233,11 +233,54 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
-    # 2. Agent 路由
+    # 复杂症状/检查查询走工作流（多步编排）
+    if intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
+        try:
+            from .agno_workflow import create_prenatal_workflow
+            workflow = create_prenatal_workflow()
+            workflow.session_state = {"patient_id": req.pregnant_id, "risk_level": "routine"}
+            logger.info("路由到孕检工作流 intent={}", nlu_result.intent)
+            workflow_response = await workflow.arun(input=agent_input)
+            content = workflow_response.content if hasattr(workflow_response, "content") else str(workflow_response) if workflow_response is not None else None
+            if content:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                import asyncio
+                await asyncio.to_thread(
+                    _save_audit_log,
+                    session_id=session_id,
+                    user_id=req.pregnant_id,
+                    agent_role="pregnant",
+                    agent_variant="workflow",
+                    intent_classification=nlu_result.intent,
+                    run_response=None,
+                    total_latency_ms=elapsed_ms,
+                )
+                if settings.persist_chat_messages:
+                    try:
+                        await conversation_store.async_save_single(session_id, req.pregnant_id, "user", req.message)
+                        await conversation_store.async_save_single(session_id, req.pregnant_id, "assistant", content)
+                    except Exception:
+                        logger.warning("工作流对话持久化失败 session_id={}", session_id, exc_info=True)
+                return ChatResponse(content=content, session_id=session_id, source="AI_CARE")
+        except Exception as e:
+            logger.warning("工作流路由失败，回退到单Agent: {}", e)
+
+    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复调用 agno_parse_nlu
+    if nlu_result:
+        nlu_context = (
+            f"[系统预分析] 意图:{nlu_result.intent} "
+            f"情绪:{nlu_result.emotion.get('level', 'neutral') if nlu_result.emotion else 'neutral'} "
+            f"紧急:{nlu_result.is_emergency} "
+            f"实体:{nlu_result.entities}\n\n"
+        )
+        if isinstance(agent_input, str):
+            agent_input = nlu_context + agent_input
+
+    # 3. Agent 路由
     agent_factory = AGENT_VARIANT_MAP.get(intent_variant, get_main_agent)
     agent = agent_factory()
 
-    # 3. arun
+    # 4. arun
     response = await agent.arun(
         input=agent_input,
         user_id=req.pregnant_id,
@@ -247,7 +290,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     elapsed_ms = int((time.time() - start_time) * 1000)
     content = response.content or ""
 
-    # 4. 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
+    # 5. 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
     import asyncio
     await asyncio.to_thread(
         _save_audit_log,
@@ -260,7 +303,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         total_latency_ms=elapsed_ms,
     )
 
-    # 5. 对话持久化
+    # 6. 对话持久化
     if settings.persist_chat_messages:
         try:
             await conversation_store.async_save_single(
@@ -329,7 +372,62 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
-    # 2. Agent 路由
+    # 复杂症状/检查查询走工作流（多步编排）
+    if intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
+        try:
+            from .agno_workflow import create_prenatal_workflow
+            workflow = create_prenatal_workflow()
+            workflow.session_state = {"patient_id": req.pregnant_id, "risk_level": "routine"}
+            logger.info("路由到孕检工作流 intent={}", nlu_result.intent)
+            workflow_response = await workflow.arun(input=agent_input)
+            content = workflow_response.content if hasattr(workflow_response, "content") else str(workflow_response) if workflow_response is not None else None
+            if content:
+                yield {"event": "chunk", "data": content}
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                yield {
+                    "event": "done",
+                    "data": json.dumps({
+                        "session_id": session_id,
+                        "source": "AI_CARE",
+                        "nlu_result": None,
+                        "memory_updated": [],
+                        "tool_steps": ["工作流处理"],
+                        "transcribed_text": transcribed_text,
+                    }),
+                }
+                import asyncio
+                await asyncio.to_thread(
+                    _save_audit_log,
+                    session_id=session_id,
+                    user_id=req.pregnant_id,
+                    agent_role="pregnant",
+                    agent_variant="workflow",
+                    intent_classification=nlu_result.intent,
+                    run_response=None,
+                    total_latency_ms=elapsed_ms,
+                )
+                if settings.persist_chat_messages:
+                    try:
+                        await conversation_store.async_save_single(session_id, req.pregnant_id, "user", req.message)
+                        await conversation_store.async_save_single(session_id, req.pregnant_id, "assistant", content)
+                    except Exception:
+                        logger.warning("工作流对话持久化失败 session_id={}", session_id, exc_info=True)
+                return  # Exit the generator, skip single Agent path
+        except Exception as e:
+            logger.warning("工作流路由失败，回退到单Agent: {}", e)
+
+    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复调用 agno_parse_nlu
+    if nlu_result:
+        nlu_context = (
+            f"[系统预分析] 意图:{nlu_result.intent} "
+            f"情绪:{nlu_result.emotion.get('level', 'neutral') if nlu_result.emotion else 'neutral'} "
+            f"紧急:{nlu_result.is_emergency} "
+            f"实体:{nlu_result.entities}\n\n"
+        )
+        if isinstance(agent_input, str):
+            agent_input = nlu_context + agent_input
+
+    # 3. Agent 路由
     agent_factory = AGENT_VARIANT_MAP.get(intent_variant, get_main_agent)
     agent = agent_factory()
 

@@ -171,7 +171,7 @@ def test_pregnant_instructions_contains_task_planning():
     """验证压缩后任务规划指令保留"""
     result = get_pregnant_system_prompt_instructions()
     joined = " ".join(result)
-    assert "agno_search_knowledge" in joined
+    assert "search_knowledge_base" in joined
     assert "agno_get_patient_context" in joined
     assert "agno_analyze_health_trends" in joined
 

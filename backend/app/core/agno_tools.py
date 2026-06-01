@@ -27,6 +27,7 @@ from uuid import UUID
 from agno.run import RunContext
 from ..utils.timezone import beijing_now
 from agno.tools import tool
+from ..config import settings
 
 # NLU 结果上下文：由路由层注入，供 agno_get_nlu_result 工具读取
 # key: session_id, value: NLU result dict
@@ -350,28 +351,10 @@ async def agno_analyze_health_trends(
     return await asyncio.to_thread(_analyze_health_trends_sync, pid)
 
 
-# ==================== 知识搜索工具 ====================
-
-
-@tool
-async def agno_search_knowledge(query: str, top_k: int = 3) -> dict:
-    """搜索产科知识库，返回与问题最相关的文档片段。用于回答孕期知识问题。异步安全。"""
-    from ..config import settings
-
-    if not settings.rag_enabled:
-        return {"results": [], "message": "RAG功能未启用"}
-
-    try:
-        from ..core.agno_rag import agno_rag_engine
-
-        # agno_rag_engine.search 是同步方法，直接调用
-        result = agno_rag_engine.search(query, top_k=top_k)
-        return {"results": result, "count": len(result)}
-    except Exception as e:
-        return {"results": [], "error": str(e)}
-
-
 # ==================== 心理筛查工具 ====================
+
+# 注意：知识搜索工具由 Agno 框架自动注入 (search_knowledge_base)
+# 当 Agent 设置 search_knowledge=True 时，框架会自动创建该工具
 
 
 @tool
@@ -431,7 +414,6 @@ MEDICAL_TOOLS = [
     agno_should_ask_weight,
     agno_should_ask_bp,
     agno_analyze_health_trends,
-    agno_search_knowledge,
     agno_get_epds_result,
 ]
 
@@ -492,14 +474,33 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
                 for f in recent_followups
             ]
 
-            return result
-        finally:
-            db.close()
+        # 自动评估规则引擎：将最近数据喂入规则引擎检测异常
+        from .rule_engine import rule_engine
+        latest_vitals = {}
+        for d in recent_data:
+            code = d.metric_code
+            if code not in latest_vitals:
+                latest_vitals[code] = d.value
+        rule_ctx = {
+            "sbp": latest_vitals.get("systolic", 0),
+            "dbp": latest_vitals.get("diastolic", 0),
+            "weight": latest_vitals.get("weight", 0),
+            "fetal_movement": latest_vitals.get("fetal_movement", 0),
+            "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting", 0) or latest_vitals.get("blood_sugar", 0),
+            "heart_rate": latest_vitals.get("heart_rate", 0),
+            "gest_week": gest_days // 7 if gest_days else 0,
+        }
+        try:
+            auto_alerts = rule_engine.evaluate_all(rule_ctx)
+        except Exception:
+            auto_alerts = []
+        result["auto_alerts"] = [
+            {"level": a["level"], "message": a["message"]}
+            for a in auto_alerts
+        ]
+        result["has_abnormal"] = len(auto_alerts) > 0
 
-    result = await asyncio.to_thread(_query)
-
-    # 保存到 session_state，供后续工具使用
-    if not isinstance(result, dict) or "error" not in result:
+        # 保存到 session_state，供后续工具使用
         if run_context is not None:
             if run_context.session_state is None:
                 run_context.session_state = {}
@@ -799,25 +800,33 @@ async def agno_handle_issue(
 
 @tool
 def agno_query_clinical_guideline(topic: str = "") -> dict:
-    """查询临床指南和规范。
-    当医生需要查阅相关指南时使用此工具。"""
+    """查询临床指南和规范。优先使用知识库检索。"""
+    try:
+        from .agno_knowledge import knowledge
+        results = knowledge.search(query=topic, max_results=3)
+        if results:
+            return {
+                "topic": topic,
+                "guidelines": [
+                    doc.content[:500] if hasattr(doc, "content") else str(doc)[:500]
+                    for doc in results
+                ],
+                "source": "knowledge_base",
+            }
+    except Exception:
+        pass
+
     guidelines = {
         "fgr": "ACOG Practice Bulletin No. 204: Fetal Growth Restriction (2021)",
         "gdm": "ACOG Practice Bulletin No. 190: Gestational Diabetes Mellitus (2023)",
         "hypertension": "ACOG Practice Bulletin No. 222: Gestational Hypertension and Preeclampsia (2023)",
         "prenatal": "中华医学会妇产科学分会. 孕前和孕期保健指南(2022)",
     }
-
     topic_lower = topic.lower()
-    matched = []
-    for key, guideline in guidelines.items():
-        if key in topic_lower:
-            matched.append(guideline)
-
+    matched = [v for k, v in guidelines.items() if k in topic_lower]
     if not matched:
-        return {"topic": topic, "guidelines": [], "message": f"未找到与'{topic}'匹配的临床指南，建议查阅相关专业文献"}
-
-    return {"topic": topic, "guidelines": matched}
+        matched = list(guidelines.values())[:3]
+    return {"topic": topic, "guidelines": matched, "source": "hardcoded_fallback"}
 
 
 # 护士端 Agent 工具集
@@ -827,7 +836,6 @@ NURSE_TOOLS = [
     agno_report_issue_to_doctor,
     agno_analyze_health_trends,
     agno_evaluate_vital_rules,
-    agno_search_knowledge,
 ]
 
 # 医生端 Agent 工具集
@@ -838,16 +846,17 @@ DOCTOR_TOOLS = [
     agno_query_clinical_guideline,
     agno_analyze_health_trends,
     agno_evaluate_vital_rules,
-    agno_search_knowledge,
 ]
 
 # ==================== 工具子集分组（工具路由） ====================
 
 TOOL_GROUPS: dict[str, list] = {
     "chat": [
-        agno_get_nlu_result,
+        # agno_parse_nlu 移除 — 意图已由 chat_handler NLU 预分析注入
         agno_check_emergency,
         agno_get_patient_context,
+        agno_get_epds_result,       # 情绪评估
+        agno_save_health_data,      # 记录情绪评分
     ],
     "record": [
         agno_get_nlu_result,
@@ -856,8 +865,7 @@ TOOL_GROUPS: dict[str, list] = {
         agno_get_patient_context,
     ],
     "qa": [
-        agno_search_knowledge,
-        agno_get_patient_context,
+            agno_get_patient_context,
         agno_analyze_health_trends,
     ],
     "emergency": [
@@ -889,6 +897,9 @@ INTENT_TO_GROUP: dict[str, str] = {
     "ask_knowledge": "qa",
     "ask_symptom": "qa",
     "ask_exam": "qa",
+    "emergency": "emergency",
+    "health_data_report": "record",
+    "schedule_inquiry": "qa",
 }
 
 
@@ -918,8 +929,7 @@ NURSE_TOOL_GROUPS: dict[str, list] = {
         agno_query_patient_data,
         agno_analyze_health_trends,
         agno_evaluate_vital_rules,
-        agno_search_knowledge,
-    ],
+        ],
     "followup": [
         agno_create_followup_record,
         agno_query_patient_data,
@@ -930,8 +940,7 @@ NURSE_TOOL_GROUPS: dict[str, list] = {
     ],
     "chat": [
         agno_query_patient_data,
-        agno_search_knowledge,
-        agno_analyze_health_trends,
+            agno_analyze_health_trends,
     ],
 }
 
@@ -966,8 +975,7 @@ DOCTOR_TOOL_GROUPS: dict[str, list] = {
         agno_analyze_patient_comprehensive,
         agno_analyze_health_trends,
         agno_evaluate_vital_rules,
-        agno_search_knowledge,
-        agno_query_clinical_guideline,
+            agno_query_clinical_guideline,
     ],
     "order": [
         agno_generate_medical_order,
@@ -978,8 +986,7 @@ DOCTOR_TOOL_GROUPS: dict[str, list] = {
         agno_analyze_patient_comprehensive,
     ],
     "chat": [
-        agno_search_knowledge,
-        agno_analyze_health_trends,
+            agno_analyze_health_trends,
         agno_evaluate_vital_rules,
     ],
 }

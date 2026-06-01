@@ -118,6 +118,13 @@ class Settings(BaseSettings):
             return None
         return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
+    @property
+    def agno_database_url(self) -> str:
+        """Agno PgVector 使用 psycopg3 驱动"""
+        if self.db_type == "sqlite":
+            return self.database_url
+        return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379
@@ -126,12 +133,24 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
-    # RAG配置
-    rag_enabled: bool = False
-    embedding_mode: Literal["mock", "local", "api"] = "mock"
-    embedding_api_url: str = ""
+    # RAG (Agno native)
+    rag_enabled: bool = True
+    rag_chunk_size: int = 600
+    rag_chunk_overlap: int = 120
+    rag_search_type: Literal["vector", "hybrid"] = "hybrid"
+    rag_max_results: int = 5
+    rag_chunking_strategy: Literal["fixed_size", "recursive"] = "fixed_size"
+
+    # Reranker（可选，留空则不启用）
+    reranker_provider: Literal["", "cohere", "infinity"] = ""
+    reranker_model: str = ""
+    reranker_base_url: str = ""
+
+    # Embedding (DashScope / OpenAI-compatible)
+    embedding_api_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embedding_api_key: str = ""
-    embedding_model: str = "BAAI/bge-m3"
+    embedding_model: str = "text-embedding-v3"
+    embedding_dimensions: int = 1024
 
     # Seed
     seed_data: bool = True

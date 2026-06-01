@@ -12,7 +12,7 @@ from .config import settings
 from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
-from .routers import websocket, tts, admin
+from .routers import websocket, tts, admin, knowledge
 from .models import AgentAuditLog
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
@@ -293,6 +293,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── JWT 认证中间件 ──
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from .core.auth import decode_token
+
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/v1/auth/login"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """JWT认证中间件：跳过公开路径和OPTIONS请求"""
+
+    async def dispatch(self, request: Request, call_next):
+        # 跳过 OPTIONS 预检请求
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        path = request.url.path
+
+        # 跳过公开路径
+        if path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        # 跳过静态资源
+        if path.startswith("/assets") or path.rsplit(".", 1)[-1] in ("js", "css", "ico", "png", "jpg", "svg", "woff", "woff2", "ttf"):
+            return await call_next(request)
+
+        # 跳过 Swagger UI 相关资源
+        if path.startswith("/swagger") or path.startswith("/favicon"):
+            return await call_next(request)
+
+        # 检查 Authorization 头
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "未提供认证凭据"})
+
+        token = auth_header[7:]  # 去掉 "Bearer " 前缀
+        payload = decode_token(token)
+        if payload is None:
+            return JSONResponse(status_code=401, content={"detail": "认证凭据无效或已过期"})
+
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
+
 # 注册路由
 app.include_router(chat.router)
 app.include_router(schedule.router)
@@ -313,6 +359,7 @@ app.include_router(health_trends.router)
 app.include_router(websocket.router)
 app.include_router(tts.router)
 app.include_router(admin.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")

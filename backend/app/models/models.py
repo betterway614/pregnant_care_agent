@@ -223,7 +223,7 @@ class Feedback(Base):
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
     message_id = Column(String(64), nullable=False, comment="前端消息ID")
-    rating = Column(String(8), nullable=False, comment="thumbs_up/thumbs_down")
+    rating = Column(String(16), nullable=False, comment="thumbs_up/thumbs_down")
     comment = Column(Text, nullable=True, comment="可选评论")
     session_id = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=beijing_now)

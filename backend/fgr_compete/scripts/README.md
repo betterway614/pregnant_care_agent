@@ -28,7 +28,9 @@ API 运行时的核心代码仍在 `fgr_compete` 根目录，脚本入口按硬�
 - 分类服务代码：`backend/fgr_compete/onnx_predictor.py`
   - `.env` 设置 `FGR_BACKEND=onnx_npu` 时优先选择 `VitisAIExecutionProvider`
   - 当前机器需要先保证 Ryzen AI `quicktest.py` 跑出 `Test Finished`
+  - 如果 `xrt-smi validate` 或 quicktest 失败，先运行 `python -m fgr_compete.scripts.ryzen_ai.check_npu_runtime`
 - 脚本入口：
+  - `python -m fgr_compete.scripts.ryzen_ai.check_npu_runtime`
   - `python -m fgr_compete.scripts.ryzen_ai.quantize_onnx`
   - `python -m fgr_compete.scripts.ryzen_ai.classify_single <image> <mask>`
   - `python -m fgr_compete.scripts.ryzen_ai.benchmark --image <image> --mask <mask>`
