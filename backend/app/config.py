@@ -139,6 +139,12 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 120
     rag_search_type: Literal["vector", "hybrid"] = "hybrid"
     rag_max_results: int = 5
+    rag_chunking_strategy: Literal["fixed_size", "recursive"] = "fixed_size"
+
+    # Reranker（可选，留空则不启用）
+    reranker_provider: Literal["", "cohere", "infinity"] = ""
+    reranker_model: str = ""
+    reranker_base_url: str = ""
 
     # Embedding (DashScope / OpenAI-compatible)
     embedding_api_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"

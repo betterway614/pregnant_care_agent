@@ -450,3 +450,131 @@ export interface AdminSessionDetail {
   run_count: number
   runs: AdminSessionRun[]
 }
+
+// ==================== 知识库管理类型 ====================
+
+export interface KnowledgeDoc {
+  filename: string
+  name: string
+  extension: string
+  size_bytes: number
+  size_human: string
+  modified_at: string
+}
+
+export interface KnowledgeDocListResponse {
+  total: number
+  data: KnowledgeDoc[]
+}
+
+export interface KnowledgeStats {
+  enabled: boolean
+  document_count: number
+  total_size_bytes: number
+  total_size_human: string
+  embedding_model: string
+  embedding_dimensions: number
+  search_type: string
+  chunk_size: number
+  chunk_overlap: number
+  chunking_strategy: string
+  max_results: number
+  reranker_provider: string
+  reranker_model: string
+  vector_db_table: string
+  docs_directory: string
+}
+
+export interface RagConfig {
+  enabled: boolean
+  search_type: string
+  chunk_size: number
+  chunk_overlap: number
+  chunking_strategy: string
+  max_results: number
+  embedding_model: string
+  embedding_dimensions: number
+  embedding_api_url: string
+  reranker_provider: string
+  reranker_model: string
+  reranker_base_url: string
+  vector_db_table: string
+  predefined_tags: string[]
+  docs_directory: string
+}
+
+export interface RagConfigUpdate {
+  search_type?: string
+  chunk_size?: number
+  chunk_overlap?: number
+  chunking_strategy?: string
+  max_results?: number
+  reranker_provider?: string
+  reranker_model?: string
+  reranker_base_url?: string
+}
+
+export interface KnowledgeSearchResult {
+  content: string
+  score: number | null
+  metadata: Record<string, string>
+}
+
+export interface KnowledgeSearchResponse {
+  query: string
+  filters: Record<string, string>
+  results: KnowledgeSearchResult[]
+  total: number
+}
+
+export interface KnowledgeChunk {
+  id: string
+  name: string
+  content: string
+  meta_data: Record<string, any> | null
+  filters: Record<string, any> | null
+  content_hash: string
+  content_id: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface KnowledgeChunkListResponse {
+  total: number
+  page: number
+  page_size: number
+  data: KnowledgeChunk[]
+  error?: string
+}
+
+export interface ChunkDocStat {
+  name: string
+  chunk_count: number
+  min_content_length: number
+  max_content_length: number
+  avg_content_length: number
+}
+
+export interface ChunkStatsResponse {
+  total_chunks: number
+  documents: ChunkDocStat[]
+  error?: string
+}
+
+export interface KnowledgeUploadResponse {
+  filename: string
+  name: string
+  size_bytes: number
+  size_human: string
+  auto_ingest: boolean
+  ingested: boolean
+  ingest_error?: string
+}
+
+export interface KnowledgeIngestResponse {
+  message: string
+  success: number
+  failed: number
+  total: number
+  errors: Array<{ filename: string; error: string }>
+}
