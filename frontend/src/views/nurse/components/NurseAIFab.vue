@@ -52,7 +52,7 @@
                 role="nurse"
                 :default-expanded="firstSectionKey === 'summary'"
               >
-                <p>{{ aiResult.summary }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.summary)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -64,7 +64,7 @@
                 role="nurse"
                 :default-expanded="firstSectionKey === 'risk_assessment'"
               >
-                <p>{{ aiResult.risk_assessment }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.risk_assessment)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -76,7 +76,7 @@
                 role="nurse"
                 :default-expanded="firstSectionKey === 'nursing_suggestions'"
               >
-                <p>{{ aiResult.nursing_suggestions }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.nursing_suggestions)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -138,6 +138,7 @@ import {
 import type { ReportFormData } from '@/components/agent-fab'
 import { NURSE_FAB_TABS, NURSE_ANALYSIS_SECTIONS } from '@/config/agentFabTools'
 import { dashboardApi, nurseAiApi, aiAnalysisApi, collaborationApi } from '@/api/endpoints'
+import { renderMarkdown } from '@/utils/markdown'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)

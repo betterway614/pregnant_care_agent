@@ -26,11 +26,13 @@ from ..database import db_call, SessionLocal
 from ..models import AgentAuditLog
 from ..core.conversation_store import conversation_store
 from ..config import settings, get_asr_mode
+from .agno_tools import _nlu_context
 
 
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
 TOOL_THINKING_MAP: dict[str, str] = {
     "agno_parse_nlu": "正在理解您的需求...",
+    "agno_get_nlu_result": "正在理解您的需求...",
     "agno_check_emergency": "正在进行安全检查...",
     "search_knowledge_base": "正在查阅孕期知识库...",
     "agno_get_patient_context": "正在了解您的健康情况...",
@@ -206,14 +208,28 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         user_text = req.message.strip() if req.message else ""
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
+
+            # UNKNOWN 意图：尝试 LLM 辅助分类
+            if nlu_result.intent == "UNKNOWN":
+                refined_intent = nlu_engine.classify_with_llm(user_text)
+                if refined_intent != "UNKNOWN":
+                    from .nlu_engine import NLUResult as _NR
+                    nlu_result.intent = refined_intent
+                    nlu_result.category = nlu_engine._classify_category(
+                        refined_intent, nlu_result.entities, user_text,
+                    )
+
             nlu_dict = {
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
                 "emotion": nlu_result.emotion,
                 "is_emergency": nlu_result.is_emergency,
+                "suggested_tools": nlu_result.suggested_tools,
             }
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
+            # 注入 NLU 结果到模块级上下文
+            _nlu_context[session_id] = nlu_dict
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -299,6 +315,9 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         except Exception:
             logger.warning("非流式对话持久化失败 session_id={}", session_id, exc_info=True)
 
+    # 清理 NLU 上下文
+    _nlu_context.pop(session_id, None)
+
     return ChatResponse(
         content=content,
         session_id=session_id,
@@ -328,14 +347,28 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         user_text = req.message.strip() if req.message else ""
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
+
+            # UNKNOWN 意图：尝试 LLM 辅助分类
+            if nlu_result.intent == "UNKNOWN":
+                refined_intent = nlu_engine.classify_with_llm(user_text)
+                if refined_intent != "UNKNOWN":
+                    from .nlu_engine import NLUResult as _NR
+                    nlu_result.intent = refined_intent
+                    nlu_result.category = nlu_engine._classify_category(
+                        refined_intent, nlu_result.entities, user_text,
+                    )
+
             nlu_dict = {
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
                 "emotion": nlu_result.emotion,
                 "is_emergency": nlu_result.is_emergency,
+                "suggested_tools": nlu_result.suggested_tools,
             }
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
+            # 注入 NLU 结果到模块级上下文
+            _nlu_context[session_id] = nlu_dict
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -487,3 +520,6 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             )
         except Exception:
             logger.warning("流式对话持久化失败 session_id={}", session_id, exc_info=True)
+
+    # 清理 NLU 上下文
+    _nlu_context.pop(session_id, None)

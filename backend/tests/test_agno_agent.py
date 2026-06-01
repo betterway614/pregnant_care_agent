@@ -35,7 +35,7 @@ def test_create_followup_generate_agent():
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_followup_generate_agent()
             assert agent is not None
-            assert agent.name == "小安-随访生成"
+            assert agent.name == "小护-随访生成"
             assert agent.output_schema == FollowUpGenerateOutput
 
 

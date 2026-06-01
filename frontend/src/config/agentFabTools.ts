@@ -38,7 +38,6 @@ export const DOCTOR_ANALYSIS_SECTIONS: AnalysisSection[] = [
   { key: 'risk_summary', label: '风险总结', icon: 'Warning', severity: 'danger', scrollTarget: 'section-risk_summary' },
   { key: 'analysis', label: '综合分析', icon: 'DataAnalysis', severity: 'info', scrollTarget: 'section-analysis' },
   { key: 'reasoning_chain', label: '推理链', icon: 'Guide', severity: 'info', scrollTarget: 'section-reasoning_chain' },
-  { key: 'differential_diagnosis', label: '鉴别诊断', icon: 'FirstAidKit', severity: 'warning', scrollTarget: 'section-differential_diagnosis' },
   { key: 'suggested_orders', label: '建议医嘱', icon: 'Document', severity: 'warning', scrollTarget: 'section-suggested_orders' },
   { key: 'evidence_references', label: '循证参考', icon: 'Reading', severity: 'info', scrollTarget: 'section-evidence_references' },
 ]

@@ -287,6 +287,7 @@ class AlertResponse(BaseModel):
     pregnant_id: str
     trigger_source: str
     rule_id: Optional[str] = None
+    domain: Optional[str] = None
     level: str
     message: str
     details: dict = {}
@@ -461,7 +462,6 @@ class DoctorAnalyzeResponse(BaseModel):
     evidence_references: list[str] = []
     suggested_orders: str = ""
     risk_summary: str = ""
-    differential_diagnosis: list[dict] = []  # [{condition, confidence, reasoning}]
     reasoning_chain: list[str] = []  # 逐步推理链
     source: str = "llm"  # "llm" | "template" — 区分数据来源
 

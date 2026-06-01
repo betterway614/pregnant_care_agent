@@ -79,7 +79,7 @@
           <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.agent_variant }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="intent_classification" label="意图" width="120" />
-        <el-table-column prop="total_tokens" label="Token" width="90" />
+        <el-table-column prop="total_tokens" label="Token 数" width="90" />
         <el-table-column prop="total_latency_ms" label="延迟" width="90">
           <template #default="{ row }">{{ row.total_latency_ms }}ms</template>
         </el-table-column>

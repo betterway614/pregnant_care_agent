@@ -7,11 +7,11 @@
         </el-form-item>
         <el-form-item label="Agent 变体">
           <el-select v-model="filters.agent_variant" placeholder="全部" clearable style="width: 140px;">
-            <el-option label="chat" value="chat" />
-            <el-option label="record" value="record" />
-            <el-option label="qa" value="qa" />
-            <el-option label="emergency" value="emergency" />
-            <el-option label="complex" value="complex" />
+            <el-option label="对话" value="chat" />
+            <el-option label="记录" value="record" />
+            <el-option label="问答" value="qa" />
+            <el-option label="紧急" value="emergency" />
+            <el-option label="复杂分析" value="complex" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -30,7 +30,7 @@
         <el-table-column prop="agent_variant" label="路由" width="90">
           <template #default="{ row }"><el-tag size="small">{{ row.agent_variant }}</el-tag></template>
         </el-table-column>
-        <el-table-column prop="total_tokens" label="Token" width="80" />
+        <el-table-column prop="total_tokens" label="Token 数" width="80" />
         <el-table-column prop="total_latency_ms" label="延迟" width="80">
           <template #default="{ row }">{{ row.total_latency_ms }}ms</template>
         </el-table-column>

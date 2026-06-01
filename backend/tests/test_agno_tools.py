@@ -7,14 +7,60 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 
-def test_agno_parse_nlu_content():
-    """验证 agno_parse_nlu 工具返回正确格式"""
-    from app.core.agno_tools import agno_parse_nlu
+def test_agno_get_nlu_result_with_session_state():
+    """验证 agno_get_nlu_result 从 session_state 读取 NLU 结果"""
+    from agno.run import RunContext
+    from app.core.agno_tools import agno_get_nlu_result
 
-    result = agno_parse_nlu.entrypoint("你好")
-    assert "intent" in result
-    assert "entities" in result
-    assert "is_emergency" in result
+    ctx = RunContext(
+        run_id="test-run",
+        session_id="test-session",
+        session_state={
+            "nlu_result": {
+                "intent": "HEALTH_DATA_REPORT",
+                "entities": {"weight": 65.0},
+                "emotion": {"level": "neutral", "score": 0},
+                "is_emergency": False,
+            }
+        },
+    )
+    result = agno_get_nlu_result.entrypoint(run_context=ctx)
+    assert result["intent"] == "HEALTH_DATA_REPORT"
+    assert result["entities"]["weight"] == 65.0
+
+
+def test_agno_get_nlu_result_from_module_context():
+    """验证 agno_get_nlu_result 从模块级上下文读取"""
+    from agno.run import RunContext
+    from app.core.agno_tools import agno_get_nlu_result, _nlu_context
+
+    session_id = "test-session-ctx"
+    _nlu_context[session_id] = {
+        "intent": "EMOTION_EXPRESS",
+        "entities": {},
+        "emotion": {"level": "medium", "score": 2},
+        "is_emergency": False,
+    }
+
+    ctx = RunContext(
+        run_id="test-run",
+        session_id=session_id,
+        session_state={},
+    )
+
+    result = agno_get_nlu_result.entrypoint(run_context=ctx)
+    assert result["intent"] == "EMOTION_EXPRESS"
+
+    _nlu_context.pop(session_id, None)
+
+
+def test_agno_get_nlu_result_without_context():
+    """验证 agno_get_nlu_result 无 context 时返回默认值"""
+    from app.core.agno_tools import agno_get_nlu_result
+
+    result = agno_get_nlu_result.entrypoint()
+    assert result["intent"] == "UNKNOWN"
+    assert "note" in result
 
 
 def test_agno_check_emergency_normal():
@@ -71,14 +117,15 @@ async def test_agno_get_patient_context():
 
 
 def test_tool_groups_exist():
-    """验证 TOOL_GROUPS 包含 4 个场景分组"""
+    """验证 TOOL_GROUPS 包含 5 个场景分组"""
     from app.core.agno_tools import TOOL_GROUPS
 
     assert "chat" in TOOL_GROUPS
     assert "record" in TOOL_GROUPS
     assert "qa" in TOOL_GROUPS
     assert "emergency" in TOOL_GROUPS
-    assert len(TOOL_GROUPS) == 4
+    assert "complex" in TOOL_GROUPS
+    assert len(TOOL_GROUPS) == 5
 
 
 def test_tool_groups_tool_count():

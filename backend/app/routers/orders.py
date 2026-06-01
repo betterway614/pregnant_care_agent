@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
-from ..database import get_db, SessionLocal
+from ..database import get_db
 from ..utils.timezone import beijing_now
 from ..models import MedicalOrder, Pregnant, Alert
 from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderExplainResponse, OrderDocumentResponse
@@ -109,9 +109,16 @@ def get_orders(status: Optional[str] = None,
         query = query.filter(MedicalOrder.pregnant_id == pregnant_id)
     orders = query.order_by(MedicalOrder.created_at.desc()).limit(50).all()
 
+    # 批量查询孕妇信息，避免 N+1 查询
+    pregnant_ids = list(set(o.pregnant_id for o in orders))
+    pregnant_map = {}
+    if pregnant_ids:
+        pregnants = db.query(Pregnant).filter(Pregnant.pregnant_id.in_(pregnant_ids)).all()
+        pregnant_map = {p.pregnant_id: p for p in pregnants}
+
     result = []
     for o in orders:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == o.pregnant_id).first()
+        pregnant = pregnant_map.get(o.pregnant_id)
         result.append(OrderResponse(
             **{c.name: getattr(o, c.name) for c in o.__table__.columns},
             patient_name=pregnant.display_name if pregnant else "未知",
@@ -232,85 +239,75 @@ def get_order_templates():
 
 
 @router.post("/{order_id}/explain", response_model=OrderExplainResponse)
-async def explain_order(order_id: str):
+async def explain_order(order_id: str, db: Session = Depends(get_db)):
     """用LLM将医嘱翻译成孕妇易懂的通俗语言"""
-    db = SessionLocal()
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+
+    original_content = order.content
+
+    # 尝试用LLM翻译
     try:
-        order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
-        if not order:
-            raise HTTPException(404, "医嘱不存在")
+        system_prompt = {
+            "role": "system",
+            "content": (
+                "你是一位专业的产科健康教育师。请将医生的医嘱翻译成孕妇能理解的通俗语言。\n"
+                "要求：\n"
+                "1. plain_language: 用日常口语将医嘱内容翻译成通俗易懂的话\n"
+                "2. precautions: 列出孕妇需要注意的3-5条事项\n"
+                "3. 保持医学准确性，不要添加或删除医疗建议\n"
+                "请按以下JSON格式输出（不要输出其他内容）：\n"
+                '{"plain_language": "...", "precautions": "..."}'
+            )
+        }
+        user_msg = {
+            "role": "user",
+            "content": f"请解释以下医嘱：\n{original_content}"
+        }
+        response = await llm.chat([system_prompt, user_msg], max_tokens=1024)
 
-        original_content = order.content
-
-        # 尝试用LLM翻译
         try:
-            system_prompt = {
-                "role": "system",
-                "content": (
-                    "你是一位专业的产科健康教育师。请将医生的医嘱翻译成孕妇能理解的通俗语言。\n"
-                    "要求：\n"
-                    "1. plain_language: 用日常口语将医嘱内容翻译成通俗易懂的话\n"
-                    "2. precautions: 列出孕妇需要注意的3-5条事项\n"
-                    "3. 保持医学准确性，不要添加或删除医疗建议\n"
-                    "请按以下JSON格式输出（不要输出其他内容）：\n"
-                    '{"plain_language": "...", "precautions": "..."}'
-                )
-            }
-            user_msg = {
-                "role": "user",
-                "content": f"请解释以下医嘱：\n{original_content}"
-            }
-            response = await llm.chat([system_prompt, user_msg], max_tokens=1024)
-
-            try:
-                # 尝试提取JSON
-                json_start = response.find("{")
-                json_end = response.rfind("}") + 1
-                if json_start >= 0 and json_end > json_start:
-                    parsed = json.loads(response[json_start:json_end])
-                    plain_language = parsed.get("plain_language", "")
-                    precautions = parsed.get("precautions", "")
-                else:
-                    plain_language = response
-                    precautions = ""
-            except (json.JSONDecodeError, KeyError):
+            json_start = response.find("{")
+            json_end = response.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                parsed = json.loads(response[json_start:json_end])
+                plain_language = parsed.get("plain_language", "")
+                precautions = parsed.get("precautions", "")
+            else:
                 plain_language = response
                 precautions = ""
-        except Exception:
-            # LLM不可用时生成兜底解释
-            plain_language = f"以下是您需要注意的医嘱内容（通俗版）：\n{original_content}\n\n如果有不明白的地方，请咨询您的产检医生。"
-            precautions = "如有任何不适，请及时联系您的主治医生。"
+        except (json.JSONDecodeError, KeyError):
+            plain_language = response
+            precautions = ""
+    except Exception:
+        plain_language = f"以下是您需要注意的医嘱内容（通俗版）：\n{original_content}\n\n如果有不明白的地方，请咨询您的产检医生。"
+        precautions = "如有任何不适，请及时联系您的主治医生。"
 
-        return OrderExplainResponse(
-            order_id=order_id,
-            original_content=original_content,
-            plain_language=plain_language,
-            precautions=precautions,
-            source="AI_CARE"
-        )
-    finally:
-        db.close()
+    return OrderExplainResponse(
+        order_id=order_id,
+        original_content=original_content,
+        plain_language=plain_language,
+        precautions=precautions,
+        source="AI_CARE"
+    )
 
 
 @router.get("/{order_id}/document", response_model=OrderDocumentResponse)
-def get_order_document(order_id: str):
+def get_order_document(order_id: str, db: Session = Depends(get_db)):
     """获取医嘱归档文档（含签名）
 
     返回：order_snapshot（结构化快照）+ order_text（纯文本）+ signature_data（签名）
     """
-    db = SessionLocal()
-    try:
-        order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
-        if not order:
-            raise HTTPException(404, "医嘱不存在")
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
-        return OrderDocumentResponse(
-            order_id=str(order.id),
-            patient_name=pregnant.display_name if pregnant else "未知",
-            snapshot=order.order_snapshot or {},
-            text=order.order_text or "",
-            signature=order.signature_data or {},
-            has_document=bool(order.order_snapshot),
-        )
-    finally:
-        db.close()
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
+    return OrderDocumentResponse(
+        order_id=str(order.id),
+        patient_name=pregnant.display_name if pregnant else "未知",
+        snapshot=order.order_snapshot or {},
+        text=order.order_text or "",
+        signature=order.signature_data or {},
+        has_document=bool(order.order_snapshot),
+    )

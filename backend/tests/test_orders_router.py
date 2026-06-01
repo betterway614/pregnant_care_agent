@@ -133,7 +133,7 @@ class TestOrdersRouterIntegration:
 
     @pytest.fixture
     def client(self, mock_db):
-        """创建 TestClient 并注入 mock DB + SessionLocal"""
+        """创建 TestClient 并注入 mock DB（端点统一使用 Depends(get_db)）"""
         from fastapi.testclient import TestClient
         from app.main import app
         from app.database import get_db
@@ -142,11 +142,7 @@ class TestOrdersRouterIntegration:
             yield mock_db
 
         app.dependency_overrides[get_db] = override_get_db
-
-        # document 和 update 端点直接使用 SessionLocal()（非依赖注入），需 patch
-        with patch("app.routers.orders.SessionLocal", return_value=mock_db):
-            yield TestClient(app)
-
+        yield TestClient(app)
         app.dependency_overrides.clear()
 
     def _setup_mock_order_query(self, mock_db, order):

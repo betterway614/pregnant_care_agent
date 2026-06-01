@@ -16,6 +16,7 @@ from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
 from ..core.websocket_manager import ws_manager
 from ..config import settings
+from loguru import logger
 
 # 护士端工具调用 → 用户友好的中文描述
 NURSE_TOOL_THINKING_MAP: dict[str, str] = {
@@ -86,8 +87,9 @@ def _save_nurse_audit_log(
             db.rollback()
         finally:
             db.close()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("审计日志写入失败: %s", e)
 
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
 
@@ -134,16 +136,24 @@ async def nurse_analyze(req: NurseAnalyzeRequest):
             alert_level = None
 
         if alert_level:
-            alert = Alert(
+            from ..services.alert_service import alert_service
+            from ..utils.timezone import beijing_now
+
+            alert = alert_service.create_alert(
+                db=db,
                 pregnant_id=req.pregnant_id,
-                trigger_source="MANUAL",
+                rule_id="NURSE_AI_ALERT",
+                domain="vital",
                 level=alert_level,
                 message=f"护士AI分析提示：{result.risk_assessment[:100]}",
-                status="PENDING",
+                trigger_source="MANUAL",
+                details={
+                    "action": "ALERT_NURSE_AND_DOCTOR" if alert_level == "RED" else "ALERT_NURSE",
+                    "triggered_rules": ["NURSE_AI_ALERT"],
+                    "risk_assessment": result.risk_assessment[:200] if result.risk_assessment else "",
+                    "created_at": beijing_now().isoformat(),
+                },
             )
-            db.add(alert)
-            db.commit()
-            db.refresh(alert)
 
             alert_data = {
                 "id": str(alert.id),
@@ -277,7 +287,8 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             followup_focus=data.get("followup_focus", []),
             alert_level=data.get("alert_level", "NONE"),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("护士LLM分析降级: %s", e)
         return None
 
 
@@ -449,7 +460,8 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
             questions=data.get("questions", []),
             closing_message=data.get("closing_message", ""),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("随访脚本生成LLM降级: %s", e)
         return None
 
 
@@ -558,8 +570,8 @@ async def nurse_chat_stream(req: dict):
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("护士端意图分类降级: %s", e)
 
     agent_factory = NURSE_AGENT_VARIANT_MAP.get(intent_variant, get_nurse_chat_agent)
     agent = agent_factory()
@@ -605,7 +617,8 @@ async def nurse_chat_stream(req: dict):
         except Exception as e:
             from loguru import logger
             logger.error("Nurse AI Agent run error: {}", e)
-            yield {"event": "error", "data": str(e)}
+            logger.error("Nurse chat stream error: {}", e)
+            yield {"event": "error", "data": "服务内部错误，请稍后重试"}
             yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。如果问题持续存在，请检查网络连接或联系管理员。"}
         yield {"event": "done", "data": json.dumps({"source": "NURSE_AI", "tool_steps": tool_steps})}
 
@@ -627,15 +640,23 @@ async def nurse_chat_stream(req: dict):
 
 def tool_create_alert(db, pregnant_id: str, level: str, message: str, trigger_source: str = "MANUAL") -> dict:
     """创建预警记录"""
-    alert = Alert(
+    from ..services.alert_service import alert_service
+    from ..utils.timezone import beijing_now
+
+    alert = alert_service.create_alert(
+        db=db,
         pregnant_id=pregnant_id,
-        trigger_source=trigger_source,
+        rule_id="AGENT_TOOL_ALERT",
+        domain="vital",
         level=level,
         message=message,
-        status="PENDING",
+        trigger_source=trigger_source,
+        details={
+            "action": "ALERT_NURSE_AND_DOCTOR" if level == "RED" else "ALERT_NURSE",
+            "triggered_rules": ["AGENT_TOOL_ALERT"],
+            "created_at": beijing_now().isoformat(),
+        },
     )
-    db.add(alert)
-    db.commit()
     return {"success": True, "alert_id": str(alert.id), "message": f"已创建{level}级预警"}
 
 

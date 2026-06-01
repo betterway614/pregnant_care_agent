@@ -33,6 +33,7 @@
         <el-option label="已确认" value="CONFIRMED" />
         <el-option label="已驳回" value="DISMISSED" />
         <el-option label="已升级" value="ESCALATED" />
+        <el-option label="已自动关闭" value="AUTO_DISMISSED" />
       </el-select>
       <span class="text-light filter-summary" v-if="alerts.length">
         共 {{ alerts.length }} 条预警
@@ -258,6 +259,7 @@ function statusLabel(status: string): string {
     CONFIRMED: '已确认',
     DISMISSED: '已驳回',
     ESCALATED: '已升级',
+    AUTO_DISMISSED: '已自动关闭',
   }
   return map[normalizeAlertStatus(status)] || status
 }
@@ -269,6 +271,7 @@ function statusTagType(status: string): string {
     CONFIRMED: 'success',
     DISMISSED: 'info',
     ESCALATED: 'danger',
+    AUTO_DISMISSED: 'info',
   }
   return map[normalizeAlertStatus(status)] || 'info'
 }

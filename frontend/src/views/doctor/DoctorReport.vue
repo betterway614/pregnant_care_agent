@@ -29,7 +29,14 @@
         :default-expanded="idx === 0"
         :collapsible="reportSections.length > 1"
       >
-        <div class="report-section-body" v-html="section.html" />
+        <div class="report-section-body">
+          <StructuredAnalysisCard
+            v-if="section.structured"
+            :data="section.structured"
+            role="doctor"
+          />
+          <div v-else v-html="section.html" />
+        </div>
       </AnalysisResultCard>
     </div>
 
@@ -53,7 +60,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { Document, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
+import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
+import type { StructuredAnalysis } from '@/utils/markdown'
+import { StructuredAnalysisCard } from '@/components/agent-fab'
 import {
   ToolActionBar,
   AnalysisResultCard,
@@ -77,26 +86,31 @@ const patientList = computed(() => props.patients?.length ? props.patients : loc
 interface ReportSection {
   title: string
   html: string
+  structured: StructuredAnalysis | null
 }
 
 const reportSections = computed((): ReportSection[] => {
   if (!report.value?.report) return []
+
+  // 如果 report 是字符串且有结构化特征，整体解析
   const text = report.value.report as string
+  const structured = isStructuredAnalysis(text) ? parseStructuredAnalysis(text) : null
+  if (structured) {
+    return [{ title: '报告正文', html: renderMarkdown(text), structured }]
+  }
+
   const parts = text.split(/(?=^#{1,3}\s)/m).filter(Boolean)
   if (parts.length <= 1) {
-    return [{ title: '报告正文', html: renderMarkdown(text) }]
+    return [{ title: '报告正文', html: renderMarkdown(text), structured: null }]
   }
   return parts.map(part => {
     const match = part.match(/^#{1,3}\s+(.+?)[\n\r]/)
     const title = match ? match[1].trim() : '报告内容'
     const body = match ? part.slice(match[0].length) : part
-    return { title, html: renderMarkdown(body.trim()) }
+    const bodyStructured = isStructuredAnalysis(body) ? parseStructuredAnalysis(body) : null
+    return { title, html: renderMarkdown(body.trim()), structured: bodyStructured }
   })
 })
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text, { async: false }) as string
-}
 
 async function loadPatientList() {
   if (props.patients?.length) return

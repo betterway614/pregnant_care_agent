@@ -257,14 +257,33 @@ class TestBatchRecommendations:
         mock_alert.message = "胎动异常减少"
         mock_alert.status = "PENDING"
 
-        db.query.return_value.filter.return_value.first.return_value = mock_pregnant
-        db.query.return_value.filter.return_value.all.return_value = [mock_alert]
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        # 模拟链式调用，按顺序返回不同值:
+        # query(Pregnant).filter().first() → mock_pregnant
+        # query(FollowUpRecord).filter().first() → None (无活跃随访)
+        # query(FollowUpRecord).filter().order_by().first() → None (无历史随访)
+        # query(Alert).filter().all() → [mock_alert]
+        # query(func.count(...)).filter().scalar() → 0
+        mock_query = MagicMock()
+        call_count = [0]
+        first_returns = [mock_pregnant, None, None]
+        all_returns = [[mock_alert]]
+        scalar_returns = [0]
 
-        with patch("app.routers.nurse_ai.func") as mock_func:
-            mock_func.count.return_value = MagicMock()
-            db.query.return_value.filter.return_value.scalar.return_value = 0
-            result = tool_recommend_followup_schedule(db, "P002")
+        def first_side_effect():
+            idx = call_count[0]
+            call_count[0] += 1
+            if idx < len(first_returns):
+                return first_returns[idx]
+            return None
+
+        mock_query.first.side_effect = first_side_effect
+        mock_query.all.side_effect = lambda: all_returns.pop(0) if all_returns else []
+        mock_query.scalar.side_effect = lambda: scalar_returns.pop(0) if scalar_returns else 0
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        db.query.return_value = mock_query
+
+        result = tool_recommend_followup_schedule(db, "P002")
 
         immediate_recs = [r for r in result["recommendations"] if r["recommended_date"] == "immediate"]
         assert len(immediate_recs) > 0
@@ -612,8 +631,7 @@ class TestArchiveEndpoints:
         mock_query.filter.return_value = mock_query
         mock_query.first.side_effect = [mock_record, mock_pregnant]
 
-        with patch("app.routers.followup.SessionLocal", return_value=mock_db):
-            result = get_record_document(str(mock_record.id))
+        result = get_record_document(str(mock_record.id), db=mock_db)
 
         assert result["patient_name"] == "小明"
         assert result["has_document"] is True

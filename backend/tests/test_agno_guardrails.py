@@ -201,3 +201,54 @@ def test_doctor_draft_guardrail_enhanced_patterns():
 
     # 安全内容
     assert guardrail.check("建议进一步评估血压情况") is None
+
+
+# ==================== 药物剂量模式检测 ====================
+
+
+def test_guardrail_blocks_dosage_pattern_daily():
+    """验证 'X片每日Y次' 模式被拦截"""
+    from app.core.agno_guardrails import MedicalSafetyGuardrail
+
+    guardrail = MedicalSafetyGuardrail()
+    assert guardrail.check("每次2片，每日3次") is not None
+    assert guardrail.check("每次1片,每日2次") is not None
+
+
+def test_guardrail_blocks_dosage_pattern_ml():
+    """验证 '每次Xml' 模式被拦截"""
+    from app.core.agno_guardrails import MedicalSafetyGuardrail
+
+    guardrail = MedicalSafetyGuardrail()
+    assert guardrail.check("每次10ml") is not None
+    assert guardrail.check("每次5mg") is not None
+
+
+def test_guardrail_blocks_dosage_pattern_timing():
+    """验证 '饭前/饭后/睡前服用X' 模式被拦截"""
+    from app.core.agno_guardrails import MedicalSafetyGuardrail
+
+    guardrail = MedicalSafetyGuardrail()
+    assert guardrail.check("饭前服用2片") is not None
+    assert guardrail.check("睡前口服1粒") is not None
+    assert guardrail.check("空腹吃3片") is not None
+
+
+def test_guardrail_blocks_dosage_pattern_abbreviation():
+    """验证 'Xmg bid/tid' 模式被拦截"""
+    from app.core.agno_guardrails import MedicalSafetyGuardrail
+
+    guardrail = MedicalSafetyGuardrail()
+    assert guardrail.check("100mg bid") is not None
+    assert guardrail.check("50mg tid") is not None
+    assert guardrail.check("25mg 每日两次") is not None
+
+
+def test_guardrail_allows_safe_suggestion():
+    """验证建议性措辞不被误拦"""
+    from app.core.agno_guardrails import MedicalSafetyGuardrail
+
+    guardrail = MedicalSafetyGuardrail()
+    assert guardrail.check("建议咨询医生获取用药指导") is None
+    assert guardrail.check("请遵医嘱服药") is None
+    assert guardrail.check("具体治疗需由医生评估决定") is None

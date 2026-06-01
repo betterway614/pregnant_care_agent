@@ -248,6 +248,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("Mock数据注入失败: {}", e)
 
+    # 修复可能存在 rule_id 与 message 不匹配的预警数据
+    try:
+        from .services.alert_service import alert_service
+        from .database import SessionLocal
+        db = SessionLocal()
+        repaired = alert_service.repair_mismatched_alerts(db)
+        if repaired:
+            logger.info(f"预警数据修复: 已修正 {repaired} 条不匹配记录")
+        db.close()
+    except Exception as e:
+        logger.warning(f"预警数据修复检查跳过: {e}")
+
     yield
     # 应用关闭
     if settings.fgr_mode:
@@ -268,11 +280,14 @@ app = FastAPI(
 from .core.timeout_middleware import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout=300)
 
-# CORS 配置
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+# CORS 配置（生产环境应通过 settings.cors_origins 配置域名白名单）
+_cors_origins = getattr(settings, "cors_origins", None) or [
+    "http://localhost:5173", "http://localhost:3000",
+    "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

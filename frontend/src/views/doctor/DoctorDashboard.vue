@@ -45,14 +45,16 @@
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-grid-row">
       <el-col :xs="12" :sm="12" :md="6" v-for="card in statCards" :key="card.label">
-        <StatCard
-          :icon="card.icon"
-          :value="card.value"
-          :label="card.label"
-          :color="card.color"
-          :bg-color="card.bgColor"
-          :sub-label="card.subLabel"
-        />
+        <div class="stat-card-wrapper" @click="card.route && $router.push(card.route)">
+          <StatCard
+            :icon="card.icon"
+            :value="card.value"
+            :label="card.label"
+            :color="card.color"
+            :bg-color="card.bgColor"
+            :sub-label="card.subLabel"
+          />
+        </div>
       </el-col>
     </el-row>
 
@@ -247,6 +249,7 @@ const statCards = computed(() => [
     color: '#D32F2F',
     bgColor: '#FFEBEE',
     subLabel: '红色高危',
+    route: '/doctor/review',
   },
   {
     icon: 'Bell',
@@ -255,6 +258,7 @@ const statCards = computed(() => [
     color: '#E65100',
     bgColor: '#FFF3E0',
     subLabel: '待处理',
+    route: '/doctor/review',
   },
   {
     icon: 'Edit',
@@ -263,6 +267,7 @@ const statCards = computed(() => [
     color: '#1976D2',
     bgColor: '#E3F2FD',
     subLabel: '等待签署',
+    route: '/doctor/orders',
   },
   {
     icon: 'DataAnalysis',
@@ -271,6 +276,7 @@ const statCards = computed(() => [
     color: '#7B1FA2',
     bgColor: '#F3E5F5',
     subLabel: '胎儿生长受限',
+    route: '/doctor/fgr-board',
   },
 ])
 
@@ -510,6 +516,10 @@ onUnmounted(() => {
 
 .stat-grid-row {
   margin-bottom: 28px;
+}
+
+.stat-card-wrapper {
+  cursor: pointer;
 }
 
 /* 医嘱列表项 */

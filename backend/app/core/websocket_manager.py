@@ -131,9 +131,9 @@ class WebSocketManager:
 
         if source_role == "doctor" and action == "downgrade":
             await self._broadcast_to_nurses_only(alert_data)
-        elif source_role == "nurse" and action == "escalate":
+        elif source_role == "nurse" and action == "nurse_escalate":
             await self._broadcast_all(alert_data)
-        elif source_role == "nurse" and action == "appeal":
+        elif source_role == "nurse" and action == "nurse_appeal":
             target_doctor_id = alert_data.get("target_doctor_id")
             if target_doctor_id:
                 await self.send_alert_to_doctor(target_doctor_id, alert_data)

@@ -28,6 +28,7 @@ from ..schemas import (
     FOLLOWUP_STATUS_COMPLETED,
 )
 from ..services import followup_service
+from loguru import logger
 
 router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
 
@@ -104,6 +105,10 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
     if not record:
         raise HTTPException(404, "记录不存在")
 
+    # 状态机校验：仅 completed 状态允许确认
+    if record.status != "completed":
+        raise HTTPException(400, f"当前状态 '{record.status}' 不允许确认，仅 'completed' 状态可确认审核")
+
     # 审核追溯
     record.status = confirm.status
     record.reviewed_by = confirm.reviewer_id
@@ -160,7 +165,7 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
 
 
 @router.get("/records/{record_id}/ai-review")
-async def ai_review_followup(record_id: str):
+async def ai_review_followup(record_id: str, db: Session = Depends(get_db)):
     """护士审核随访时的 AI 辅助分析
 
     收集该次随访数据 + 历史记录 + 健康数据，调用 LLM 生成审核建议。
@@ -171,78 +176,108 @@ async def ai_review_followup(record_id: str):
     from ..schemas import FollowUpAiReviewResponse
     from datetime import timedelta
 
-    db = SessionLocal()
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "随访记录不存在")
+
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    patient_name = (pregnant.display_name if pregnant else "未知")
+    gest_week = record.gestational_week or "未知"
+    risk_tags = pregnant.risk_tags if pregnant else []
+    answers = record.self_reported_data or {}
+
+    # 收集历史随访记录（不含当前）
+    prev_records = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == record.pregnant_id,
+        FollowUpRecord.id != record.id,
+    ).order_by(FollowUpRecord.created_at.desc()).limit(5).all()
+
+    history_text = ""
+    if prev_records:
+        lines = []
+        for pr in prev_records:
+            pr_data = pr.self_reported_data or {}
+            pr_date = pr.created_at.strftime("%Y-%m-%d") if pr.created_at else "?"
+            items = "; ".join(f"{k}={v}" for k, v in pr_data.items() if v)
+            lines.append(f"  [{pr_date}] {items}")
+        history_text = "\n".join(lines)
+
+    # 最近健康数据
+    seven_days_ago = beijing_now() - timedelta(days=7)
+    recent_points = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == record.pregnant_id,
+        HealthDataPoint.recorded_at >= seven_days_ago,
+    ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
+
+    health_text = ""
+    if recent_points:
+        health_text = "\n".join(
+            f"  {hp.metric_code}: {hp.value}{hp.unit} ({hp.recorded_at.strftime('%m-%d')})"
+            for hp in recent_points
+        )
+
+    # 活跃预警
+    active_alerts = db.query(Alert).filter(
+        Alert.pregnant_id == record.pregnant_id,
+        Alert.status == "PENDING",
+    ).all()
+    alert_text = ""
+    if active_alerts:
+        alert_text = "\n".join(f"  [{a.level}] {a.message}" for a in active_alerts)
+
+    # 构造答案文本
+    answer_lines = [f"- {k}: {v}" for k, v in answers.items()]
+    answer_text = "\n".join(answer_lines)
+    risk_text = "、".join(risk_tags) if risk_tags else "无"
+
+    # 拼接上下文
+    context = f"孕妇：{patient_name}，孕{gest_week}周，风险标签：{risk_text}\n\n本次随访数据：\n{answer_text}"
+    if history_text:
+        context += f"\n\n最近随访历史：\n{history_text}"
+    if health_text:
+        context += f"\n\n最近7天健康数据：\n{health_text}"
+    if alert_text:
+        context += f"\n\n活跃预警：\n{alert_text}"
+
+    # 尝试1: Agno Agent
     try:
-        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
-        if not record:
-            raise HTTPException(404, "随访记录不存在")
-
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
-        patient_name = (pregnant.display_name if pregnant else "未知")
-        gest_week = record.gestational_week or "未知"
-        risk_tags = pregnant.risk_tags if pregnant else []
-        answers = record.self_reported_data or {}
-
-        # 收集历史随访记录（不含当前）
-        prev_records = db.query(FollowUpRecord).filter(
-            FollowUpRecord.pregnant_id == record.pregnant_id,
-            FollowUpRecord.id != record.id,
-        ).order_by(FollowUpRecord.created_at.desc()).limit(5).all()
-
-        history_text = ""
-        if prev_records:
-            lines = []
-            for pr in prev_records:
-                pr_data = pr.self_reported_data or {}
-                pr_date = pr.created_at.strftime("%Y-%m-%d") if pr.created_at else "?"
-                items = "; ".join(f"{k}={v}" for k, v in pr_data.items() if v)
-                lines.append(f"  [{pr_date}] {items}")
-            history_text = "\n".join(lines)
-
-        # 最近健康数据
-        seven_days_ago = beijing_now() - timedelta(days=7)
-        recent_points = db.query(HealthDataPoint).filter(
-            HealthDataPoint.pregnant_id == record.pregnant_id,
-            HealthDataPoint.recorded_at >= seven_days_ago,
-        ).order_by(HealthDataPoint.recorded_at.desc()).limit(10).all()
-
-        health_text = ""
-        if recent_points:
-            health_text = "\n".join(
-                f"  {hp.metric_code}: {hp.value}{hp.unit} ({hp.recorded_at.strftime('%m-%d')})"
-                for hp in recent_points
+        from ..core.agno_medical_agents import create_followup_review_agent
+        from ..core.agno_structured import extract_structured_content
+        agent = create_followup_review_agent()
+        response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
+        data = extract_structured_content(response.content)
+        if data:
+            return FollowUpAiReviewResponse(
+                summary=data.get("summary", ""),
+                abnormal_flags=data.get("abnormal_flags", []),
+                action_needed=data.get("action_needed", False),
+                recommendation=data.get("recommendation", "确认通过"),
+                detail_analysis=data.get("detail_analysis", ""),
             )
+    except Exception as e:
+        logger.warning("随访审核Agno Agent降级: %s", e)
 
-        # 活跃预警
-        active_alerts = db.query(Alert).filter(
-            Alert.pregnant_id == record.pregnant_id,
-            Alert.status == "PENDING",
-        ).all()
-        alert_text = ""
-        if active_alerts:
-            alert_text = "\n".join(f"  [{a.level}] {a.message}" for a in active_alerts)
-
-        # 构造答案文本
-        answer_lines = [f"- {k}: {v}" for k, v in answers.items()]
-        answer_text = "\n".join(answer_lines)
-        risk_text = "、".join(risk_tags) if risk_tags else "无"
-
-        # 拼接上下文
-        context = f"孕妇：{patient_name}，孕{gest_week}周，风险标签：{risk_text}\n\n本次随访数据：\n{answer_text}"
-        if history_text:
-            context += f"\n\n最近随访历史：\n{history_text}"
-        if health_text:
-            context += f"\n\n最近7天健康数据：\n{health_text}"
-        if alert_text:
-            context += f"\n\n活跃预警：\n{alert_text}"
-
-        # 尝试1: Agno Agent
-        try:
-            from ..core.agno_medical_agents import create_followup_review_agent
-            from ..core.agno_structured import extract_structured_content
-            agent = create_followup_review_agent()
-            response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
-            data = extract_structured_content(response.content)
+    # 尝试2: 普通 LLM（容错降级）
+    try:
+        from ..core import get_llm_client
+        from ..core.json_parser import parse_llm_json
+        client = get_llm_client()
+        system_prompt = (
+            "你是一位专业的产科护理AI助手，帮助护士审核随访记录。请以JSON格式返回：\n"
+            "- summary: 随访要点摘要（100-200字）\n"
+            "- abnormal_flags: 异常指标列表\n"
+            "- action_needed: 是否需要上报医生（布尔值）\n"
+            "- recommendation: 审核建议（确认通过/需进一步沟通/紧急上报）\n"
+            "- detail_analysis: 详细分析（100-200字）\n"
+            "不要包含markdown代码块标记。"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请审核以下随访记录：\n\n{context}"},
+        ]
+        response = await client.chat(messages)
+        if response and response.strip():
+            data = parse_llm_json(response)
             if data:
                 return FollowUpAiReviewResponse(
                     summary=data.get("summary", ""),
@@ -251,122 +286,85 @@ async def ai_review_followup(record_id: str):
                     recommendation=data.get("recommendation", "确认通过"),
                     detail_analysis=data.get("detail_analysis", ""),
                 )
-        except Exception:
-            pass
+    except Exception as e:
+        logger.warning("随访审核普通LLM降级: %s", e)
 
-        # 尝试2: 普通 LLM（容错降级）
+    # 降级: 模板兜底
+    abnormal = []
+    bp = answers.get("bp", "")
+    if bp and "/" in str(bp):
         try:
-            from ..core import get_llm_client
-            from ..core.json_parser import parse_llm_json
-            client = get_llm_client()
-            system_prompt = (
-                "你是一位专业的产科护理AI助手，帮助护士审核随访记录。请以JSON格式返回：\n"
-                "- summary: 随访要点摘要（100-200字）\n"
-                "- abnormal_flags: 异常指标列表\n"
-                "- action_needed: 是否需要上报医生（布尔值）\n"
-                "- recommendation: 审核建议（确认通过/需进一步沟通/紧急上报）\n"
-                "- detail_analysis: 详细分析（100-200字）\n"
-                "不要包含markdown代码块标记。"
-            )
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"请审核以下随访记录：\n\n{context}"},
-            ]
-            response = await client.chat(messages)
-            if response and response.strip():
-                data = parse_llm_json(response)
-                if data:
-                    return FollowUpAiReviewResponse(
-                        summary=data.get("summary", ""),
-                        abnormal_flags=data.get("abnormal_flags", []),
-                        action_needed=data.get("action_needed", False),
-                        recommendation=data.get("recommendation", "确认通过"),
-                        detail_analysis=data.get("detail_analysis", ""),
-                    )
-        except Exception:
+            parts = str(bp).split("/")
+            sbp, dbp = float(parts[0]), float(parts[1])
+            if sbp >= 140 or dbp >= 90:
+                abnormal.append(f"血压偏高（{bp}mmHg）")
+        except (ValueError, IndexError):
             pass
 
-        # 降级: 模板兜底
-        abnormal = []
-        bp = answers.get("bp", "")
-        if bp and "/" in str(bp):
-            try:
-                parts = str(bp).split("/")
-                sbp, dbp = float(parts[0]), float(parts[1])
-                if sbp >= 140 or dbp >= 90:
-                    abnormal.append(f"血压偏高（{bp}mmHg）")
-            except (ValueError, IndexError):
-                pass
-
-        return FollowUpAiReviewResponse(
-            summary=f"孕妇{patient_name}孕{gest_week}周随访记录，共回答{len(answers)}项。",
-            abnormal_flags=abnormal,
-            action_needed=len(abnormal) > 0,
-            recommendation="需进一步沟通" if abnormal else "确认通过",
-            detail_analysis="建议护士核实各项指标，如有异常需及时与医生沟通。",
-        )
-    finally:
-        db.close()
+    return FollowUpAiReviewResponse(
+        summary=f"孕妇{patient_name}孕{gest_week}周随访记录，共回答{len(answers)}项。",
+        abnormal_flags=abnormal,
+        action_needed=len(abnormal) > 0,
+        recommendation="需进一步沟通" if abnormal else "确认通过",
+        detail_analysis="建议护士核实各项指标，如有异常需及时与医生沟通。",
+    )
 
 
 @router.put("/records/{record_id}")
 async def update_record(record_id: str, data: dict, db: Session = Depends(get_db)):
-    """更新随访记录"""
+    """更新随访记录（仅允许更新安全字段）"""
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
+    # 白名单：仅允许更新这些字段
+    allowed_fields = {"summary", "classification", "health_education", "nurse_notes"}
     for key, value in data.items():
-        if hasattr(record, key):
+        if key in allowed_fields and hasattr(record, key):
             setattr(record, key, value)
     db.commit()
     return {"message": "更新成功"}
 
 
 @router.get("/records/{record_id}/document")
-def get_record_document(record_id: str):
+def get_record_document(record_id: str, db: Session = Depends(get_db)):
     """获取随访记录的归档文档
 
     返回：record_snapshot（结构化快照）+ record_text（纯文本）+ signature_data（签名）
     """
     from ..schemas import FollowUpRecordResponse
-    db = SessionLocal()
-    try:
-        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
-        if not record:
-            raise HTTPException(404, "记录不存在")
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
-        return {
-            "record_id": str(record.id),
-            "patient_name": pregnant.display_name if pregnant else "未知",
-            "snapshot": record.record_snapshot or {},
-            "text": record.record_text or "",
-            "signature": record.signature_data or {},
-            "has_document": bool(record.record_snapshot),
-        }
-    finally:
-        db.close()
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    return {
+        "record_id": str(record.id),
+        "patient_name": pregnant.display_name if pregnant else "未知",
+        "snapshot": record.record_snapshot or {},
+        "text": record.record_text or "",
+        "signature": record.signature_data or {},
+        "has_document": bool(record.record_snapshot),
+    }
 
 
 @router.post("/records/{record_id}/sign")
-def sign_record(record_id: str, req: FollowUpSignatureRequest):
+def sign_record(record_id: str, req: FollowUpSignatureRequest, db: Session = Depends(get_db)):
     """提交手写签名
 
     将签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
     """
-    db = SessionLocal()
-    try:
-        record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
-        if not record:
-            raise HTTPException(404, "记录不存在")
-        record.signature_data = {
-            "image": req.signature_image,
-            "signer": req.signer_name,
-            "signed_at": beijing_now().isoformat(),
-        }
-        db.commit()
-        return {"message": "签名已保存", "signed_at": record.signature_data["signed_at"]}
-    finally:
-        db.close()
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    # 状态机校验：仅 confirmed 状态允许签名
+    if record.status != "confirmed":
+        raise HTTPException(400, f"当前状态 '{record.status}' 不允许签名，仅 'confirmed' 状态可签名")
+    record.signature_data = {
+        "image": req.signature_image,
+        "signer": req.signer_name,
+        "signed_at": beijing_now().isoformat(),
+    }
+    db.commit()
+    return {"message": "签名已保存", "signed_at": record.signature_data["signed_at"]}
 
 
 # ==================== 孕妇端随访对话 ====================
@@ -554,6 +552,58 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
             if pregnant and pregnant.gestational_age_days:
                 context["gest_week"] = pregnant.gestational_age_days // 7
 
+            # 补充查询聚合字段（规则引擎依赖这些历史数据）
+            if context:
+                from sqlalchemy import func
+                from datetime import timedelta
+                from ..utils.timezone import beijing_now
+                now = beijing_now()
+                week_ago = now - timedelta(days=7)
+                two_weeks_ago = now - timedelta(days=14)
+
+                # 补充当前随访未采集但规则引擎需要的指标
+                existing_keys = set(context.keys())
+
+                # 胎动平均值（近7天）
+                if "fetal_movement_avg" not in existing_keys:
+                    from ..models import HealthDataPoint
+                    fm_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "fetal_movement",
+                        HealthDataPoint.recorded_at >= week_ago,
+                    ).scalar()
+                    if fm_avg:
+                        context["fetal_movement_avg"] = float(fm_avg)
+
+                # 体重周增长
+                if "weight_gain_weekly" not in existing_keys and "weight" in context:
+                    weight_prev = db.query(HealthDataPoint).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "weight",
+                        HealthDataPoint.recorded_at <= two_weeks_ago,
+                    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+                    if weight_prev and weight_prev.value > 0:
+                        context["weight_gain_weekly"] = (context["weight"] - weight_prev.value) / 2.0
+
+                # 情绪评分平均值（近7天）
+                if "emotion_score_avg_7d" not in existing_keys:
+                    emotion_avg = db.query(func.avg(HealthDataPoint.value)).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "emotion_score",
+                        HealthDataPoint.recorded_at >= week_ago,
+                    ).scalar()
+                    if emotion_avg:
+                        context["emotion_score_avg_7d"] = float(emotion_avg)
+
+                # 睡眠时长
+                if "sleep_hours" not in existing_keys:
+                    sleep = db.query(HealthDataPoint).filter(
+                        HealthDataPoint.pregnant_id == record.pregnant_id,
+                        HealthDataPoint.metric_code == "sleep_hours",
+                    ).order_by(HealthDataPoint.recorded_at.desc()).first()
+                    if sleep:
+                        context["sleep_hours"] = sleep.value
+
             # 调用规则引擎评估
             if context:
                 from ..core.rule_engine import rule_engine
@@ -689,8 +739,8 @@ async def _stream_followup_analysis(
                 for hp in recent_points
             ]
             recent_health_text = "\n".join(health_lines)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("随访分析历史数据收集失败: %s", e)
 
     # Phase 2: 开始 AI 分析
     yield {"event": "phase", "data": "正在分析您的健康趋势..."}
@@ -915,8 +965,8 @@ async def _generate_llm_summary(
                 for hp in recent_points
             ]
             recent_health_text = "\n".join(health_lines)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("LLM摘要历史数据收集失败: %s", e)
     finally:
         db.close()
 
@@ -955,8 +1005,8 @@ async def _generate_llm_summary(
                 "personalized_advice": data.get("personalized_advice", ""),
                 "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("随访分析Agno Agent降级: %s", e)
 
     # 尝试2: 普通 LLM（容错降级）
     try:
@@ -993,8 +1043,8 @@ async def _generate_llm_summary(
                     "personalized_advice": data.get("personalized_advice", ""),
                     "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
                 }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("随访分析普通LLM降级: %s", e)
 
     # 降级: 模板兜底
     return _fallback_analysis_report(patient_name, gest_week, answers, risk_tags)

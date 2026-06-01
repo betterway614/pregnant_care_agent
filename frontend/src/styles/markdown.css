@@ -1,0 +1,336 @@
+/* ============================================================
+   Markdown 渲染全局样式
+   为聊天场景中 marked 生成的 HTML 提供完整的视觉样式
+   覆盖：标题、分割线、引用块、代码块、表格、图片、删除线
+   ============================================================ */
+
+/* ---- 标题 h1-h6 ---- */
+.bubble-markdown h1,
+.bubble-markdown h2,
+.bubble-markdown h3,
+.bubble-markdown h4,
+.bubble-markdown h5,
+.bubble-markdown h6 {
+  font-family: 'Figtree', 'Noto Sans', -apple-system, sans-serif;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 16px 0 8px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.bubble-markdown h1:first-child,
+.bubble-markdown h2:first-child,
+.bubble-markdown h3:first-child,
+.bubble-markdown h4:first-child,
+.bubble-markdown h5:first-child,
+.bubble-markdown h6:first-child {
+  margin-top: 0;
+}
+
+.bubble-markdown h1 { font-size: 1.35em; }
+.bubble-markdown h2 { font-size: 1.2em; }
+.bubble-markdown h3 { font-size: 1.08em; }
+.bubble-markdown h4 { font-size: 1em; }
+.bubble-markdown h5 { font-size: 0.95em; }
+.bubble-markdown h6 { font-size: 0.9em; color: #475569; }
+
+/* ---- 分割线 ---- */
+.bubble-markdown hr {
+  border: none;
+  border-top: 1px solid #E2E8F0;
+  margin: 18px 0;
+}
+
+/* ---- 引用块 ---- */
+.bubble-markdown blockquote {
+  border-left: 3px solid #CBD5E1;
+  margin: 10px 0;
+  padding: 4px 0 4px 14px;
+  color: #64748B;
+}
+.bubble-markdown blockquote p {
+  margin: 4px 0;
+}
+
+/* ---- 行内代码 ---- */
+.bubble-markdown code {
+  background: #F1F5F9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  color: #334155;
+}
+
+/* ---- 代码块 ---- */
+.bubble-markdown pre {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 10px 0;
+  line-height: 1.55;
+}
+.bubble-markdown pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+  color: #1E293B;
+}
+
+/* ---- 表格 ---- */
+.bubble-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 0.93em;
+}
+.bubble-markdown th,
+.bubble-markdown td {
+  border: 1px solid #E2E8F0;
+  padding: 8px 12px;
+  text-align: left;
+}
+.bubble-markdown th {
+  background: #F8FAFC;
+  font-weight: 600;
+  color: #1E293B;
+}
+.bubble-markdown td {
+  color: #334155;
+}
+
+/* ---- 图片 ---- */
+.bubble-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 8px 0;
+}
+
+/* ---- 删除线 ---- */
+.bubble-markdown del,
+.bubble-markdown s {
+  color: #94A3B8;
+  text-decoration: line-through;
+}
+
+/* ---- 任务列表 (GFM) ---- */
+.bubble-markdown input[type="checkbox"] {
+  margin-right: 6px;
+  accent-color: var(--primary, #2E7D32);
+}
+
+/* ---- 链接 ---- */
+.bubble-markdown a {
+  color: var(--primary, #2E7D32);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bubble-markdown a:hover {
+  color: var(--primary-dark, #1B5E20);
+}
+
+/* ============================================================
+   兼容无 .bubble-markdown 包裹的场景
+   （NurseAIChat 使用 .nurse-chat__text，
+     DoctorAIChat 使用 .doctor-chat__text）
+   ============================================================ */
+
+/* 护士聊天 */
+.nurse-chat__text h1,
+.nurse-chat__text h2,
+.nurse-chat__text h3,
+.nurse-chat__text h4,
+.nurse-chat__text h5,
+.nurse-chat__text h6 {
+  font-family: 'Figtree', 'Noto Sans', -apple-system, sans-serif;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 14px 0 6px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.nurse-chat__text h1:first-child,
+.nurse-chat__text h2:first-child,
+.nurse-chat__text h3:first-child,
+.nurse-chat__text h4:first-child,
+.nurse-chat__text h5:first-child,
+.nurse-chat__text h6:first-child {
+  margin-top: 0;
+}
+.nurse-chat__text h1 { font-size: 1.3em; }
+.nurse-chat__text h2 { font-size: 1.15em; }
+.nurse-chat__text h3 { font-size: 1.05em; }
+.nurse-chat__text hr {
+  border: none;
+  border-top: 1px solid #E2E8F0;
+  margin: 16px 0;
+}
+.nurse-chat__text blockquote {
+  border-left: 3px solid #A5B4FC;
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  color: #64748B;
+}
+.nurse-chat__text pre {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.nurse-chat__text pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.nurse-chat__text table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.nurse-chat__text th,
+.nurse-chat__text td { border: 1px solid #E2E8F0; padding: 6px 10px; text-align: left; }
+.nurse-chat__text th { background: #F8FAFC; font-weight: 600; }
+.nurse-chat__text img { max-width: 100%; border-radius: 10px; margin: 6px 0; }
+.nurse-chat__text del,
+.nurse-chat__text s { color: #94A3B8; }
+.nurse-chat__text input[type="checkbox"] { margin-right: 6px; accent-color: #6366f1; }
+.nurse-chat__text a { color: #6366f1; text-decoration: underline; text-underline-offset: 2px; }
+
+/* 医生聊天 */
+.doctor-chat__text h1,
+.doctor-chat__text h2,
+.doctor-chat__text h3,
+.doctor-chat__text h4,
+.doctor-chat__text h5,
+.doctor-chat__text h6 {
+  font-family: 'Figtree', 'Noto Sans', -apple-system, sans-serif;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 14px 0 6px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.doctor-chat__text h1:first-child,
+.doctor-chat__text h2:first-child,
+.doctor-chat__text h3:first-child,
+.doctor-chat__text h4:first-child,
+.doctor-chat__text h5:first-child,
+.doctor-chat__text h6:first-child {
+  margin-top: 0;
+}
+.doctor-chat__text h1 { font-size: 1.3em; }
+.doctor-chat__text h2 { font-size: 1.15em; }
+.doctor-chat__text h3 { font-size: 1.05em; }
+.doctor-chat__text hr {
+  border: none;
+  border-top: 1px solid #E2E8F0;
+  margin: 16px 0;
+}
+.doctor-chat__text blockquote {
+  border-left: 3px solid #6EE7B7;
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  color: #64748B;
+}
+.doctor-chat__text pre {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.doctor-chat__text pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.doctor-chat__text table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.doctor-chat__text th,
+.doctor-chat__text td { border: 1px solid #E2E8F0; padding: 6px 10px; text-align: left; }
+.doctor-chat__text th { background: #F8FAFC; font-weight: 600; }
+.doctor-chat__text img { max-width: 100%; border-radius: 10px; margin: 6px 0; }
+.doctor-chat__text del,
+.doctor-chat__text s { color: #94A3B8; }
+.doctor-chat__text input[type="checkbox"] { margin-right: 6px; accent-color: #10b981; }
+.doctor-chat__text a { color: #10b981; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ============================================================
+   分析结果卡片内的 Markdown 样式
+   （NurseAIFab / DoctorAIFab 中的 AI 分析结果）
+   ============================================================ */
+.analysis-markdown h1,
+.analysis-markdown h2,
+.analysis-markdown h3,
+.analysis-markdown h4,
+.analysis-markdown h5,
+.analysis-markdown h6 {
+  font-family: 'Figtree', 'Noto Sans', -apple-system, sans-serif;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 14px 0 6px;
+  line-height: 1.35;
+}
+.analysis-markdown h1 { font-size: 1.2em; }
+.analysis-markdown h2 { font-size: 1.1em; }
+.analysis-markdown h3 { font-size: 1.05em; }
+.analysis-markdown h1:first-child,
+.analysis-markdown h2:first-child,
+.analysis-markdown h3:first-child,
+.analysis-markdown h4:first-child { margin-top: 0; }
+.analysis-markdown p { margin: 0 0 8px; line-height: 1.6; }
+.analysis-markdown p:last-child { margin-bottom: 0; }
+.analysis-markdown strong { font-weight: 700; color: #1E293B; }
+.analysis-markdown ul, .analysis-markdown ol { padding-left: 18px; margin: 4px 0 8px; }
+.analysis-markdown li { margin: 2px 0; }
+.analysis-markdown hr { border: none; border-top: 1px solid #E2E8F0; margin: 14px 0; }
+.analysis-markdown blockquote {
+  border-left: 3px solid #CBD5E1;
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  color: #64748B;
+}
+.analysis-markdown code {
+  background: #F1F5F9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.analysis-markdown pre {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-size: 0.88em;
+}
+.analysis-markdown pre code { background: none; padding: 0; }
+.analysis-markdown table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 0.9em; }
+.analysis-markdown th, .analysis-markdown td { border: 1px solid #E2E8F0; padding: 6px 10px; text-align: left; }
+.analysis-markdown th { background: #F8FAFC; font-weight: 600; }
+.analysis-markdown img { max-width: 100%; border-radius: 8px; margin: 6px 0; }
+.analysis-markdown a { color: var(--primary, #2E7D32); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ============================================================
+   结构化分析卡片 — 在各聊天气泡/报告容器内的适配
+   ============================================================ */
+
+/* 卡片在聊天气泡内的间距 */
+.doctor-chat__text .structured-card,
+.nurse-chat__text .structured-card,
+.bubble-markdown .structured-card {
+  margin: -4px 0;
+}
+
+/* 卡片在报告 section body 内的间距 */
+.report-section-body .structured-card {
+  margin: 0;
+}
+
+/* 确保卡片内的图标颜色不继承父级 */
+.structured-card .el-icon {
+  flex-shrink: 0;
+}

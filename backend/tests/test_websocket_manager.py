@@ -208,7 +208,7 @@ class TestRouteAlert:
         await ws_manager.connect_nurse(nurse_ws, "nurse-1")
 
         alert_data = {
-            "level": "ORANGE", "source_role": "nurse", "action": "escalate",
+            "level": "ORANGE", "source_role": "nurse", "action": "nurse_escalate",
             "message": "[护士升级] 血压偏高需要医生关注",
         }
         await ws_manager.route_alert(alert_data)
@@ -225,7 +225,7 @@ class TestRouteAlert:
         await ws_manager.connect_nurse(nurse_ws, "nurse-1")
 
         alert_data = {
-            "level": "YELLOW", "source_role": "nurse", "action": "appeal",
+            "level": "YELLOW", "source_role": "nurse", "action": "nurse_appeal",
             "target_doctor_id": "doctor-1", "message": "[复议] 请重新评估",
         }
         await ws_manager.route_alert(alert_data)

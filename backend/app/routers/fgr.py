@@ -10,11 +10,13 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from loguru import logger
 from ..database import get_db
-from ..models import FgrAssessment, Pregnant, Alert
+from ..models import FgrAssessment, Pregnant
 from ..schemas import FgrAssessRequest, FgrAssessResponse, FgrTrendPoint, PatientImageResponse
 from ..core import rule_engine
 from ..config import settings
 from ..services.segmentation_service import SegmentationError, get_segmentation_service
+from ..services.alert_service import alert_service
+from ..utils.timezone import beijing_now
 import numpy as np
 
 router = APIRouter(prefix="/api/v1/fgr", tags=["FGR评估"])
@@ -197,15 +199,22 @@ def _save_assessment(db: Session, pregnant_id: str, gestational_weeks: float,
 def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> None:
     rule_hits = rule_engine.evaluate_fgr_risk(result["risk_level"])
     for hit in rule_hits:
-        alert = Alert(
+        alert_service.create_alert(
+            db=db,
             pregnant_id=pregnant_id,
-            trigger_source="FGR_ALGORITHM",
             rule_id=hit["rule_id"],
+            domain=hit.get("domain", "fetal"),
             level=hit["level"],
             message=hit["message"],
-            details={"case_id": result["case_id"], "risk_level": result["risk_level"]},
+            trigger_source="FGR_ALGORITHM",
+            details={
+                "action": hit.get("action", ""),
+                "triggered_rules": [hit["rule_id"]],
+                "case_id": result["case_id"],
+                "risk_level": result["risk_level"],
+                "created_at": beijing_now().isoformat(),
+            },
         )
-        db.add(alert)
 
 
 # ==================== API 端点 ====================

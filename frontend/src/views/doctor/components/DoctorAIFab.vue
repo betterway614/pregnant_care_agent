@@ -63,7 +63,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'risk_summary'"
               >
-                <p>{{ aiResult.risk_summary }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.risk_summary)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -75,7 +75,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'analysis'"
               >
-                <p>{{ aiResult.analysis }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.analysis)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -100,33 +100,6 @@
               </AnalysisResultCard>
 
               <AnalysisResultCard
-                v-if="aiResult.differential_diagnosis?.length"
-                id="section-differential_diagnosis"
-                title="鉴别诊断"
-                icon="FirstAidKit"
-                severity="warning"
-                role="doctor"
-                :default-expanded="firstSectionKey === 'differential_diagnosis'"
-              >
-                <div class="diagnosis-list">
-                  <div
-                    v-for="(dx, idx) in aiResult.differential_diagnosis"
-                    :key="idx"
-                    class="diagnosis-row"
-                  >
-                    <span class="diagnosis-row__condition">{{ dx.condition }}</span>
-                    <span
-                      class="diagnosis-row__confidence"
-                      :class="confidenceClass(dx.confidence)"
-                    >
-                      {{ (dx.confidence * 100).toFixed(0) }}%
-                    </span>
-                    <p v-if="dx.reasoning" class="diagnosis-row__reasoning">{{ dx.reasoning }}</p>
-                  </div>
-                </div>
-              </AnalysisResultCard>
-
-              <AnalysisResultCard
                 v-if="aiResult.suggested_orders"
                 id="section-suggested_orders"
                 title="建议医嘱"
@@ -135,7 +108,7 @@
                 role="doctor"
                 :default-expanded="firstSectionKey === 'suggested_orders'"
               >
-                <p>{{ aiResult.suggested_orders }}</p>
+                <div class="analysis-markdown" v-html="renderMarkdown(aiResult.suggested_orders)" />
               </AnalysisResultCard>
 
               <AnalysisResultCard
@@ -161,7 +134,7 @@
               v-else
               :icon="MagicStick"
               role="doctor"
-              message="选择孕妇后点击「开始分析」，Dr.智将提供鉴别诊断、治疗建议等临床分析"
+              message="选择孕妇后点击「开始分析」，Dr.智将提供风险评估、治疗建议等临床分析"
             />
           </div>
 
@@ -223,6 +196,7 @@ import {
   ISSUE_FILTER_OPTIONS,
 } from '@/config/agentFabTools'
 import { dashboardApi, doctorAiApi, collaborationApi } from '@/api/endpoints'
+import { renderMarkdown } from '@/utils/markdown'
 import type { Pregnant } from '@/types'
 
 const panelVisible = ref(false)
@@ -304,12 +278,6 @@ async function loadIssues() {
       allIssues.value = res.data || []
     }
   } catch { /* ignore */ }
-}
-
-function confidenceClass(confidence: number) {
-  if (confidence >= 0.7) return 'diagnosis-row__confidence--high'
-  if (confidence >= 0.4) return 'diagnosis-row__confidence--medium'
-  return 'diagnosis-row__confidence--low'
 }
 
 function formatTime(t?: string): string {
@@ -466,55 +434,6 @@ onMounted(() => {
   line-height: 1.5;
   color: var(--text-secondary);
   padding-top: 2px;
-}
-
-.diagnosis-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diagnosis-row {
-  padding: 8px 10px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-}
-
-.diagnosis-row__condition {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.diagnosis-row__confidence {
-  float: right;
-  padding: 2px 10px;
-  border-radius: var(--capsule-radius);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.diagnosis-row__confidence--high {
-  background: var(--danger-light);
-  color: var(--danger);
-}
-
-.diagnosis-row__confidence--medium {
-  background: var(--warning-light);
-  color: var(--warning);
-}
-
-.diagnosis-row__confidence--low {
-  background: var(--info-light);
-  color: var(--info);
-}
-
-.diagnosis-row__reasoning {
-  clear: both;
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.5;
 }
 
 .evidence-chips {

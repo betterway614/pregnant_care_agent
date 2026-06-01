@@ -34,7 +34,14 @@
             </div>
             <span class="audio-duration">{{ formatAudioDuration(msg.audioDuration || 0) }}</span>
           </div>
-          <div v-else class="nurse-chat__text" v-html="renderMarkdown(msg.content)" />
+          <div v-else class="nurse-chat__text">
+            <StructuredAnalysisCard
+              v-if="isStructuredAnalysis(msg.content)"
+              :data="parseStructuredAnalysis(msg.content)!"
+              role="nurse"
+            />
+            <div v-else v-html="renderMarkdown(msg.content)" />
+          </div>
         </div>
         <!-- TTS 播报按钮（助手消息） -->
         <button
@@ -61,7 +68,7 @@
 
     <!-- 已完成的工具步骤 -->
     <transition name="fade">
-      <div v-if="completedToolSteps.length > 0 && isStreaming" class="nurse-chat__tool-steps">
+      <div v-if="completedToolSteps.length > 0" class="nurse-chat__tool-steps">
         <div
           v-for="(step, idx) in completedToolSteps"
           :key="idx"
@@ -125,9 +132,10 @@ import { ref, nextTick, onMounted } from 'vue'
 import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset } from '@element-plus/icons-vue'
 import { nurseAiApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import { useTTS } from '@/composables/useTTS'
+import { StructuredAnalysisCard } from '@/components/agent-fab'
 
 interface ChatMsg {
   id: string

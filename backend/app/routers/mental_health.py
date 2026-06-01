@@ -105,6 +105,7 @@ async def submit_epds(req: EPDSSubmitRequest):
                 pregnant_id=req.pregnant_id,
                 trigger_source="EPDS_SCREENING",
                 rule_id="EPDS_HIGH_RISK",
+                domain="mental",
                 level="RED" if risk_level == "severe" else "ORANGE",
                 message=f"EPDS心理健康筛查结果：{risk_desc}（得分：{total_score}/30）",
                 details={"score": total_score, "risk_level": risk_level},

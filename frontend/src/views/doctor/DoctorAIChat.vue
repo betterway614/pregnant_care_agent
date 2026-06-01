@@ -34,7 +34,14 @@
             </div>
             <span class="audio-duration">{{ formatAudioDuration(msg.audioDuration || 0) }}</span>
           </div>
-          <div v-else class="doctor-chat__text" v-html="renderMarkdown(msg.content)" />
+          <div v-else class="doctor-chat__text">
+            <StructuredAnalysisCard
+              v-if="isStructuredAnalysis(msg.content)"
+              :data="parseStructuredAnalysis(msg.content)!"
+              role="doctor"
+            />
+            <div v-else v-html="renderMarkdown(msg.content)" />
+          </div>
         </div>
         <!-- TTS 播报按钮（助手消息） -->
         <button
@@ -61,7 +68,7 @@
 
     <!-- 已完成的工具步骤 -->
     <transition name="fade">
-      <div v-if="completedToolSteps.length > 0 && isStreaming" class="doctor-chat__tool-steps">
+      <div v-if="completedToolSteps.length > 0" class="doctor-chat__tool-steps">
         <div
           v-for="(step, idx) in completedToolSteps"
           :key="idx"
@@ -125,9 +132,10 @@ import { ref, nextTick, onMounted } from 'vue'
 import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset } from '@element-plus/icons-vue'
 import { doctorAiApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import { useTTS } from '@/composables/useTTS'
+import { StructuredAnalysisCard } from '@/components/agent-fab'
 
 interface ChatMsg {
   id: string
@@ -370,7 +378,7 @@ onMounted(() => {
   messages.value.push({
     id: genId(),
     role: 'assistant',
-    content: '您好！我是 **Dr.智**，您的AI临床助手。\n\n可以向我咨询：\n- 鉴别诊断\n- 治疗方案\n- 指南解读\n- 病例分析\n- 用药参考',
+    content: '您好！我是 **Dr.智**，您的AI临床助手。\n\n可以向我咨询：\n- 风险评估\n- 治疗方案参考\n- 指南解读\n- 病例分析\n- 用药参考',
   })
 })
 </script>

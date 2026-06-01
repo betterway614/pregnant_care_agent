@@ -38,9 +38,9 @@ def test_care_team_members():
             with patch("agno.agent._init.get_model", return_value=mock_model):
                 team = create_care_team()
                 member_names = [m.name for m in team.members]
-                assert "小安" in member_names
-                assert "小护" in member_names
-                assert "智医" in member_names
+                assert any("小安" in n for n in member_names), f"expected 小安 in {member_names}"
+                assert any("小护" in n for n in member_names), f"expected 小护 in {member_names}"
+                assert any("智医" in n for n in member_names), f"expected 智医 in {member_names}"
 
 
 def test_get_care_team_singleton():

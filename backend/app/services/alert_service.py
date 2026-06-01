@@ -97,25 +97,151 @@ class AlertService:
         return alerts
 
     @staticmethod
-    async def enrich_alert_with_llm(db: Session, alert: Alert, pregnant):
-        """使用护士 Agno Agent 为预警生成分析摘要"""
+    async def enrich_alert_with_llm(alert_id, pregnant_id: str):
+        """使用 Agno Workflow 为预警生成分析摘要（护士初筛 → 医生预分析）"""
+        from ..database import SessionLocal
         from .alert_analysis_service import alert_analysis_service
 
-        nurse_result = await alert_analysis_service.run_nurse_analysis(db, alert, pregnant)
-        if not nurse_result:
-            return
+        db = SessionLocal()
+        try:
+            alert = db.query(Alert).filter(Alert.id == alert_id).first()
+            if not alert:
+                logger.warning("enrich_alert_with_llm: alert {} 不存在", alert_id)
+                return
 
-        details = alert.details or {}
-        details["llm_analysis"] = {
-            "risk_interpretation": nurse_result.get("risk_assessment") or nurse_result.get("summary", ""),
-            "recommended_actions": [nurse_result.get("nursing_suggestions", "")],
-            "severity_assessment": nurse_result.get("summary", ""),
-            "analyzed_at": nurse_result.get("analyzed_at", beijing_now().isoformat()),
-            "source": "agno_nurse_agent",
-        }
-        alert.details = details
-        db.commit()
-        logger.info("Agno预警分析完成: alert_id={}", alert.id)
+            from ..models import Pregnant
+            pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+            if not pregnant:
+                logger.warning("enrich_alert_with_llm: pregnant {} 不存在", pregnant_id)
+                return
+
+            # 使用 Workflow 路径（含护士→医生分析 + 自动 fallback）
+            result_payload = await alert_analysis_service.run_alert_workflow(db, alert, pregnant)
+
+            # 兼容读取：从 workflow 结果中提取摘要字段
+            steps = result_payload.get("steps", [])
+            workflow_output = result_payload.get("workflow_output", "")
+
+            nurse_summary = ""
+            for step in steps:
+                if step.get("role") == "nurse":
+                    nurse_summary = step.get("summary", "")
+                    break
+
+            details = alert.details or {}
+            details["llm_analysis"] = {
+                "risk_interpretation": nurse_summary or (workflow_output[:200] if isinstance(workflow_output, str) else ""),
+                "recommended_actions": [s.get("nursing_suggestions", "") for s in steps if s.get("role") == "nurse"],
+                "severity_assessment": nurse_summary or "",
+                "analyzed_at": beijing_now().isoformat(),
+                "source": "agno_workflow",
+            }
+            alert.details = details
+            db.commit()
+            logger.info("Agno Workflow 预警分析完成: alert_id={}", alert.id)
+        except Exception as e:
+            logger.error("enrich_alert_with_llm 失败: alert_id={}, error={}", alert_id, e)
+        finally:
+            db.close()
+
+
+    @staticmethod
+    def repair_details(db: Session) -> int:
+        """修复 details 字段格式，使所有预警的 details 结构一致，返回修复条数"""
+        from sqlalchemy.orm.attributes import flag_modified
+
+        repaired = 0
+        alerts = db.query(Alert).all()
+        for alert in alerts:
+            details = dict(alert.details or {})  # 拷贝一份，确保 SQLAlchemy 检测变更
+            changed = False
+
+            # 补充 source_role
+            if "source_role" not in details:
+                details["source_role"] = "system"
+                changed = True
+
+            # 补充 created_at
+            if "created_at" not in details:
+                details["created_at"] = alert.created_at.isoformat() if alert.created_at else beijing_now().isoformat()
+                changed = True
+
+            # 补充 triggered_rules
+            if "triggered_rules" not in details:
+                details["triggered_rules"] = [alert.rule_id] if alert.rule_id else []
+                changed = True
+
+            # 补充 action（FGR 预警根据 risk_level 推断）
+            if "action" not in details:
+                risk_level = details.get("risk_level", "")
+                action_map = {
+                    "critical": "ALERT_DOCTOR",
+                    "high": "ALERT_DOCTOR",
+                    "medium": "ALERT_NURSE",
+                }
+                details["action"] = action_map.get(risk_level, "ALERT_NURSE")
+                changed = True
+
+            # 初始化 history（如果不存在）
+            if "history" not in details:
+                details["history"] = [{
+                    "seq": 1,
+                    "action": "created",
+                    "source_role": "system",
+                    "level": alert.level,
+                    "operator": None,
+                    "reason": None,
+                    "timestamp": alert.created_at.isoformat() if alert.created_at else beijing_now().isoformat(),
+                }]
+                changed = True
+
+            if changed:
+                alert.details = details
+                flag_modified(alert, "details")
+                repaired += 1
+
+        if repaired:
+            db.commit()
+            logger.info(f"共修复 {repaired} 条预警的 details 字段")
+        return repaired
+
+    @staticmethod
+    def repair_mismatched_alerts(db: Session) -> int:
+        """修复 rule_id 与 message/level 不匹配的预警记录，返回修复条数"""
+        from ..core.rule_engine import get_rule_message, get_rule_level
+
+        repaired = 0
+        alerts = db.query(Alert).all()
+        for alert in alerts:
+            changed = False
+            correct_message = get_rule_message(alert.rule_id)
+            correct_level = get_rule_level(alert.rule_id)
+
+            if correct_message and alert.message != correct_message:
+                old_msg = alert.message
+                alert.message = correct_message
+                changed = True
+                logger.info(
+                    f"修复预警 {alert.id}: rule_id={alert.rule_id}, "
+                    f"消息 '{old_msg}' → '{correct_message}'"
+                )
+
+            if correct_level and alert.level != correct_level:
+                old_level = alert.level
+                alert.level = correct_level
+                changed = True
+                logger.info(
+                    f"修复预警 {alert.id}: rule_id={alert.rule_id}, "
+                    f"级别 '{old_level}' → '{correct_level}'"
+                )
+
+            if changed:
+                repaired += 1
+
+        if repaired:
+            db.commit()
+            logger.info(f"共修复 {repaired} 条不匹配的预警记录")
+        return repaired
 
 
 alert_service = AlertService()
