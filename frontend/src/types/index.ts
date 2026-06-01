@@ -567,8 +567,16 @@ export interface KnowledgeUploadResponse {
   size_bytes: number
   size_human: string
   auto_ingest: boolean
+  auto_tag: boolean
   ingested: boolean
+  metadata?: Record<string, string>
   ingest_error?: string
+}
+
+export interface AutoTagResponse {
+  filename: string
+  tags: Record<string, string>
+  message: string
 }
 
 export interface KnowledgeIngestResponse {

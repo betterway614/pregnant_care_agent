@@ -15,6 +15,7 @@ import type {
   KnowledgeSearchResponse,
   KnowledgeChunkListResponse,
   ChunkStatsResponse,
+  AutoTagResponse,
 } from '@/types'
 
 export const adminApi = {
@@ -99,19 +100,30 @@ export const adminApi = {
     }, { timeout: 30000 }),
 
   // ── 带元数据的上传 ──
-  uploadKnowledgeDocWithMeta: (file: File, name?: string, autoIngest: boolean = true, metadata?: Record<string, string>) => {
+  uploadKnowledgeDocWithMeta: (
+    file: File, name?: string, autoIngest: boolean = true,
+    metadata?: Record<string, string>, autoTag: boolean = true,
+  ) => {
     const formData = new FormData()
     formData.append('file', file)
     if (name) formData.append('name', name)
     formData.append('auto_ingest', String(autoIngest))
+    formData.append('auto_tag', String(autoTag))
     if (metadata && Object.keys(metadata).length > 0) {
       formData.append('metadata_json', JSON.stringify(metadata))
     }
     return client.post<KnowledgeUploadResponse>('/admin/knowledge/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
+      timeout: 180000, // AI 打标签可能耗时
     })
   },
+
+  // ── AI 自动打标签 ──
+  autoTagDocument: (filename: string) =>
+    client.post<AutoTagResponse>(`/admin/knowledge/auto-tag`, null, {
+      params: { filename },
+      timeout: 60000,
+    }),
 
   // ── 嵌入文本块浏览 ──
   getKnowledgeChunks: (page: number = 1, pageSize: number = 20, name?: string) =>

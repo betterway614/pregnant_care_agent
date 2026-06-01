@@ -236,6 +236,7 @@ async def upload_document(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     auto_ingest: bool = Form(True),
+    auto_tag: bool = Form(True),
     metadata_json: Optional[str] = Form(None),
 ):
     """上传新文档到知识库
@@ -244,6 +245,7 @@ async def upload_document(
         file: 上传的文件（支持 .md / .txt / .pdf）
         name: 文档显示名称（可选，默认使用文件名）
         auto_ingest: 是否自动入库（默认 True）
+        auto_tag: 是否自动 AI 打标签（默认 True）
         metadata_json: 元数据 JSON 字符串，如 '{"category":"产检指南","trimester":"all"}'
     """
     # 校验文件类型
@@ -289,12 +291,25 @@ async def upload_document(
         f.write(content)
 
     doc_name = name or os.path.splitext(filename)[0]
+
+    # AI 自动打标签
+    if auto_tag and not metadata:
+        try:
+            text_content = content.decode("utf-8", errors="ignore")[:4000]
+            auto_meta = await _auto_tag_content(text_content, doc_name)
+            if auto_meta:
+                metadata = auto_meta
+                logger.info("AI 自动标签生成成功: %s -> %s", filename, list(auto_meta.keys()))
+        except Exception as e:
+            logger.warning("AI 自动标签生成失败（继续入库）: %s", e)
+
     result = {
         "filename": filename,
         "name": doc_name,
         "size_bytes": len(content),
         "size_human": _human_size(len(content)),
         "auto_ingest": auto_ingest,
+        "auto_tag": auto_tag,
         "ingested": False,
         "metadata": metadata,
     }
@@ -546,6 +561,88 @@ def get_predefined_tags():
             "language": "语言：zh(中文) / en(英文)",
         },
     }
+
+
+# ── AI 自动打标签 ──
+
+@router.post("/auto-tag")
+async def auto_tag_document(filename: str = Query(..., description="文档文件名")):
+    """对已存在的文档执行 AI 自动标签生成
+
+    读取文档内容，调用 LLM 分析并返回推荐的元数据标签。
+    """
+    docs_dir = _get_docs_dir()
+    fpath = os.path.join(docs_dir, filename)
+    if not os.path.exists(fpath):
+        raise HTTPException(status_code=404, detail=f"文档不存在: {filename}")
+
+    try:
+        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read(4000)
+        doc_name = os.path.splitext(filename)[0]
+        tags = await _auto_tag_content(content, doc_name)
+        return {"filename": filename, "tags": tags, "message": "AI 标签生成成功"}
+    except Exception as e:
+        logger.error("AI 标签生成失败: %s - %s", filename, e)
+        raise HTTPException(status_code=500, detail=f"标签生成失败: {e}")
+
+
+async def _auto_tag_content(content: str, doc_name: str) -> dict[str, str]:
+    """调用 LLM 分析文档内容，自动生成元数据标签
+
+    返回格式: {"category": "...", "trimester": "...", "risk_level": "...", "audience": "...", "summary": "..."}
+    """
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        api_key=settings.llm_api_key or "sk-placeholder",
+        base_url=settings.llm_base_url,
+    )
+
+    prompt = f"""你是一个医学文档分类专家。请分析以下孕期管理平台的文档内容，生成元数据标签。
+
+文档名称：{doc_name}
+
+文档内容（前4000字符）：
+{content}
+
+请严格按照以下 JSON 格式返回标签，不要返回其他内容：
+{{
+  "category": "从以下选择：产检指南、用药安全、孕期疾病、营养饮食、心理健康、运动安全、分娩准备、产后恢复、新生儿护理、实验室检查",
+  "trimester": "从以下选择：first（孕早期1-12周）、second（孕中期13-27周）、third（孕晚期28-40周）、all（全孕期）",
+  "risk_level": "从以下选择：low（低风险，一般科普）、medium（中风险，需关注）、high（高风险，需专业指导）",
+  "audience": "从以下选择：patient（孕妇本人）、nurse（护士）、doctor（医生）、all（所有角色）",
+  "language": "zh 或 en",
+  "summary": "文档摘要，50字以内"
+}}"""
+
+    try:
+        response = await client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=500,
+        )
+        result_text = response.choices[0].message.content.strip()
+
+        # 提取 JSON（兼容 markdown code block）
+        if "```" in result_text:
+            start = result_text.find("{")
+            end = result_text.rfind("}") + 1
+            if start >= 0 and end > start:
+                result_text = result_text[start:end]
+
+        tags = json.loads(result_text)
+
+        # 只保留允许的标签键
+        valid_keys = {"category", "trimester", "risk_level", "audience", "language", "summary"}
+        return {k: v for k, v in tags.items() if k in valid_keys and v}
+    except json.JSONDecodeError:
+        logger.warning("LLM 返回的标签不是有效 JSON: %s", result_text[:200])
+        return {}
+    except Exception as e:
+        logger.warning("LLM 调用失败: %s", e)
+        return {}
 
 
 async def _ingest_single(

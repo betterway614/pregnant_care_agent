@@ -195,7 +195,7 @@
             {{ formatTime(row.modified_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
             <el-button
               type="primary"
@@ -205,6 +205,15 @@
               :loading="ingestingFiles.has(row.filename)"
             >
               入库
+            </el-button>
+            <el-button
+              type="warning"
+              link
+              size="small"
+              @click="handleAutoTag(row)"
+              :loading="taggingFiles.has(row.filename)"
+            >
+              AI标签
             </el-button>
             <el-button
               type="danger"
@@ -345,7 +354,13 @@
           <el-switch v-model="autoIngest" active-text="是" inactive-text="否" />
         </el-form-item>
 
-        <el-form-item label="元数据标签">
+        <el-form-item label="AI 自动标签">
+          <el-switch v-model="autoTag" active-text="是" inactive-text="否" />
+          <span class="form-tip" v-if="autoTag">上传后自动调用 AI 分析内容生成标签</span>
+          <span class="form-tip" v-else>手动填写元数据标签</span>
+        </el-form-item>
+
+        <el-form-item label="元数据标签" v-if="!autoTag || metadataEntries.length > 0">
           <div class="metadata-editor">
             <div
               v-for="(entry, idx) in metadataEntries"
@@ -427,7 +442,9 @@ const showUploadDialog = ref(false)
 const uploadFile = ref<File | null>(null)
 const uploadName = ref('')
 const autoIngest = ref(true)
+const autoTag = ref(true)
 const ingestingFiles = ref(new Set<string>())
+const taggingFiles = ref(new Set<string>())
 const documents = ref<KnowledgeDoc[]>([])
 
 // Chunks state
@@ -612,6 +629,7 @@ function resetUpload() {
   uploadFile.value = null
   uploadName.value = ''
   autoIngest.value = true
+  autoTag.value = true
   metadataEntries.value = []
 }
 
@@ -629,14 +647,18 @@ async function handleUpload() {
       uploadName.value || undefined,
       autoIngest.value,
       Object.keys(metadata).length > 0 ? metadata : undefined,
+      autoTag.value,
     )
     const data = res.data
+    const metaInfo = data.metadata
+      ? ` 标签: ${Object.entries(data.metadata).map(([k, v]) => `${k}=${v}`).join(', ')}`
+      : ''
     if (data.ingested) {
-      ElMessage.success(`"${data.name}" 上传并入库成功`)
+      ElMessage.success(`"${data.name}" 上传并入库成功${metaInfo}`)
     } else if (data.ingest_error) {
       ElMessage.warning(`上传成功，入库失败: ${data.ingest_error}`)
     } else {
-      ElMessage.success(`"${data.name}" 上传成功`)
+      ElMessage.success(`"${data.name}" 上传成功${metaInfo}`)
     }
     showUploadDialog.value = false
     loadData()
@@ -697,6 +719,25 @@ async function handleIngestAll() {
     ElMessage.error('全量入库失败: ' + (err.response?.data?.detail || err.message))
   } finally {
     ingesting.value = false
+  }
+}
+
+async function handleAutoTag(doc: KnowledgeDoc) {
+  taggingFiles.value.add(doc.filename)
+  try {
+    const res = await adminApi.autoTagDocument(doc.filename)
+    const tags = res.data.tags
+    const tagStr = Object.entries(tags)
+      .filter(([k]) => k !== 'summary')
+      .map(([k, v]) => `${k}=${v}`)
+      .join(', ')
+    const summary = tags.summary ? ` 摘要: ${tags.summary}` : ''
+    ElMessage.success(`"${doc.name}" AI 标签: ${tagStr}${summary}`)
+    loadData()
+  } catch (err: any) {
+    ElMessage.error('AI 标签生成失败: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    taggingFiles.value.delete(doc.filename)
   }
 }
 

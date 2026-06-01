@@ -64,7 +64,6 @@ def _mode_is_viable(mode: str) -> bool:
 
 def _build_model(role: AgentRole, mode: str):
     from agno.models.openai import OpenAIChat
-    from agno.models.ollama import Ollama
 
     model_id = _resolve_model_id(role)
     temperature = _resolve_temperature(role)
@@ -91,6 +90,7 @@ def _build_model(role: AgentRole, mode: str):
                 max_tokens=max_tokens,
                 role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
             )
+        from agno.models.ollama import Ollama
         return Ollama(
             id=local_id,
             host=settings.ollama_host,

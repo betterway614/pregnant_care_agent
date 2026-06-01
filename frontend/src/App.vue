@@ -9,6 +9,8 @@ import { useAppStore } from '@/stores/app'
 const appStore = useAppStore()
 
 onMounted(() => {
-  appStore.fetchStats()
+  if (localStorage.getItem('isLoggedIn')) {
+    appStore.fetchStats()
+  }
 })
 </script>

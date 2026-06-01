@@ -317,9 +317,8 @@ def _seed_fgr_assessments(db):
     if db.query(FgrAssessment).count() > 0:
         logger.info("FGR评估数据已存在，跳过")
         return
-    fgr_patients = db.query(Pregnant).filter(
-        Pregnant.risk_tags.contains("FGR高危")
-    ).all()
+    all_pregnant = db.query(Pregnant).all()
+    fgr_patients = [p for p in all_pregnant if "FGR高危" in (p.risk_tags or [])]
     count = 0
     for pregnant in fgr_patients:
         current_gw = (pregnant.gestational_age_days or 168) // 7

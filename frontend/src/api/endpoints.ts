@@ -281,11 +281,13 @@ async function _sseFetch(
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
+  const token = localStorage.getItem('token')
   await fetchEventSource(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
     signal,
