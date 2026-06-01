@@ -24,6 +24,10 @@ export const chatApi = {
       `/chat/conversation/${pregnantId}`,
       { params: { session_id: sessionId } }
     ),
+  listSessions: (pregnantId: string) =>
+    client.get<{ sessions: Array<{ session_id: string; message_count: number; started_at: string; last_message_at: string; preview: string }> }>(
+      `/chat/sessions/${pregnantId}`
+    ),
   clearConversation: (pregnantId: string, sessionId?: string) =>
     client.delete(`/chat/conversation/${pregnantId}`, { params: { session_id: sessionId } }),
 }

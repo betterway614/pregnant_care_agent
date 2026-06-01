@@ -315,7 +315,108 @@
       <el-empty v-else-if="searchPerformed" description="未检索到相关内容" :image-size="80" />
     </el-card>
 
-    <!-- ═══════════════════ 5. UPLOAD DIALOG ═══════════════════ -->
+    <!-- ═══════════════════ 5. EMBEDDED CHUNKS PANEL ═══════════════════ -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="section-header">
+          <div class="section-header__left">
+            <el-icon :size="18" color="#0891b2"><Grid /></el-icon>
+            <span>已入库文本块</span>
+            <el-tag size="small" type="info" class="doc-count-tag">{{ chunkTotal }} 条</el-tag>
+          </div>
+          <div class="section-header__actions">
+            <el-select
+              v-model="chunkFilterName"
+              placeholder="按文档筛选"
+              clearable
+              size="small"
+              style="width: 180px;"
+              @change="loadChunks(1)"
+            >
+              <el-option
+                v-for="doc in chunkDocStats"
+                :key="doc.name"
+                :label="`${doc.name} (${doc.chunk_count})`"
+                :value="doc.name"
+              />
+            </el-select>
+            <el-button :icon="Refresh" @click="loadChunks()" :loading="loadingChunks" size="small">刷新</el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 文档分块统计 -->
+      <el-row :gutter="12" class="chunk-stats-row" v-if="chunkDocStats.length > 0">
+        <el-col :xs="12" :sm="8" :md="6" v-for="doc in chunkDocStats" :key="doc.name">
+          <div class="chunk-stat-card" @click="chunkFilterName = doc.name; loadChunks(1)">
+            <div class="chunk-stat-card__name">{{ doc.name }}</div>
+            <div class="chunk-stat-card__count">{{ doc.chunk_count }} 块</div>
+            <div class="chunk-stat-card__len">平均 {{ doc.avg_content_length }} 字符</div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <!-- 文本块列表 -->
+      <el-table
+        :data="chunks"
+        v-loading="loadingChunks"
+        stripe
+        size="small"
+        style="width: 100%; margin-top: 12px;"
+        empty-text="暂无已入库文本块，请先执行入库操作"
+        :header-cell-style="{ background: '#f8fafc', color: '#334155', fontWeight: 600 }"
+        row-key="id"
+      >
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="chunk-expand">
+              <div class="chunk-expand__label">完整内容：</div>
+              <div class="chunk-expand__content">{{ row.content }}</div>
+              <div v-if="row.meta_data && Object.keys(row.meta_data).length > 0" class="chunk-expand__meta">
+                <span class="chunk-expand__label">元数据：</span>
+                <el-tag
+                  v-for="(val, key) in row.meta_data"
+                  :key="key"
+                  size="small"
+                  effect="plain"
+                  class="meta-tag"
+                >
+                  {{ key }}: {{ val }}
+                </el-tag>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="文档" width="160" show-overflow-tooltip />
+        <el-table-column label="内容预览" min-width="300">
+          <template #default="{ row }">
+            <div class="chunk-preview">{{ row.content?.slice(0, 200) }}{{ row.content?.length > 200 ? '...' : '' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="长度" width="80" align="center">
+          <template #default="{ row }">
+            {{ row.content?.length || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="入库时间" width="140" align="center">
+          <template #default="{ row }">
+            {{ row.created_at ? formatTime(row.created_at) : '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-pagination
+        v-if="chunkTotal > chunkPageSize"
+        v-model:current-page="chunkPage"
+        :page-size="chunkPageSize"
+        :total="chunkTotal"
+        layout="total, prev, pager, next"
+        style="margin-top: 12px; justify-content: flex-end;"
+        @current-change="loadChunks"
+      />
+    </el-card>
+
+    <!-- ═══════════════════ 6. UPLOAD DIALOG ═══════════════════ -->
     <el-dialog
       v-model="showUploadDialog"
       title="上传知识库文档"

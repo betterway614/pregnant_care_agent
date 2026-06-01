@@ -58,6 +58,9 @@
       </button>
       <h1 class="navbar-title">孕期温暖陪伴</h1>
       <div class="navbar-actions">
+        <button class="navbar-btn interactive-card" @click="openSessionDrawer" aria-label="历史会话" title="历史会话">
+          <el-icon :size="20"><Clock /></el-icon>
+        </button>
         <button class="navbar-btn interactive-card" @click="handleNewChat" aria-label="新建对话" title="新建对话">
           <el-icon :size="20"><ChatLineRound /></el-icon>
         </button>
@@ -70,9 +73,6 @@
     <!-- ==================== 2. 用户信息栏 ==================== -->
     <div class="user-info-bar">
       <span class="user-name">{{ displayName || '孕妈' }}</span>
-      <button class="switch-btn interactive-card" @click="handleSwitchUser">
-        <el-icon :size="12"><RefreshRight /></el-icon> 切换
-      </button>
       <div class="user-actions">
         <button class="user-action-btn interactive-card" :class="{ active: isMuted }" @click="toggleMute" :aria-label="isMuted ? '取消静音' : '静音'">
           <el-icon :size="16"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
@@ -415,6 +415,40 @@
         <el-button type="primary" @click="confirmEdit">发送</el-button>
       </template>
     </el-dialog>
+
+    <!-- ==================== 历史会话抽屉 ==================== -->
+    <el-drawer
+      v-model="sessionDrawerVisible"
+      title="历史会话"
+      direction="rtl"
+      size="85%"
+      :style="{ maxWidth: '400px' }"
+    >
+      <div class="session-list">
+        <div v-if="sessionLoading" class="session-loading">
+          <span class="loading-dot" />
+          <span class="loading-dot" />
+          <span class="loading-dot" />
+        </div>
+        <div v-else-if="sessions.length === 0" class="session-empty">
+          <el-icon :size="48" color="#CBD5E1"><ChatDotRound /></el-icon>
+          <p>暂无历史会话</p>
+        </div>
+        <div
+          v-for="s in sessions"
+          :key="s.session_id"
+          class="session-item interactive-card"
+          :class="{ 'session-item--active': s.session_id === chatStore.sessionId }"
+          @click="handleLoadSession(s.session_id)"
+        >
+          <div class="session-item__header">
+            <span class="session-item__date">{{ formatSessionDate(s.last_message_at) }}</span>
+            <span class="session-item__count">{{ s.message_count }} 条消息</span>
+          </div>
+          <p class="session-item__preview">{{ s.preview || '新对话' }}</p>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -423,7 +457,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Delete, DeleteFilled, Promotion, ArrowLeft, WarningFilled, Close, Microphone,
-  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera, Headset, Document
+  Mute, RefreshRight, ChatDotRound, ChatLineRound, CopyDocument, Edit, VideoPlay, VideoPause, ArrowRight, DocumentChecked, Avatar, Check, Picture, Camera, Headset, Document, Clock
 } from '@element-plus/icons-vue'
 import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
@@ -488,6 +522,11 @@ const isMuted = ref(false)
 const followupRecordId = ref<string | null>(null)
 const isFollowupMode = ref(false)
 const followupProgress = ref<{ answered: number; total: number; status: string } | null>(null)
+
+// 历史会话
+const sessionDrawerVisible = ref(false)
+const sessionLoading = ref(false)
+const sessions = ref<Array<{ session_id: string; message_count: number; started_at: string; last_message_at: string; preview: string }>>([])
 
 // 音频录制
 const isRecording = ref(false)
@@ -579,10 +618,6 @@ function handleBack() {
   router.options.history.state.back ? router.back() : router.push('/')
 }
 
-function handleSwitchUser() {
-  ElMessage.info('孕妇切换功能即将上线')
-}
-
 function toggleMute() {
   isMuted.value = !isMuted.value
   ElMessage.info(isMuted.value ? '已静音' : '已取消静音')
@@ -590,13 +625,56 @@ function toggleMute() {
 
 /* ==================== 新建对话 ==================== */
 function handleNewChat() {
-  if (chatStore.messages.length === 0) return
+  if (chatStore.messages.length === 0 && !chatStore.sessionId) return
   chatStore.newConversation()
   urgentDetected.value = false
   followupRecordId.value = null
   isFollowupMode.value = false
   followupProgress.value = null
   ElMessage.success('已开始新对话')
+}
+
+/* ==================== 历史会话 ==================== */
+async function openSessionDrawer() {
+  sessionDrawerVisible.value = true
+  sessionLoading.value = true
+  try {
+    const res = await chatApi.listSessions(pregnantId.value)
+    sessions.value = res.data.sessions || []
+  } catch {
+    sessions.value = []
+  } finally {
+    sessionLoading.value = false
+  }
+}
+
+async function handleLoadSession(targetSessionId: string) {
+  if (targetSessionId === chatStore.sessionId) {
+    sessionDrawerVisible.value = false
+    return
+  }
+  await chatStore.loadSession(pregnantId.value, targetSessionId)
+  sessionDrawerVisible.value = false
+  urgentDetected.value = false
+  followupRecordId.value = null
+  isFollowupMode.value = false
+  followupProgress.value = null
+  nextTick(() => scrollToBottom(false))
+}
+
+function formatSessionDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const now = new Date()
+  const isToday = d.toDateString() === now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const isYesterday = d.toDateString() === yesterday.toDateString()
+
+  const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  if (isToday) return `今天 ${time}`
+  if (isYesterday) return `昨天 ${time}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${time}`
 }
 
 /* ==================== 消息操作 ==================== */
@@ -1469,15 +1547,6 @@ onMounted(async () => {
   z-index: 9;
 }
 .user-name { font-size: 13px; font-weight: 600; color: #475569; }
-.switch-btn {
-  display: flex; align-items: center; gap: 4px;
-  padding: 4px 10px; border-radius: 12px;
-  background: rgba(255, 255, 255, 0.7); border: 1px solid white;
-  color: #0284C7; font-size: 11px; font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.switch-btn:hover { background: rgba(255, 255, 255, 0.9); }
 .user-actions { margin-left: auto; display: flex; }
 .user-action-btn {
   width: 36px; height: 36px; border-radius: 50%; border: none;
@@ -1982,6 +2051,50 @@ onMounted(async () => {
 }
 .image-source-item:active {
   background: #FFE4E6;
+}
+
+/* ==================== 历史会话列表 ==================== */
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+.session-loading {
+  display: flex; justify-content: center; align-items: center; gap: 6px;
+  padding: 40px 0;
+}
+.session-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 0; color: #94A3B8;
+}
+.session-empty p { font-size: 14px; margin: 0; }
+.session-item {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.1);
+}
+.session-item--active {
+  background: #FFF1F2;
+  border-color: #FECDD3;
+}
+.session-item__header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.session-item__date { font-size: 13px; font-weight: 600; color: #334155; }
+.session-item__count { font-size: 11px; color: #94A3B8; }
+.session-item__preview {
+  font-size: 13px; color: #64748B; line-height: 1.4;
+  margin: 0; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 
 </style>

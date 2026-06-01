@@ -129,6 +129,59 @@ async def get_memory(patient_id: str):
     return {"pregnant_id": patient_id, "memory": memory}
 
 
+@router.get("/sessions/{pregnant_id}")
+async def list_sessions(pregnant_id: str):
+    """列出该孕妇的所有历史会话（按时间倒序）"""
+    if not settings.persist_chat_messages:
+        return {"sessions": []}
+
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func, distinct
+
+        # 查询所有不同的 session_id 及其消息数和最新时间
+        rows = (
+            db.query(
+                ConversationMessage.session_id,
+                func.count(ConversationMessage.id).label("message_count"),
+                func.min(ConversationMessage.created_at).label("started_at"),
+                func.max(ConversationMessage.created_at).label("last_message_at"),
+            )
+            .filter(ConversationMessage.pregnant_id == pregnant_id)
+            .group_by(ConversationMessage.session_id)
+            .order_by(func.max(ConversationMessage.created_at).desc())
+            .limit(50)
+            .all()
+        )
+
+        sessions = []
+        for row in rows:
+            # 获取该会话的第一条用户消息作为预览
+            first_user_msg = (
+                db.query(ConversationMessage.content)
+                .filter(
+                    ConversationMessage.pregnant_id == pregnant_id,
+                    ConversationMessage.session_id == row.session_id,
+                    ConversationMessage.role == "user",
+                )
+                .order_by(ConversationMessage.created_at.asc())
+                .first()
+            )
+            preview = first_user_msg.content[:50] if first_user_msg else ""
+
+            sessions.append({
+                "session_id": row.session_id,
+                "message_count": row.message_count,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "last_message_at": row.last_message_at.isoformat() if row.last_message_at else None,
+                "preview": preview,
+            })
+
+        return {"sessions": sessions}
+    finally:
+        db.close()
+
+
 @router.delete("/memory")
 async def clear_memory(patient_id: str):
     memory_manager.clear(patient_id)
