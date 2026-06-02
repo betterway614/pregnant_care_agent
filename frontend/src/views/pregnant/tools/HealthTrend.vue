@@ -10,7 +10,7 @@
       <!-- 指标选择器 -->
       <div class="trend-metric-selector">
         <el-checkbox-group v-model="selectedMetrics" @change="loadTrendData">
-          <el-checkbox v-for="m in metricOptions" :key="m.value" :label="m.value" :value="m.value">
+          <el-checkbox v-for="m in metricOptions" :key="m.value" :value="m.value">
             {{ m.label }}
           </el-checkbox>
         </el-checkbox-group>
@@ -58,6 +58,7 @@ import { ref, onMounted } from 'vue'
 import { pregnantApi } from '@/api/endpoints'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import type { TrendSeries } from '@/types'
+import { METRIC_OPTIONS } from '@/utils/labelMaps'
 
 const selectedMetrics = ref<string[]>(['weight', 'systolic', 'diastolic'])
 const trendAxisMode = ref<'date' | 'gestational_week'>('date')
@@ -65,17 +66,7 @@ const trendSeries = ref<TrendSeries[]>([])
 const trendLoading = ref(false)
 const pointDetail = ref<{ metric: string; name: string; date: string; value: number; unit: string; isNormal: boolean | null } | null>(null)
 
-const metricOptions = [
-  { value: 'weight', label: '体重' },
-  { value: 'systolic', label: '收缩压' },
-  { value: 'diastolic', label: '舒张压' },
-  { value: 'blood_sugar_fasting', label: '空腹血糖' },
-  { value: 'blood_sugar_postprandial', label: '餐后血糖' },
-  { value: 'fetal_movement', label: '胎动' },
-  { value: 'heart_rate', label: '心率' },
-  { value: 'sleep_hours', label: '睡眠' },
-  { value: 'steps', label: '步数' },
-]
+const metricOptions = METRIC_OPTIONS
 
 function loadTrendData() {
   const pid = localStorage.getItem('currentPregnantId')

@@ -449,7 +449,17 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
         prompt = _build_followup_generate_prompt(pregnant, gest_week, gest_day, risk_tags,
                                                   patient_data, template_id)
         agent = create_followup_generate_agent()
+        t0 = time.time()
         response = await agent.arun(prompt)
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_nurse_audit_log(
+            session_id=f"nurse_followup_{pregnant.pregnant_id}",
+            user_id=pregnant.pregnant_id,
+            agent_variant="followup",
+            intent_classification="FOLLOWUP_GENERATE",
+            run_response=response,
+            total_latency_ms=elapsed_ms,
+        )
         data = extract_structured_content(response.content)
         if not data:
             return None

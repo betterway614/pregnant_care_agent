@@ -117,6 +117,7 @@
 
 <script setup lang="ts">
 import type { FollowUpHistoryRecord } from '@/types'
+import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
 
 defineProps<{
   records: FollowUpHistoryRecord[]
@@ -175,25 +176,6 @@ function hasExam(obj: Record<string, any> | undefined): boolean {
   return !!obj && Object.keys(obj).length > 0
 }
 
-function fieldLabel(key: string): string {
-  const map: Record<string, string> = {
-    weight: '体重', bp: '血压', blood_pressure: '血压', fetal_movement: '胎动',
-    diet: '饮食', mood: '情绪', sleep: '睡眠', stress: '压力',
-    medication: '用药', nausea: '孕吐', feeling: '感受',
-    blood_sugar_fasting: '空腹血糖', blood_sugar_2h: '餐后血糖',
-  }
-  return map[key] || key
-}
-
-function examLabel(key: string): string {
-  const map: Record<string, string> = {
-    fundal_height_cm: '宫高', abdominal_circumference_cm: '腹围',
-    fetal_position: '胎位', fetal_heart_rate_bpm: '胎心率',
-    blood_pressure: '血压',
-  }
-  return map[key] || key
-}
-
 function examHighlightClass(key: string, val: any): string {
   if (key === 'fetal_heart_rate_bpm') {
     const v = Number(val)
@@ -204,18 +186,6 @@ function examHighlightClass(key: string, val: any): string {
     if (s >= 140 || d >= 90) return 'value--abnormal'
   }
   return ''
-}
-
-function labLabel(key: string): string {
-  const map: Record<string, string> = {
-    hemoglobin_g_L: '血红蛋白', urine_protein: '尿蛋白',
-    blood_sugar_fasting: '空腹血糖', blood_sugar_2h: '餐后血糖',
-    alt: '谷丙转氨酶(ALT)', ast: '谷草转氨酶(AST)',
-    creatinine: '肌酐', uric_acid: '尿酸', albumin: '白蛋白',
-    wbc: '白细胞', platelet: '血小板', hct: '红细胞压积',
-    bilirubin_total: '总胆红素',
-  }
-  return map[key] || key
 }
 
 function labHighlightClass(key: string, val: any): string {

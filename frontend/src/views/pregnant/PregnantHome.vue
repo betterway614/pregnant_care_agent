@@ -251,6 +251,7 @@ import {
   Odometer, Sunny, ArrowDown
 } from '@element-plus/icons-vue'
 import { pregnantApi, recommendApi, followUpApi, chatApi, orderApi } from '@/api/endpoints'
+import { trendName } from '@/utils/labelMaps'
 
 const router = useRouter()
 const loading = ref(true)
@@ -354,13 +355,6 @@ const loadPregnantOrders = async () => {
   } catch {}
 }
 
-function trendName(metric: string): string {
-  const names: Record<string, string> = {
-    weight: '体重', systolic: '收缩压', diastolic: '舒张压',
-    fetal_movement: '胎动', blood_sugar: '血糖', heart_rate: '心率'
-  }
-  return names[metric] || metric
-}
 
 function formatOrderDate(t?: string): string {
   if (!t) return ''
@@ -371,7 +365,9 @@ function formatOrderDate(t?: string): string {
 function getTrendIcon(metric: string): string {
   const icons: Record<string, string> = {
     weight: 'ScaleToOriginal', systolic: 'Odometer', diastolic: 'Odometer',
-    fetal_movement: 'Opportunity', blood_sugar: 'Sunny', heart_rate: 'Odometer'
+    fetal_movement: 'Opportunity', blood_sugar: 'Sunny', blood_sugar_fasting: 'Sunny',
+    blood_sugar_postprandial: 'Sunny', heart_rate: 'Odometer',
+    sleep_hours: 'Moon', steps: 'Odometer', emotion_score: 'ChatRound'
   }
   return icons[metric] || 'Document'
 }
@@ -761,8 +757,11 @@ onActivated(() => {
 .icon-weight { color: var(--c-rose); background: var(--c-rose-light); }
 .icon-systolic, .icon-diastolic { color: var(--c-sky); background: var(--c-sky-light); }
 .icon-fetal_movement { color: var(--c-indigo); background: rgba(129,140,248,0.15); }
-.icon-blood_sugar { color: var(--c-amber); background: rgba(251,191,36,0.15); }
+.icon-blood_sugar, .icon-blood_sugar_fasting, .icon-blood_sugar_postprandial { color: var(--c-amber); background: rgba(251,191,36,0.15); }
 .icon-heart_rate { color: var(--c-rose); background: var(--c-rose-light); }
+.icon-sleep_hours { color: var(--c-indigo); background: rgba(129,140,248,0.15); }
+.icon-steps { color: var(--c-emerald); background: rgba(52,211,153,0.15); }
+.icon-emotion_score { color: var(--c-indigo); background: rgba(129,140,248,0.15); }
 
 .trend-name { font-size: 14px; font-weight: 600; color: var(--c-slate-600); }
 .trend-status { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 600; }

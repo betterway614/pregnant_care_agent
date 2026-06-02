@@ -43,7 +43,7 @@
       </h4>
       <div class="metric-controls">
         <el-checkbox-group v-model="selectedMetrics" size="small" @change="loadHealthTrends">
-          <el-checkbox v-for="m in metricOptions" :key="m.value" :value="m.value" :label="m.label" />
+          <el-checkbox v-for="m in metricOptions" :key="m.value" :value="m.value">{{ m.label }}</el-checkbox>
         </el-checkbox-group>
       </div>
       <HealthTrendChart
@@ -96,6 +96,7 @@ import { pregnantApi } from '@/api/endpoints'
 import type { HealthTrendResponse, LabTrendItem, LabTrendResponse } from '@/types'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import MiniSpark from '@/components/charts/MiniSpark.vue'
+import { METRIC_OPTIONS } from '@/utils/labelMaps'
 
 const props = withDefaults(defineProps<{
   pregnantId: string
@@ -118,16 +119,7 @@ const basicInfo = ref({
 const trendsLoading = ref(false)
 const trendsData = ref<HealthTrendResponse | null>(null)
 const selectedMetrics = ref(['systolic', 'diastolic', 'weight'])
-const metricOptions = [
-  { label: '收缩压', value: 'systolic' },
-  { label: '舒张压', value: 'diastolic' },
-  { label: '体重', value: 'weight' },
-  { label: '空腹血糖', value: 'blood_sugar_fasting' },
-  { label: '餐后血糖', value: 'blood_sugar_postprandial' },
-  { label: '胎动', value: 'fetal_movement' },
-  { label: '心率', value: 'heart_rate' },
-  { label: '睡眠', value: 'sleep_hours' },
-]
+const metricOptions = METRIC_OPTIONS
 
 // 生化指标
 const labLoaded = ref(false)

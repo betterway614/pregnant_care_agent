@@ -474,42 +474,44 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
                 for f in recent_followups
             ]
 
-        # 自动评估规则引擎：将最近数据喂入规则引擎检测异常
-        from .rule_engine import rule_engine
-        latest_vitals = {}
-        for d in recent_data:
-            code = d.metric_code
-            if code not in latest_vitals:
-                latest_vitals[code] = d.value
-        rule_ctx = {
-            "sbp": latest_vitals.get("systolic", 0),
-            "dbp": latest_vitals.get("diastolic", 0),
-            "weight": latest_vitals.get("weight", 0),
-            "fetal_movement": latest_vitals.get("fetal_movement", 0),
-            "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting", 0) or latest_vitals.get("blood_sugar", 0),
-            "heart_rate": latest_vitals.get("heart_rate", 0),
-            "gest_week": gest_days // 7 if gest_days else 0,
-        }
-        try:
-            auto_alerts = rule_engine.evaluate_all(rule_ctx)
-        except Exception:
-            auto_alerts = []
-        result["auto_alerts"] = [
-            {"level": a["level"], "message": a["message"]}
-            for a in auto_alerts
-        ]
-        result["has_abnormal"] = len(auto_alerts) > 0
-
-        # 保存到 session_state，供后续工具使用
-        if run_context is not None:
-            if run_context.session_state is None:
-                run_context.session_state = {}
-            run_context.session_state["last_queried_patient"] = {
-                "pregnant_id": pid,
-                "data": result,
+            # 自动评估规则引擎：将最近数据喂入规则引擎检测异常
+            from .rule_engine import rule_engine
+            latest_vitals = {}
+            for d in recent_data:
+                code = d.metric_code
+                if code not in latest_vitals:
+                    latest_vitals[code] = d.value
+            rule_ctx = {
+                "sbp": latest_vitals.get("systolic", 0),
+                "dbp": latest_vitals.get("diastolic", 0),
+                "weight": latest_vitals.get("weight", 0),
+                "fetal_movement": latest_vitals.get("fetal_movement", 0),
+                "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting", 0) or latest_vitals.get("blood_sugar", 0),
+                "heart_rate": latest_vitals.get("heart_rate", 0),
+                "gest_week": gest_days // 7 if gest_days else 0,
             }
+            try:
+                auto_alerts = rule_engine.evaluate_all(rule_ctx)
+            except Exception:
+                auto_alerts = []
+            result["auto_alerts"] = [
+                {"level": a["level"], "message": a["message"]}
+                for a in auto_alerts
+            ]
+            result["has_abnormal"] = len(auto_alerts) > 0
 
-    return result
+            # 保存到 session_state，供后续工具使用
+            if run_context is not None:
+                if run_context.session_state is None:
+                    run_context.session_state = {}
+                run_context.session_state["last_queried_patient"] = {
+                    "pregnant_id": pid,
+                    "data": result,
+                }
+
+            return result
+        finally:
+            db.close()
 
 
 @tool

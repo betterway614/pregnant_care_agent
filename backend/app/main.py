@@ -300,6 +300,7 @@ from starlette.responses import JSONResponse
 from .core.auth import decode_token
 
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/v1/auth/login"}
+_PUBLIC_PREFIXES = ("/api/v1/fgr/image/", "/ws/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -314,6 +315,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # 跳过公开路径
         if path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        # 跳过公开路径前缀（如 FGR 图片端点，供 <img src> 无 auth 访问）
+        if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
 
         # 跳过静态资源

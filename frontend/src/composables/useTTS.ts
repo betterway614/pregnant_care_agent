@@ -51,9 +51,13 @@ export function useTTS(options: TTSOptions = {}) {
     isSpeaking.value = true
 
     try {
+      const token = localStorage.getItem('token')
       const resp = await fetch('/api/v1/tts/synthesize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ text, role }),
         signal: abortController.signal,
       })

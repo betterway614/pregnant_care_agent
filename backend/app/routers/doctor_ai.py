@@ -644,6 +644,7 @@ async def doctor_chat_stream(req: dict):
     agent = agent_factory()
 
     async def agno_event_generator():
+        t0 = time.time()
         tool_steps: list[str] = []
         run_response = None
         content_streamed = False
@@ -682,6 +683,17 @@ async def doctor_chat_stream(req: dict):
             logger.error("Doctor chat stream error: {}", e)
             yield {"event": "error", "data": "服务内部错误，请稍后重试"}
         yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}
+
+        # 审计日志
+        elapsed_ms = int((time.time() - t0) * 1000)
+        _save_doctor_audit_log(
+            session_id=f"doctor_chat_{pregnant_id or 'anon'}",
+            user_id=pregnant_id or "anonymous",
+            agent_variant=intent_variant,
+            intent_classification=intent_classification,
+            run_response=run_response,
+            total_latency_ms=elapsed_ms,
+        )
 
     return EventSourceResponse(agno_event_generator())
 

@@ -464,6 +464,7 @@ import { Plus, Refresh, Document, Loading } from '@element-plus/icons-vue'
 import { followUpApi, dashboardApi, nurseAiApi, collaborationApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FollowUpRecord, Pregnant } from '@/types'
+import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
 
 /** 轮询间隔（毫秒） */
 const POLL_INTERVAL = 30000
@@ -616,28 +617,8 @@ function formatDate(d?: string): string {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : d.slice(0, 10)
 }
 
-/** 字段标签映射 */
-function fieldLabel(key: string): string {
-  const map: Record<string, string> = {
-    weight: '体重', bp: '血压', fetal_movement: '胎动', diet: '饮食',
-    mood: '情绪', sleep: '睡眠', stress: '压力', medication: '用药',
-    nausea: '孕吐', feeling: '感受', blood_sugar_fasting: '空腹血糖',
-    blood_sugar_2h: '餐后血糖', sleep_quality: '睡眠质量',
-  }
-  return map[key] || key
-}
-
 function hasExam(obj: Record<string, any> | undefined): boolean {
   return !!obj && Object.keys(obj).length > 0
-}
-
-function examLabel(key: string): string {
-  const map: Record<string, string> = {
-    fundal_height_cm: '宫高', abdominal_circumference_cm: '腹围',
-    fetal_position: '胎位', fetal_heart_rate_bpm: '胎心率',
-    blood_pressure: '血压',
-  }
-  return map[key] || key
 }
 
 function examHighlightClass(key: string, val: any): string {
@@ -650,18 +631,6 @@ function examHighlightClass(key: string, val: any): string {
     if (s >= 140 || d >= 90) return 'value-abnormal'
   }
   return ''
-}
-
-function labLabel(key: string): string {
-  const map: Record<string, string> = {
-    hemoglobin_g_L: '血红蛋白', urine_protein: '尿蛋白',
-    blood_sugar_fasting: '空腹血糖', blood_sugar_2h: '餐后血糖',
-    alt: '谷丙转氨酶(ALT)', ast: '谷草转氨酶(AST)',
-    creatinine: '肌酐', uric_acid: '尿酸', albumin: '白蛋白',
-    wbc: '白细胞', platelet: '血小板', hct: '红细胞压积',
-    bilirubin_total: '总胆红素',
-  }
-  return map[key] || key
 }
 
 function labHighlightClass(key: string, val: any): string {

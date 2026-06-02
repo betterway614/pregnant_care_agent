@@ -118,6 +118,7 @@ import { pregnantApi } from '@/api/endpoints'
 import FollowUpTimeline from '@/components/followup/FollowUpTimeline.vue'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import type { TrendSeries, FollowUpHistoryRecord, Pregnant, LabTrendItem } from '@/types'
+import { LAB_METRIC_OPTIONS, LAB_METRIC_META } from '@/utils/labelMaps'
 
 const route = useRoute()
 const router = useRouter()
@@ -132,31 +133,7 @@ const axisMode = ref<'date' | 'gestational_week'>('date')
 const trendSeries = ref<TrendSeries[]>([])
 const chartRef = ref()
 
-const labMetricOptions = [
-  { value: 'hemoglobin_g_L', label: '血红蛋白' },
-  { value: 'alt', label: '谷丙转氨酶' },
-  { value: 'ast', label: '谷草转氨酶' },
-  { value: 'creatinine', label: '肌酐' },
-  { value: 'albumin', label: '白蛋白' },
-  { value: 'uric_acid', label: '尿酸' },
-  { value: 'wbc', label: '白细胞' },
-  { value: 'platelet', label: '血小板' },
-  { value: 'hct', label: '红细胞压积' },
-  { value: 'bilirubin_total', label: '总胆红素' },
-]
-
-const LAB_METRIC_META: Record<string, { name: string; unit: string; normal_low: number | null; normal_high: number | null }> = {
-  hemoglobin_g_L: { name: '血红蛋白', unit: 'g/L', normal_low: 100, normal_high: 160 },
-  alt: { name: '谷丙转氨酶(ALT)', unit: 'U/L', normal_low: 0, normal_high: 40 },
-  ast: { name: '谷草转氨酶(AST)', unit: 'U/L', normal_low: 0, normal_high: 40 },
-  creatinine: { name: '肌酐', unit: 'μmol/L', normal_low: 45, normal_high: 84 },
-  uric_acid: { name: '尿酸', unit: 'μmol/L', normal_low: 150, normal_high: 360 },
-  albumin: { name: '白蛋白', unit: 'g/L', normal_low: 35, normal_high: 55 },
-  wbc: { name: '白细胞', unit: '×10⁹/L', normal_low: 4.0, normal_high: 10.0 },
-  platelet: { name: '血小板', unit: '×10⁹/L', normal_low: 100, normal_high: 300 },
-  hct: { name: '红细胞压积', unit: '%', normal_low: 35, normal_high: 50 },
-  bilirubin_total: { name: '总胆红素', unit: 'μmol/L', normal_low: 0, normal_high: 21 },
-}
+const labMetricOptions = LAB_METRIC_OPTIONS
 
 // 异常数据检测
 const abnormalMetrics = computed(() => {

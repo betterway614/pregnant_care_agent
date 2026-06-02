@@ -39,6 +39,7 @@ export const adminApi = {
     page: number
     page_size: number
     user_id?: string
+    agent_role?: string
     agent_variant?: string
     date_from?: string
     date_to?: string

@@ -44,7 +44,8 @@ class WebSocketClient {
     const path = this.role === 'nurse'
       ? `/ws/nurse-alerts/${this.userId}`
       : `/ws/alerts/${this.userId}`;
-    const wsUrl = `${protocol}//${window.location.host}${path}`;
+    const token = localStorage.getItem('token') || '';
+    const wsUrl = `${protocol}//${window.location.host}${path}?token=${encodeURIComponent(token)}`;
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -57,6 +58,9 @@ class WebSocketClient {
       };
 
       this.ws.onmessage = (event) => {
+        // 跳过心跳响应
+        if (event.data === 'pong') return;
+
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'NEW_ALERT') {

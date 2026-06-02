@@ -452,6 +452,30 @@ async def search_knowledge(body: SearchRequest):
 
 # ── 嵌入文本块浏览 ──
 
+def _resolve_knowledge_table(db) -> str:
+    """解析 knowledge_chunks 表的实际 schema 限定名"""
+    from sqlalchemy import text
+    table_name = settings.agno_knowledge_table
+    # 如果已经包含 schema 前缀，直接返回
+    if "." in table_name:
+        return table_name
+    # 检查 public schema
+    exists = db.execute(
+        text("SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=:t"),
+        {"t": table_name},
+    ).fetchone()
+    if exists:
+        return table_name
+    # 检查 ai schema（PgVector 默认）
+    exists = db.execute(
+        text("SELECT 1 FROM information_schema.tables WHERE table_schema='ai' AND table_name=:t"),
+        {"t": table_name},
+    ).fetchone()
+    if exists:
+        return f"ai.{table_name}"
+    return table_name
+
+
 @router.get("/chunks")
 def list_chunks(
     page: int = Query(1, ge=1, description="页码"),
@@ -462,8 +486,8 @@ def list_chunks(
     from sqlalchemy import text
     from ..database import SessionLocal
 
-    table = settings.agno_knowledge_table
     db = SessionLocal()
+    table = _resolve_knowledge_table(db)
     try:
         count_sql = text(f"SELECT COUNT(*) FROM {table}")
         if name:
@@ -514,8 +538,8 @@ def get_chunk_stats():
     from sqlalchemy import text
     from ..database import SessionLocal
 
-    table = settings.agno_knowledge_table
     db = SessionLocal()
+    table = _resolve_knowledge_table(db)
     try:
         group_sql = text(
             f"SELECT name, COUNT(*) as chunk_count, "

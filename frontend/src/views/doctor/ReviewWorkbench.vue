@@ -638,6 +638,7 @@ import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 import PatientBioInfoPanel from '@/components/common/PatientBioInfoPanel.vue'
 import { ElNotification } from 'element-plus'
+import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
 
 const route = useRoute()
 const router = useRouter()
@@ -1103,40 +1104,6 @@ function classificationTag(classification: string): 'success' | 'warning' | 'dan
 function classificationLabel(classification: string): string {
   const map: Record<string, string> = { normal: '正常', abnormal: '异常', critical: '高危' }
   return map[classification] || classification
-}
-
-/** S 主观数据字段中文映射 */
-function fieldLabel(key: string): string {
-  const map: Record<string, string> = {
-    weight: '体重(kg)', bp: '血压', fetal_movement: '胎动', diet: '饮食',
-    mood: '情绪', sleep: '睡眠', stress: '压力', medication: '用药',
-    nausea: '孕吐', feeling: '感受', blood_sugar_fasting: '空腹血糖',
-    blood_sugar_2h: '餐后血糖', sleep_quality: '睡眠质量', blood_pressure: '血压',
-  }
-  return map[key] || key
-}
-
-/** O 客观检查字段中文映射 */
-function examLabel(key: string): string {
-  const map: Record<string, string> = {
-    fundal_height_cm: '宫高(cm)', abdominal_circumference_cm: '腹围(cm)',
-    fetal_position: '胎位', fetal_heart_rate_bpm: '胎心率(bpm)',
-    blood_pressure: '血压(mmHg)',
-  }
-  return map[key] || key
-}
-
-/** 实验室检查字段中文映射 */
-function labLabel(key: string): string {
-  const map: Record<string, string> = {
-    hemoglobin_g_L: '血红蛋白(g/L)', urine_protein: '尿蛋白',
-    blood_sugar_fasting: '空腹血糖(mmol/L)', blood_sugar_2h: '餐后血糖(mmol/L)',
-    alt: '谷丙转氨酶(U/L)', ast: '谷草转氨酶(U/L)',
-    creatinine: '肌酐(μmol/L)', uric_acid: '尿酸(μmol/L)', albumin: '白蛋白(g/L)',
-    wbc: '白细胞(×10⁹/L)', platelet: '血小板(×10⁹/L)', hct: '红细胞压积(%)',
-    bilirubin_total: '总胆红素(μmol/L)',
-  }
-  return map[key] || key
 }
 
 /** 触发AI分析 */

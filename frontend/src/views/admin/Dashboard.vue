@@ -162,7 +162,9 @@ async function fetchData() {
     dailyTrend.value = res.data.daily_trend
     variantDist.value = res.data.variant_distribution
     recentLogs.value = res.data.recent_logs
-  } catch { /* ignore */ }
+  } catch (err: any) {
+    console.error('Dashboard fetch error:', err)
+  }
 }
 
 fetchData()

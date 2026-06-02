@@ -143,6 +143,7 @@ def list_audit_sessions(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
     user_id: str | None = Query(None, description="用户ID筛选"),
+    agent_role: str | None = Query(None, description="角色筛选: pregnant|nurse|doctor"),
     agent_variant: str | None = Query(None, description="Agent变体筛选"),
     date_from: str | None = Query(None, description="开始日期 YYYY-MM-DD"),
     date_to: str | None = Query(None, description="结束日期 YYYY-MM-DD"),
@@ -154,6 +155,8 @@ def list_audit_sessions(
 
         if user_id:
             query = query.filter(AgentAuditLog.user_id == user_id)
+        if agent_role:
+            query = query.filter(AgentAuditLog.agent_role == agent_role)
         if agent_variant:
             query = query.filter(AgentAuditLog.agent_variant == agent_variant)
         if date_from:

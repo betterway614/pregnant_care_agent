@@ -5,13 +5,23 @@
         <el-form-item label="用户ID">
           <el-input v-model="filters.user_id" placeholder="输入用户ID" clearable style="width: 160px;" />
         </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="filters.agent_role" placeholder="全部" clearable style="width: 120px;" @change="onRoleChange">
+            <el-option label="孕妇端" value="pregnant" />
+            <el-option label="护士端" value="nurse" />
+            <el-option label="医生端" value="doctor" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="Agent 变体">
-          <el-select v-model="filters.agent_variant" placeholder="全部" clearable style="width: 140px;">
-            <el-option label="对话" value="chat" />
-            <el-option label="记录" value="record" />
-            <el-option label="问答" value="qa" />
-            <el-option label="紧急" value="emergency" />
-            <el-option label="复杂分析" value="complex" />
+          <el-select v-model="filters.agent_variant" placeholder="全部" clearable style="width: 160px;">
+            <template v-if="filters.agent_role">
+              <el-option v-for="v in roleVariants" :key="v.value" :label="v.label" :value="v.value" />
+            </template>
+            <template v-else>
+              <el-option-group v-for="group in allVariantGroups" :key="group.role" :label="group.label">
+                <el-option v-for="v in group.variants" :key="v.value" :label="v.label" :value="v.value" />
+              </el-option-group>
+            </template>
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -24,6 +34,11 @@
     <el-card shadow="never" style="margin-top: 16px;">
       <el-table :data="sessions" stripe size="small" v-loading="loading" @row-click="showDetail">
         <el-table-column prop="created_at" label="时间" width="160" />
+        <el-table-column prop="agent_role" label="角色" width="80">
+          <template #default="{ row }">
+            <el-tag :type="roleTagType(row.agent_role)" size="small">{{ roleLabel(row.agent_role) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="session_id" label="会话ID" width="180" show-overflow-tooltip />
         <el-table-column prop="user_id" label="用户ID" width="100" />
         <el-table-column prop="intent_classification" label="意图" width="120" />
@@ -96,20 +111,68 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, inject } from 'vue'
+import { ref, reactive, computed, inject } from 'vue'
 import { adminApi } from '@/api/admin'
 import type { AdminSessionItem, AdminSessionDetail } from '@/types'
 
 const dateRange = inject<{ from: { value: string }; to: { value: string } }>('dateRange')!
 
+// ── 角色-变体映射 ──
+interface VariantOption { label: string; value: string }
+
+const ROLE_VARIANTS: Record<string, VariantOption[]> = {
+  pregnant: [
+    { label: '对话', value: 'chat' },
+    { label: '记录', value: 'record' },
+    { label: '问答', value: 'qa' },
+    { label: '紧急', value: 'emergency' },
+    { label: '复杂分析', value: 'complex' },
+  ],
+  nurse: [
+    { label: '分析', value: 'analyze' },
+    { label: '随访', value: 'followup' },
+    { label: '上报', value: 'report' },
+    { label: '对话', value: 'chat' },
+    { label: '复杂分析', value: 'complex' },
+  ],
+  doctor: [
+    { label: '分析', value: 'analyze' },
+    { label: '医嘱', value: 'order' },
+    { label: '处置', value: 'issue' },
+    { label: '对话', value: 'chat' },
+    { label: '复杂分析', value: 'complex' },
+  ],
+}
+
+const ROLE_LABELS: Record<string, string> = { pregnant: '孕妇', nurse: '护士', doctor: '医生' }
+const ROLE_TAG_TYPES: Record<string, '' | 'success' | 'warning' | 'info' | 'danger'> = {
+  pregnant: '', nurse: 'success', doctor: 'warning',
+}
+
+const allVariantGroups = computed(() => [
+  { role: 'pregnant', label: '孕妇端', variants: ROLE_VARIANTS.pregnant },
+  { role: 'nurse', label: '护士端', variants: ROLE_VARIANTS.nurse },
+  { role: 'doctor', label: '医生端', variants: ROLE_VARIANTS.doctor },
+])
+
+const roleVariants = computed(() => ROLE_VARIANTS[filters.agent_role] ?? [])
+
+function roleLabel(role: string) { return ROLE_LABELS[role] ?? role }
+function roleTagType(role: string) { return ROLE_TAG_TYPES[role] ?? 'info' }
+
+// ── 状态 ──
 const loading = ref(false)
 const sessions = ref<AdminSessionItem[]>([])
 const pagination = reactive({ page: 1, page_size: 20, total: 0 })
 
-const filters = reactive({ user_id: '', agent_variant: '' })
+const filters = reactive({ user_id: '', agent_role: '', agent_variant: '' })
 
 const drawerVisible = ref(false)
 const detail = ref<AdminSessionDetail | null>(null)
+
+function onRoleChange() {
+  filters.agent_variant = ''
+}
 
 async function fetchData() {
   loading.value = true
@@ -118,6 +181,7 @@ async function fetchData() {
       page: pagination.page,
       page_size: pagination.page_size,
       user_id: filters.user_id || undefined,
+      agent_role: filters.agent_role || undefined,
       agent_variant: filters.agent_variant || undefined,
       date_from: dateRange.from.value,
       date_to: dateRange.to.value,
@@ -130,7 +194,7 @@ async function fetchData() {
 }
 
 function search() { pagination.page = 1; fetchData() }
-function reset() { filters.user_id = ''; filters.agent_variant = ''; pagination.page = 1; fetchData() }
+function reset() { filters.user_id = ''; filters.agent_role = ''; filters.agent_variant = ''; pagination.page = 1; fetchData() }
 
 async function showDetail(row: AdminSessionItem) {
   try {
