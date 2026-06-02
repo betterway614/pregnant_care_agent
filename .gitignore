@@ -49,3 +49,11 @@ backend/fgr_compete/cache/
 backend/fgr_compete/uploads/
 backend/fgr_compete/diagnostic_reports/
 backend/fgr_compete/photo/
+
+# Personal files
+简历*.md
+面试*.md
+*.log.zip
+
+# Secrets
+backend/app/.jwt_secret
