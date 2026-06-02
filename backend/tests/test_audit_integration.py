@@ -33,7 +33,7 @@ async def test_chat_routing_uses_chat_variant():
     mock_nlu_result = MagicMock()
     mock_nlu_result.intent = "GREETING"
     mock_nlu_result.entities = {}
-    mock_nlu_result.emotion = "neutral"
+    mock_nlu_result.emotion = {"level": "neutral"}
     mock_nlu_result.is_emergency = False
 
     with patch("app.core.agno_chat_handler.settings") as mock_settings:
@@ -81,7 +81,7 @@ async def test_record_routing_uses_record_variant():
     mock_nlu_result = MagicMock()
     mock_nlu_result.intent = "RECORD_WEIGHT"
     mock_nlu_result.entities = {"weight": 55}
-    mock_nlu_result.emotion = "neutral"
+    mock_nlu_result.emotion = {"level": "neutral"}
     mock_nlu_result.is_emergency = False
 
     with patch("app.core.agno_chat_handler.settings") as mock_settings:
@@ -121,7 +121,7 @@ async def test_qa_routing_uses_qa_variant():
     mock_nlu_result = MagicMock()
     mock_nlu_result.intent = "ASK_KNOWLEDGE"
     mock_nlu_result.entities = {}
-    mock_nlu_result.emotion = "neutral"
+    mock_nlu_result.emotion = {"level": "neutral"}
     mock_nlu_result.is_emergency = False
 
     with patch("app.core.agno_chat_handler.settings") as mock_settings:
@@ -289,21 +289,23 @@ def test_admin_daily_endpoint_empty():
     """验证 admin daily API 在无数据时返回空列表"""
     from app.routers.admin import get_token_daily
     from app.models import AgentAuditLog
+    from app.core.auth import TokenPayload
     from unittest.mock import MagicMock, patch
 
     mock_db = MagicMock()
     mock_query = MagicMock()
     mock_query.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = []
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_token_daily(date_from="2026-01-01", date_to="2026-01-02")
-        assert result == {"data": []}
+    result = get_token_daily(date_from="2026-01-01", date_to="2026-01-02", user=mock_user, db=mock_db)
+    assert result == {"data": []}
 
 
 def test_admin_daily_endpoint_with_data():
     """验证 admin daily API 正确聚合数据"""
     from app.routers.admin import get_token_daily
+    from app.core.auth import TokenPayload
 
     mock_row = MagicMock()
     mock_row.date = "2026-05-23"
@@ -317,18 +319,19 @@ def test_admin_daily_endpoint_with_data():
     mock_query = MagicMock()
     mock_query.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = [mock_row]
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_token_daily(date_from="2026-05-23", date_to="2026-05-23")
-        assert len(result["data"]) == 1
-        assert result["data"][0]["date"] == "2026-05-23"
-        assert result["data"][0]["total_tokens"] == 1500
-        assert result["data"][0]["call_count"] == 3
+    result = get_token_daily(date_from="2026-05-23", date_to="2026-05-23", user=mock_user, db=mock_db)
+    assert len(result["data"]) == 1
+    assert result["data"][0]["date"] == "2026-05-23"
+    assert result["data"][0]["total_tokens"] == 1500
+    assert result["data"][0]["call_count"] == 3
 
 
 def test_admin_by_agent_endpoint():
     """验证 admin by-agent API 正确分组"""
     from app.routers.admin import get_token_by_agent
+    from app.core.auth import TokenPayload
 
     mock_row = MagicMock()
     mock_row.agent_role = "pregnant"
@@ -343,18 +346,19 @@ def test_admin_by_agent_endpoint():
     mock_query = MagicMock()
     mock_query.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = [mock_row]
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_token_by_agent(date_from="2026-05-23", date_to="2026-05-23")
-        assert len(result["data"]) == 1
-        assert result["data"][0]["agent_role"] == "pregnant"
-        assert result["data"][0]["agent_variant"] == "chat"
+    result = get_token_by_agent(date_from="2026-05-23", date_to="2026-05-23", user=mock_user, db=mock_db)
+    assert len(result["data"]) == 1
+    assert result["data"][0]["agent_role"] == "pregnant"
+    assert result["data"][0]["agent_variant"] == "chat"
 
 
 def test_admin_session_endpoint():
     """验证 admin session API 返回会话审计链"""
     from app.routers.admin import get_session_audit
     from app.models import AgentAuditLog
+    from app.core.auth import TokenPayload
 
     mock_log = MagicMock()
     mock_log.id = 1
@@ -376,13 +380,13 @@ def test_admin_session_endpoint():
     mock_query = MagicMock()
     mock_query.filter.return_value.order_by.return_value.all.return_value = [mock_log]
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_session_audit(session_id="test-session")
-        assert result["session_id"] == "test-session"
-        assert result["run_count"] == 1
-        assert result["runs"][0]["agent_variant"] == "chat"
-        assert result["runs"][0]["total_tokens"] == 600
+    result = get_session_audit(session_id="test-session", user=mock_user, db=mock_db)
+    assert result["session_id"] == "test-session"
+    assert result["run_count"] == 1
+    assert result["runs"][0]["agent_variant"] == "chat"
+    assert result["runs"][0]["total_tokens"] == 600
 
 
 # ==================== 数据库迁移测试 ====================
@@ -427,23 +431,25 @@ def test_ensure_audit_log_table_skips_existing():
 def test_list_audit_sessions_empty():
     """验证分页会话列表在无数据时返回空列表"""
     from app.routers.admin import list_audit_sessions
+    from app.core.auth import TokenPayload
 
     mock_db = MagicMock()
     mock_query = MagicMock()
     mock_query.count.return_value = 0
     mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant=None, date_from=None, date_to=None)
-        assert result["total"] == 0
-        assert result["page"] == 1
-        assert result["data"] == []
+    result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_role=None, agent_variant=None, date_from=None, date_to=None, user=mock_user, db=mock_db)
+    assert result["total"] == 0
+    assert result["page"] == 1
+    assert result["data"] == []
 
 
 def test_list_audit_sessions_with_data():
     """验证分页会话列表正确返回数据"""
     from app.routers.admin import list_audit_sessions
+    from app.core.auth import TokenPayload
 
     mock_log = MagicMock()
     mock_log.id = 1
@@ -466,21 +472,22 @@ def test_list_audit_sessions_with_data():
     mock_query.count.return_value = 1
     mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_log]
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant=None, date_from=None, date_to=None)
-        assert result["total"] == 1
-        assert result["page"] == 1
-        assert result["page_size"] == 20
-        assert len(result["data"]) == 1
-        assert result["data"][0]["session_id"] == "sess-001"
-        assert result["data"][0]["agent_variant"] == "chat"
-        assert result["data"][0]["total_tokens"] == 700
+    result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_role=None, agent_variant=None, date_from=None, date_to=None, user=mock_user, db=mock_db)
+    assert result["total"] == 1
+    assert result["page"] == 1
+    assert result["page_size"] == 20
+    assert len(result["data"]) == 1
+    assert result["data"][0]["session_id"] == "sess-001"
+    assert result["data"][0]["agent_variant"] == "chat"
+    assert result["data"][0]["total_tokens"] == 700
 
 
 def test_list_audit_sessions_with_user_filter():
     """验证按 user_id 筛选"""
     from app.routers.admin import list_audit_sessions
+    from app.core.auth import TokenPayload
 
     mock_db = MagicMock()
     mock_query = MagicMock()
@@ -488,17 +495,18 @@ def test_list_audit_sessions_with_user_filter():
     mock_query.count.return_value = 0
     mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = list_audit_sessions(page=1, page_size=20, user_id="P001", agent_variant=None, date_from=None, date_to=None)
-        assert result["total"] == 0
-        # 验证 filter 被调用（user_id 筛选触发了一次 filter）
-        assert mock_query.filter.called
+    result = list_audit_sessions(page=1, page_size=20, user_id="P001", agent_variant=None, date_from=None, date_to=None, user=mock_user, db=mock_db)
+    assert result["total"] == 0
+    # 验证 filter 被调用（user_id 筛选触发了一次 filter）
+    assert mock_query.filter.called
 
 
 def test_list_audit_sessions_with_variant_filter():
     """验证按 agent_variant 筛选"""
     from app.routers.admin import list_audit_sessions
+    from app.core.auth import TokenPayload
 
     mock_db = MagicMock()
     mock_query = MagicMock()
@@ -506,16 +514,17 @@ def test_list_audit_sessions_with_variant_filter():
     mock_query.count.return_value = 0
     mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant="chat", date_from=None, date_to=None)
-        assert result["total"] == 0
-        assert mock_query.filter.called
+    result = list_audit_sessions(page=1, page_size=20, user_id=None, agent_variant="chat", date_from=None, date_to=None, user=mock_user, db=mock_db)
+    assert result["total"] == 0
+    assert mock_query.filter.called
 
 
 def test_list_audit_sessions_pagination():
     """验证分页参数正确传递"""
     from app.routers.admin import list_audit_sessions
+    from app.core.auth import TokenPayload
 
     mock_db = MagicMock()
     mock_query = MagicMock()
@@ -523,14 +532,14 @@ def test_list_audit_sessions_pagination():
     mock_query.count.return_value = 50
     mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
     mock_db.query.return_value = mock_query
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = list_audit_sessions(page=3, page_size=10, user_id=None, agent_variant=None, date_from=None, date_to=None)
-        assert result["page"] == 3
-        assert result["page_size"] == 10
-        assert result["total"] == 50
-        # 验证 offset = (page - 1) * page_size = 20
-        mock_query.order_by.return_value.offset.assert_called_with(20)
+    result = list_audit_sessions(page=3, page_size=10, user_id=None, agent_variant=None, date_from=None, date_to=None, user=mock_user, db=mock_db)
+    assert result["page"] == 3
+    assert result["page_size"] == 10
+    assert result["total"] == 50
+    # 验证 offset = (page - 1) * page_size = 20
+    mock_query.order_by.return_value.offset.assert_called_with(20)
 
 
 # ==================== get_audit_dashboard 测试 ====================
@@ -539,6 +548,7 @@ def test_list_audit_sessions_pagination():
 def test_get_audit_dashboard_returns_structure():
     """验证仪表盘端点返回完整结构"""
     from app.routers.admin import get_audit_dashboard
+    from app.core.auth import TokenPayload
 
     mock_summary = MagicMock()
     mock_summary.total_calls = 100
@@ -589,8 +599,9 @@ def test_get_audit_dashboard_returns_structure():
         mock_query_recent,
     ]
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_audit_dashboard(date_from="2026-05-23", date_to="2026-05-23")
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+
+    result = get_audit_dashboard(date_from="2026-05-23", date_to="2026-05-23", user=mock_user, db=mock_db)
 
     assert "summary" in result
     assert "daily_trend" in result
@@ -615,6 +626,7 @@ def test_get_audit_dashboard_returns_structure():
 def test_get_audit_dashboard_empty():
     """验证仪表盘在无数据时返回零值"""
     from app.routers.admin import get_audit_dashboard
+    from app.core.auth import TokenPayload
 
     mock_summary = MagicMock()
     mock_summary.total_calls = None
@@ -631,9 +643,9 @@ def test_get_audit_dashboard_empty():
 
     # 所有 query 调用返回同一个 mock（空数据场景）
     mock_db.query.return_value = mock_query_empty
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
-    with patch("app.routers.admin.SessionLocal", return_value=mock_db):
-        result = get_audit_dashboard(date_from="2026-01-01", date_to="2026-01-02")
+    result = get_audit_dashboard(date_from="2026-01-01", date_to="2026-01-02", user=mock_user, db=mock_db)
 
     assert result["summary"]["total_calls"] == 0
     assert result["summary"]["total_tokens"] == 0

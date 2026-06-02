@@ -10,10 +10,13 @@ import os
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from ..config import settings
+from ..database import get_db
 from ..core.agno_knowledge import knowledge, get_rag_config, create_knowledge
+from ..core.auth import get_current_user, TokenPayload
 
 import logging
 
@@ -138,8 +141,10 @@ def _human_size(size_bytes: int) -> str:
 # ── RAG 配置管理 ──
 
 @router.get("/config")
-def get_rag_config_endpoint():
+def get_rag_config_endpoint(user: TokenPayload = Depends(get_current_user)):
     """获取当前 RAG 配置"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     config = get_rag_config()
     config["predefined_tags"] = PREDEFINED_TAGS
     config["docs_directory"] = KNOWLEDGE_DOCS_DIR
@@ -147,11 +152,13 @@ def get_rag_config_endpoint():
 
 
 @router.put("/config")
-def update_rag_config(body: RagConfigUpdate):
+def update_rag_config(body: RagConfigUpdate, user: TokenPayload = Depends(get_current_user)):
     """动态更新 RAG 配置（运行时生效，重启后恢复 .env 默认值）
 
     更新会重建全局 Knowledge 单例，后续入库和检索使用新配置。
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     global knowledge
     import app.core.agno_knowledge as kb_module
 
@@ -197,8 +204,10 @@ def update_rag_config(body: RagConfigUpdate):
 # ── 统计与文档管理 ──
 
 @router.get("/stats")
-def get_knowledge_stats():
+def get_knowledge_stats(user: TokenPayload = Depends(get_current_user)):
     """获取知识库统计信息"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     docs = _scan_documents()
     total_size = sum(d["size_bytes"] for d in docs)
 
@@ -222,8 +231,10 @@ def get_knowledge_stats():
 
 
 @router.get("/docs")
-def list_documents():
+def list_documents(user: TokenPayload = Depends(get_current_user)):
     """列出所有知识库文档"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     docs = _scan_documents()
     return {
         "total": len(docs),
@@ -238,6 +249,7 @@ async def upload_document(
     auto_ingest: bool = Form(True),
     auto_tag: bool = Form(True),
     metadata_json: Optional[str] = Form(None),
+    user: TokenPayload = Depends(get_current_user),
 ):
     """上传新文档到知识库
 
@@ -248,6 +260,8 @@ async def upload_document(
         auto_tag: 是否自动 AI 打标签（默认 True）
         metadata_json: 元数据 JSON 字符串，如 '{"category":"产检指南","trimester":"all"}'
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     # 校验文件类型
     filename = file.filename or "unknown"
     ext = os.path.splitext(filename)[1].lower()
@@ -327,13 +341,28 @@ async def upload_document(
 
 
 @router.delete("/docs/{filename}")
-def delete_document(filename: str):
-    """删除指定知识库文档"""
+def delete_document(filename: str, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
+    """删除指定知识库文档（同时清理向量数据库中的嵌入）"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     docs_dir = _get_docs_dir()
     fpath = os.path.join(docs_dir, filename)
 
     if not os.path.exists(fpath):
         raise HTTPException(status_code=404, detail=f"文档不存在: {filename}")
+
+    # 先从向量数据库中删除该文档的嵌入
+    try:
+        from sqlalchemy import text
+
+        table = settings.agno_knowledge_table or "agno_knowledge"
+        # 删除与该文档关联的向量记录
+        delete_sql = text(f"DELETE FROM {table} WHERE name = :name")
+        result = db.execute(delete_sql, {"name": filename})
+        db.commit()
+        logger.info("已从向量数据库删除 %d 条记录: %s", result.rowcount, filename)
+    except Exception as e:
+        logger.warning("清理向量数据库失败（文件仍将删除）: %s - %s", filename, e)
 
     os.remove(fpath)
     logger.info("已删除知识库文档: %s", filename)
@@ -342,8 +371,10 @@ def delete_document(filename: str):
 
 
 @router.post("/ingest")
-async def ingest_all(force: bool = Query(False, description="是否强制重新入库（upsert）")):
+async def ingest_all(force: bool = Query(False, description="是否强制重新入库（upsert）"), user: TokenPayload = Depends(get_current_user)):
     """触发全部文档入库"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     if not settings.rag_enabled:
         raise HTTPException(status_code=400, detail="RAG 未启用")
 
@@ -381,8 +412,11 @@ async def ingest_all(force: bool = Query(False, description="是否强制重新�
 async def ingest_single_doc(
     filename: str,
     force: bool = Query(False, description="是否强制重新入库"),
+    user: TokenPayload = Depends(get_current_user),
 ):
     """触发单个文档入库"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     if not settings.rag_enabled:
         raise HTTPException(status_code=400, detail="RAG 未启用")
 
@@ -409,7 +443,7 @@ async def ingest_single_doc(
 # ── 知识库检索（带元数据过滤） ──
 
 @router.post("/search")
-async def search_knowledge(body: SearchRequest):
+async def search_knowledge(body: SearchRequest, user: TokenPayload = Depends(get_current_user)):
     """在知识库中检索（支持元数据过滤）
 
     使用 Agno Knowledge 的原生检索能力，支持：
@@ -417,6 +451,8 @@ async def search_knowledge(body: SearchRequest):
     - 混合检索 (hybrid)：语义 + 关键词
     - 元数据过滤：按 category、trimester、risk_level 等标签过滤
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     if not settings.rag_enabled:
         raise HTTPException(status_code=400, detail="RAG 未启用")
 
@@ -481,12 +517,14 @@ def list_chunks(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
     name: Optional[str] = Query(None, description="按文档名称筛选"),
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """浏览向量数据库中已入库的嵌入文本块"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     from sqlalchemy import text
-    from ..database import SessionLocal
 
-    db = SessionLocal()
     table = _resolve_knowledge_table(db)
     try:
         count_sql = text(f"SELECT COUNT(*) FROM {table}")
@@ -528,17 +566,15 @@ def list_chunks(
     except Exception as e:
         logger.error("查询嵌入文本块失败: %s", e)
         return {"total": 0, "page": page, "page_size": page_size, "data": [], "error": str(e)}
-    finally:
-        db.close()
 
 
 @router.get("/chunks/stats")
-def get_chunk_stats():
+def get_chunk_stats(user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
     """获取嵌入文本块统计（按文档分组）"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     from sqlalchemy import text
-    from ..database import SessionLocal
 
-    db = SessionLocal()
     table = _resolve_knowledge_table(db)
     try:
         group_sql = text(
@@ -565,15 +601,15 @@ def get_chunk_stats():
     except Exception as e:
         logger.error("查询嵌入统计失败: %s", e)
         return {"total_chunks": 0, "documents": [], "error": str(e)}
-    finally:
-        db.close()
 
 
 # ── 元数据标签管理 ──
 
 @router.get("/tags")
-def get_predefined_tags():
+def get_predefined_tags(user: TokenPayload = Depends(get_current_user)):
     """获取预定义的元数据标签列表"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     return {
         "tags": PREDEFINED_TAGS,
         "description": {
@@ -590,11 +626,13 @@ def get_predefined_tags():
 # ── AI 自动打标签 ──
 
 @router.post("/auto-tag")
-async def auto_tag_document(filename: str = Query(..., description="文档文件名")):
+async def auto_tag_document(filename: str = Query(..., description="文档文件名"), user: TokenPayload = Depends(get_current_user)):
     """对已存在的文档执行 AI 自动标签生成
 
     读取文档内容，调用 LLM 分析并返回推荐的元数据标签。
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     docs_dir = _get_docs_dir()
     fpath = os.path.join(docs_dir, filename)
     if not os.path.exists(fpath):
@@ -677,8 +715,7 @@ async def _ingest_single(
     force: bool = False,
 ):
     """调用 Agno Knowledge 入库单个文档，支持元数据和分词策略"""
-    from agno.knowledge.reader.pdf_reader import PDFReader
-    from agno.knowledge.chunking.fixed_size_chunking import FixedSizeChunking
+    from agno.knowledge.chunking.fixed import FixedSizeChunking
 
     ext = os.path.splitext(filename)[1].lower()
 
@@ -692,6 +729,7 @@ async def _ingest_single(
 
     reader = None
     if ext == ".pdf":
+        from agno.knowledge.reader.pdf_reader import PDFReader
         reader = PDFReader(
             chunk_size=settings.rag_chunk_size,
             chunking_strategy=chunking_strategy,

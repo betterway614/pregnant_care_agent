@@ -1,6 +1,6 @@
 """Pydantic Schemas - 请求/响应数据模型"""
 from datetime import datetime, date
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from uuid import UUID
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -114,6 +114,15 @@ class ChatSendRequest(BaseModel):
     record_id: Optional[str] = None  # 随访记录ID，存在时进入随访Agent模式
     audio_data: Optional[str] = None  # base64 编码的音频数据（message_type=AUDIO 时使用）
     audio_format: str = "webm"  # 音频格式: webm, wav, mp3
+
+
+class ChatStreamRequest(BaseModel):
+    """SSE streaming chat request (doctor/nurse AI chat endpoints)"""
+    message: str = ""
+    pregnant_id: str = ""
+    message_type: str = Field(default="TEXT", pattern="^(TEXT|AUDIO|IMAGE)$")
+    audio_data: Optional[str] = None
+    audio_format: str = Field(default="webm", pattern="^(webm|wav|mp3|ogg|m4a)$")
 
 
 class ChatNLUResult(BaseModel):
@@ -237,6 +246,14 @@ class FollowUpSignatureRequest(BaseModel):
     signer_name: str = Field(description="签名者姓名")
 
 
+class FollowUpRecordUpdateRequest(BaseModel):
+    """Update a follow-up record (partial update, safe fields only)"""
+    summary: Optional[str] = Field(None, max_length=5000)
+    classification: Optional[str] = Field(None, max_length=50)
+    health_education: Optional[Any] = None
+    nurse_notes: Optional[str] = Field(None, max_length=5000)
+
+
 class FollowUpTrigger(BaseModel):
     pregnant_id: str
     template_id: Optional[str] = "standard"
@@ -341,6 +358,13 @@ class OrderSignRequest(BaseModel):
     doctor_id: str
     signature_image: Optional[str] = None  # base64 PNG 手写签名
     signer_name: Optional[str] = None  # 签名者姓名
+
+
+class OrderUpdateRequest(BaseModel):
+    """Update an existing medical order (partial update)"""
+    content: Optional[str] = Field(None, min_length=1, max_length=5000)
+    order_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    doctor_notes: Optional[str] = Field(None, max_length=2000)
 
 
 class OrderDocumentResponse(BaseModel):

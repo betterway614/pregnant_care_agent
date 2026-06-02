@@ -152,12 +152,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Loading, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderApi, pregnantApi } from '@/api/endpoints'
+import { useAppStore } from '@/stores/app'
 import type { MedicalOrder } from '@/types'
 import SignaturePad from '@/components/followup/SignaturePad.vue'
 import OrderDocumentPrint from '@/components/orders/OrderDocumentPrint.vue'
 
 const route = useRoute()
 const router = useRouter()
+const appStore = useAppStore()
 const orderId = route.params.orderId as string
 
 const loading = ref(true)
@@ -233,7 +235,7 @@ async function doSignOrder() {
 
     // 签署
     await orderApi.sign(orderId, {
-      doctor_id: 'doctor_001',
+      doctor_id: appStore.currentUserId || 'doctor',
       signature_image: savedSignature.value || undefined,
       signer_name: '主治医生',
     })

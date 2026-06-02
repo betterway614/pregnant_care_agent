@@ -634,6 +634,7 @@ import {
 } from '@element-plus/icons-vue'
 import { alertApi, orderApi, followUpApi, doctorAiApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
+import { useAppStore } from '@/stores/app'
 import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 import PatientBioInfoPanel from '@/components/common/PatientBioInfoPanel.vue'
@@ -642,6 +643,7 @@ import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
 
 const route = useRoute()
 const router = useRouter()
+const appStore = useAppStore()
 
 // 数据状态
 const loading = ref(false)
@@ -1202,7 +1204,7 @@ const handleStateChange = (state: string) => {
  * 初始化 WebSocket
  */
 function initWebSocket() {
-  const doctorId = 'current-doctor'
+  const doctorId = appStore.currentUserId || 'doctor'
   wsClient.value = getWebSocketClient(doctorId)
 
   // 注册预警回调

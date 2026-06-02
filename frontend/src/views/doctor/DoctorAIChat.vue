@@ -128,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset } from '@element-plus/icons-vue'
 import { doctorAiApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
@@ -175,22 +175,30 @@ const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioR
 const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'doctor' })
 const ttsSpeakingId = ref<string | null>(null)
 let currentAudioEl: HTMLAudioElement | null = null
+let ttsCheckInterval: ReturnType<typeof setInterval> | null = null
 
 function toggleTTS(msg: ChatMsg) {
   if (ttsSpeakingId.value === msg.id) {
     stopTTS()
     ttsSpeakingId.value = null
+    if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
   } else {
+    if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
     ttsSpeakingId.value = msg.id
     speak(cleanForTTS(msg.content))
-    const checkEnd = setInterval(() => {
+    ttsCheckInterval = setInterval(() => {
       if (!isSpeaking.value) {
         ttsSpeakingId.value = null
-        clearInterval(checkEnd)
+        if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
       }
     }, 500)
   }
 }
+
+onUnmounted(() => {
+  if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
+  stopTTS()
+})
 
 function playAudio(msg: ChatMsg) {
   if (!msg.audioUrl) return

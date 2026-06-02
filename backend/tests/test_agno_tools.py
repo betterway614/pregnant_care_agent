@@ -32,15 +32,15 @@ def test_agno_get_nlu_result_with_session_state():
 def test_agno_get_nlu_result_from_module_context():
     """验证 agno_get_nlu_result 从模块级上下文读取"""
     from agno.run import RunContext
-    from app.core.agno_tools import agno_get_nlu_result, _nlu_context
+    from app.core.agno_tools import agno_get_nlu_result, set_nlu_context, pop_nlu_context
 
     session_id = "test-session-ctx"
-    _nlu_context[session_id] = {
+    set_nlu_context(session_id, {
         "intent": "EMOTION_EXPRESS",
         "entities": {},
         "emotion": {"level": "medium", "score": 2},
         "is_emergency": False,
-    }
+    })
 
     ctx = RunContext(
         run_id="test-run",
@@ -51,7 +51,7 @@ def test_agno_get_nlu_result_from_module_context():
     result = agno_get_nlu_result.entrypoint(run_context=ctx)
     assert result["intent"] == "EMOTION_EXPRESS"
 
-    _nlu_context.pop(session_id, None)
+    pop_nlu_context(session_id)
 
 
 def test_agno_get_nlu_result_without_context():
@@ -134,7 +134,7 @@ def test_tool_groups_tool_count():
 
     assert len(TOOL_GROUPS["chat"]) == 4  # check_emergency + get_patient_context + get_epds_result + save_health_data
     assert len(TOOL_GROUPS["record"]) == 4
-    assert len(TOOL_GROUPS["qa"]) == 3
+    assert len(TOOL_GROUPS["qa"]) == 2
     assert len(TOOL_GROUPS["emergency"]) == 2
 
 
@@ -276,10 +276,10 @@ def test_nurse_tool_groups_exist():
 def test_nurse_tool_groups_tool_count():
     """验证护士各分组工具数量"""
     from app.core.agno_tools import NURSE_TOOL_GROUPS
-    assert len(NURSE_TOOL_GROUPS["analyze"]) == 4
+    assert len(NURSE_TOOL_GROUPS["analyze"]) == 3
     assert len(NURSE_TOOL_GROUPS["followup"]) == 2
     assert len(NURSE_TOOL_GROUPS["report"]) == 2
-    assert len(NURSE_TOOL_GROUPS["chat"]) == 3
+    assert len(NURSE_TOOL_GROUPS["chat"]) == 2
 
 
 def test_doctor_tool_groups_exist():
@@ -291,10 +291,10 @@ def test_doctor_tool_groups_exist():
 def test_doctor_tool_groups_tool_count():
     """验证医生各分组工具数量"""
     from app.core.agno_tools import DOCTOR_TOOL_GROUPS
-    assert len(DOCTOR_TOOL_GROUPS["analyze"]) == 5
+    assert len(DOCTOR_TOOL_GROUPS["analyze"]) == 4
     assert len(DOCTOR_TOOL_GROUPS["order"]) == 2
     assert len(DOCTOR_TOOL_GROUPS["issue"]) == 2
-    assert len(DOCTOR_TOOL_GROUPS["chat"]) == 3
+    assert len(DOCTOR_TOOL_GROUPS["chat"]) == 2
 
 
 @pytest.mark.parametrize("intent,expected_variant", [

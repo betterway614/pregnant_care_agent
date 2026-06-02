@@ -70,7 +70,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { UserFilled, Lock, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import { client } from '@/api/client'
 import { useAppStore } from '@/stores/app'
 import type { FormInstance, FormRules } from 'element-plus'
 
@@ -96,7 +96,7 @@ async function handleLogin() {
 
   loggingIn.value = true
   try {
-    const res = await axios.post('/api/v1/auth/login', {
+    const res = await client.post('/api/v1/auth/login', {
       hospital_id: form.hospital_id.trim(),
       password: form.password.trim(),
     })
@@ -112,9 +112,9 @@ async function handleLogin() {
 
     // 登录成功
     if (data.role === 'pregnant') {
-      appStore.login('pregnant', data.pregnant_id)
+      appStore.login('pregnant', data.pregnant_id, data.hospital_id)
     } else {
-      appStore.login(data.role as any)
+      appStore.login(data.role as any, undefined, data.hospital_id)
     }
 
     ElMessage.success(`欢迎，${data.nickname || data.display_name}！`)

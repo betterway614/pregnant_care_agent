@@ -19,6 +19,7 @@ from .agno_medical_agents import (
     get_nurse_agent,
     get_doctor_agent,
 )
+from ..config import settings
 
 
 def create_care_team() -> Team:
@@ -53,7 +54,7 @@ def create_care_team() -> Team:
         get_member_information_tool=True,
         add_member_tools_to_context=True,
         markdown=True,
-        debug_mode=True,
+        debug_mode=settings.debug,
     )
 
 
@@ -87,7 +88,7 @@ def create_alert_team() -> Team:
         get_member_information_tool=True,
         add_member_tools_to_context=True,
         markdown=True,
-        debug_mode=True,
+        debug_mode=settings.debug,
     )
 
 

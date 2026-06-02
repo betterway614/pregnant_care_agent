@@ -7,13 +7,22 @@ from loguru import logger
 router = APIRouter(tags=["WebSocket"])
 
 
-def _verify_ws_token(websocket: WebSocket) -> bool:
-    """从 query param 校验 WebSocket 的 JWT token"""
+def _verify_ws_token(websocket: WebSocket, expected_sub: str = "") -> bool:
+    """从 query param 校验 WebSocket 的 JWT token
+
+    Args:
+        websocket: WebSocket 连接
+        expected_sub: 期望的 token sub（用户 ID），如果提供则验证 token 的 sub 是否匹配
+    """
     token = websocket.query_params.get("token", "")
     if not token:
         return False
     payload = decode_token(token)
-    return payload is not None
+    if payload is None:
+        return False
+    if expected_sub and payload.sub != expected_sub:
+        return False
+    return True
 
 
 @router.websocket("/ws/alerts/{doctor_id}")
@@ -23,7 +32,7 @@ async def websocket_alerts(websocket: WebSocket, doctor_id: str):
 
     用于接收实时预警推送
     """
-    if not _verify_ws_token(websocket):
+    if not _verify_ws_token(websocket, expected_sub=doctor_id):
         await websocket.close(code=4001, reason="认证失败")
         return
     await ws_manager.connect(websocket, doctor_id)
@@ -50,7 +59,7 @@ async def websocket_nurse_alerts(websocket: WebSocket, nurse_id: str):
 
     用于接收实时预警推送
     """
-    if not _verify_ws_token(websocket):
+    if not _verify_ws_token(websocket, expected_sub=nurse_id):
         await websocket.close(code=4001, reason="认证失败")
         return
     await ws_manager.connect_nurse(websocket, nurse_id)

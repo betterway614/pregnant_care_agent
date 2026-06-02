@@ -137,12 +137,16 @@ class TestOrdersRouterIntegration:
         from fastapi.testclient import TestClient
         from app.main import app
         from app.database import get_db
+        from app.core.auth import get_current_user, TokenPayload, create_token
 
         def override_get_db():
             yield mock_db
 
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
         app.dependency_overrides[get_db] = override_get_db
-        yield TestClient(app)
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+        token = create_token(mock_user)
+        yield TestClient(app, headers={"Authorization": f"Bearer {token}"})
         app.dependency_overrides.clear()
 
     def _setup_mock_order_query(self, mock_db, order):

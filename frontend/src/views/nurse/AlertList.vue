@@ -207,13 +207,15 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Refresh, Bell, MagicStick } from '@element-plus/icons-vue'
 import { alertApi } from '@/api/endpoints'
 import { getNurseWebSocketClient } from '@/utils/websocket'
+import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { Alert } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
 const router = useRouter()
-const nurseId = ref('nurse-default')
+const appStore = useAppStore()
+const nurseId = ref(appStore.currentUserId || 'nurse')
 let wsClient: any = null
 
 const loading = ref(false)

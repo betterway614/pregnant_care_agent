@@ -21,6 +21,7 @@ from app.models import Pregnant, FollowUpRecord, HealthDataPoint
 from app.main import app
 from app.routers import followup as followup_router
 from app.database import get_db
+from app.core.auth import get_current_user, TokenPayload, create_token
 
 # ── 测试数据库 ──
 TEST_DB_URL = "sqlite:///./test_followup_respond.db"
@@ -48,9 +49,17 @@ def setup_db(monkeypatch):
     monkeypatch.setattr(followup_router, "SessionLocal", TestSession)
     # 覆盖 FastAPI DI
     app.dependency_overrides[get_db] = _override_get_db
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+    app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user, None)
     Base.metadata.drop_all(bind=test_engine)
+
+
+# 认证 headers（AuthMiddleware 在 DI 之前检查 JWT）
+_test_token = create_token(TokenPayload(sub="test-admin", role="admin", pregnant_id=""))
+_auth_headers = {"Authorization": f"Bearer {_test_token}"}
 
 
 def _seed_pregnant(db, pid="test-p001", gest_days=196, risk_tags=None):
@@ -107,7 +116,7 @@ class TestRespondEndpoint:
             "total_count": 5,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -133,7 +142,7 @@ class TestRespondEndpoint:
             "total_count": 5,  # 只填了1题，总共5题
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -160,7 +169,7 @@ class TestRespondEndpoint:
             "total_count": 5,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -187,7 +196,7 @@ class TestRespondEndpoint:
             "total_count": 5,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -213,7 +222,7 @@ class TestRespondEndpoint:
             "total_count": 0,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 404
@@ -231,7 +240,7 @@ class TestRespondEndpoint:
             "total_count": 5,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -256,7 +265,7 @@ class TestRespondEndpoint:
             "total_count": 5,
         }
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond", json=payload)
 
         assert resp.status_code == 200
@@ -319,7 +328,7 @@ class TestAnalyzeStreamEndpoint:
         import uuid
         payload = {"record_id": str(uuid.uuid4())}
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond/analyze/stream", json=payload)
 
         assert resp.status_code == 404
@@ -333,7 +342,7 @@ class TestAnalyzeStreamEndpoint:
 
         payload = {"record_id": str(rec.id)}
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond/analyze/stream", json=payload)
 
         assert resp.status_code == 400
@@ -350,7 +359,7 @@ class TestAnalyzeStreamEndpoint:
 
         payload = {"record_id": str(rec.id)}
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_auth_headers) as client:
             resp = client.post("/api/v1/followup/respond/analyze/stream", json=payload)
 
         assert resp.status_code == 200

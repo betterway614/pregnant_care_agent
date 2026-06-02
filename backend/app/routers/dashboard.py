@@ -2,23 +2,26 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import timedelta
 from ..database import get_db
 from ..models import Pregnant, Alert, FollowUpRecord, FgrAssessment
+from ..core.auth import get_current_user, TokenPayload
 from ..schemas import DashboardStats
+from ..utils.timezone import beijing_now
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["数据统计"])
 
 
 @router.get("/stats", response_model=DashboardStats)
-def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取统计看板数据"""
     total_pregnant = db.query(func.count(Pregnant.pregnant_id)).scalar() or 0
     pending_alerts = db.query(func.count(Alert.id)).filter(
         Alert.status.in_(["PENDING", "ESCALATED"])
     ).scalar() or 0
+    now = beijing_now()
     today_followups = db.query(func.count(FollowUpRecord.id)).filter(
-        func.date(FollowUpRecord.follow_up_date) == datetime.now().date()
+        func.date(FollowUpRecord.follow_up_date) == now.date()
     ).scalar() or 0
     high_risk_count = db.query(func.count(FgrAssessment.id)).filter(
         FgrAssessment.risk_level.in_(["high", "critical"])
@@ -28,7 +31,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         FollowUpRecord.status == "draft"
     ).scalar() or 0
 
-    week_ago = datetime.now() - timedelta(days=7)
+    week_ago = now - timedelta(days=7)
     weekly_new = db.query(func.count(Pregnant.pregnant_id)).filter(
         Pregnant.created_at >= week_ago
     ).scalar() or 0
@@ -44,7 +47,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/pregnant")
-def get_pregnant_list(db: Session = Depends(get_db)):
+def get_pregnant_list(db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取孕妇列表"""
     pregnant = db.query(Pregnant).order_by(Pregnant.created_at.desc()).limit(50).all()
     return [
@@ -64,11 +67,12 @@ def get_pregnant_list(db: Session = Depends(get_db)):
 
 
 @router.get("/pregnant/{pregnant_id}")
-def get_pregnant_detail(pregnant_id: str, db: Session = Depends(get_db)):
+def get_pregnant_detail(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取孕妇详情"""
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
-        return {"error": "孕妇不存在"}, 404
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="孕妇不存在")
 
     # 统计数据
     alert_count = db.query(func.count(Alert.id)).filter(

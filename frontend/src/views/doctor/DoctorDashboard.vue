@@ -216,12 +216,14 @@ import { useRouter } from 'vue-router'
 import { Refresh, Bell, Document, Plus } from '@element-plus/icons-vue'
 import { dashboardApi, alertApi, orderApi } from '@/api/endpoints'
 import { getWebSocketClient } from '@/utils/websocket'
+import { useAppStore } from '@/stores/app'
 import type { Alert, MedicalOrder, DashboardStats, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 import { ElNotification } from 'element-plus'
 
 const router = useRouter()
+const appStore = useAppStore()
 const loading = ref(false)
 const stats = ref<DashboardStats>({
   total_pregnant: 0,
@@ -390,7 +392,7 @@ function handleNewAlert(alert: Alert) {
  * 初始化 WebSocket
  */
 function initWebSocket() {
-  const doctorId = 'current-doctor' // 当前医生ID
+  const doctorId = appStore.currentUserId || 'doctor' // 从登录状态获取医生ID
   wsClient.value = getWebSocketClient(doctorId)
 
   // 注册预警回调

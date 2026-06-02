@@ -23,7 +23,7 @@ from ..models import FollowUpRecord, Pregnant
 from ..database import SessionLocal
 from ..schemas import (
     FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
-    FollowUpSignatureRequest,
+    FollowUpSignatureRequest, FollowUpRecordUpdateRequest,
     FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_IN_PROGRESS,
     FOLLOWUP_STATUS_COMPLETED,
 )
@@ -311,16 +311,19 @@ async def ai_review_followup(record_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/records/{record_id}")
-async def update_record(record_id: str, data: dict, db: Session = Depends(get_db)):
+async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: Session = Depends(get_db)):
     """更新随访记录（仅允许更新安全字段）"""
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
-    # 白名单：仅允许更新这些字段
-    allowed_fields = {"summary", "classification", "health_education", "nurse_notes"}
-    for key, value in data.items():
-        if key in allowed_fields and hasattr(record, key):
-            setattr(record, key, value)
+    if data.summary is not None:
+        record.summary = data.summary
+    if data.classification is not None:
+        record.classification = data.classification
+    if data.health_education is not None:
+        record.health_education = data.health_education
+    if data.nurse_notes is not None:
+        record.nurse_notes = data.nurse_notes
     db.commit()
     return {"message": "更新成功"}
 

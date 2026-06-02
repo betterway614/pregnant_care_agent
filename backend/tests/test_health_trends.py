@@ -13,6 +13,7 @@ from app.database import Base
 from app.models import Pregnant, HealthDataPoint, FollowUpRecord
 from app.main import app
 from app.routers import health_trends
+from app.core.auth import get_current_user, TokenPayload, create_token
 
 # ── 测试数据库 ──
 TEST_DB_URL = "sqlite:///./test_health_trends.db"
@@ -46,7 +47,14 @@ def setup_db():
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    from app.database import get_db
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    token = create_token(mock_user)
+    c = TestClient(app, headers={"Authorization": f"Bearer {token}"})
+    yield c
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

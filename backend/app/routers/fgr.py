@@ -382,20 +382,8 @@ def get_fgr_trend(pregnant_id: str, db: Session = Depends(get_db)):
     ).order_by(FgrAssessment.gestational_weeks).all()
 
     if not assessments:
-        from datetime import timedelta
-        base_date = datetime.now() - timedelta(days=56)
-        mock_trend = []
-        for i in range(6):
-            gw = 24 + i * 2
-            result = _mock_fgr_assess(gw, pregnant_id)
-            mock_trend.append(FgrTrendPoint(
-                gestational_weeks=float(gw),
-                risk_score=result["fgr_probability"] or 0.1,
-                confidence_lower=result["confidence_interval"].get("lower_bound", 0),
-                confidence_upper=result["confidence_interval"].get("upper_bound", 0),
-                assessed_at=(base_date + timedelta(days=i * 14)).isoformat(),
-            ))
-        return mock_trend
+        # 无真实评估数据时返回空列表，不返回mock数据以避免误导临床决策
+        return []
 
     return [
         FgrTrendPoint(

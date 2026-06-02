@@ -79,7 +79,7 @@ def get_record_agent() -> Agent:
 
 @lru_cache(maxsize=1)
 def get_qa_agent() -> Agent:
-    """孕期知识问答 Agent（3 tools）"""
+    """孕期知识问答 Agent（2 tools + 框架自动注入 search_knowledge）"""
     return _build_agent("qa", TOOL_GROUPS["qa"], tool_call_limit=4)
 
 

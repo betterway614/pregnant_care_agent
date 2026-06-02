@@ -1,10 +1,11 @@
 """TTS 语音合成 API"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal
 
 from ..config import settings, get_tts_mode
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/tts", tags=["语音合成"])
 
@@ -15,7 +16,7 @@ class TTSRequest(BaseModel):
 
 
 @router.post("/synthesize")
-async def tts_synthesize(req: TTSRequest):
+async def tts_synthesize(req: TTSRequest, user: TokenPayload = Depends(get_current_user)):
     """TTS 合成接口 - 接收文本，返回 MP3 音频流"""
     if not req.text or not req.text.strip():
         raise HTTPException(400, "text 不能为空")
@@ -45,7 +46,7 @@ async def tts_synthesize(req: TTSRequest):
 
 
 @router.get("/config")
-async def tts_config(role: str = "pregnant"):
+async def tts_config(role: str = "pregnant", user: TokenPayload = Depends(get_current_user)):
     """返回 TTS 配置信息（前端用于决定用浏览器 TTS 还是后端 TTS）"""
     mode = get_tts_mode(role)
     return {

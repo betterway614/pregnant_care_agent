@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import json
+from app.core.auth import get_current_user, TokenPayload
 
 
 class TestNurseChatStreamAudioInput:
@@ -19,6 +20,8 @@ class TestNurseChatStreamAudioInput:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-nurse", role="nurse", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
         client = TestClient(app)
 
         with patch("app.routers.nurse_ai.settings") as mock_settings:
@@ -34,6 +37,8 @@ class TestNurseChatStreamAudioInput:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
         client = TestClient(app)
 
         mock_agent = MagicMock()
@@ -68,6 +73,8 @@ class TestDoctorChatStreamAudioInput:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-doctor", role="doctor", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
         client = TestClient(app)
 
         with patch("app.config.settings"):
@@ -82,6 +89,8 @@ class TestDoctorChatStreamAudioInput:
 
         test_app = FastAPI()
         test_app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        test_app.dependency_overrides[get_current_user] = lambda: mock_user
 
         @test_app.post("/test-audio-fields")
         def check_audio_fields():

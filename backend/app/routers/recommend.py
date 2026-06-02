@@ -1,38 +1,38 @@
 """AI 个性化推荐 API"""
 import json
-from fastapi import APIRouter, HTTPException
-from ..database import SessionLocal
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from ..database import get_db
 from ..models import Pregnant, HealthDataPoint, ScheduleNode, Alert
 from ..schemas import RecommendResponse
 from ..core import get_llm_client
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/recommend", tags=["AI推荐"])
 
 
 @router.get("/{pregnant_id}", response_model=RecommendResponse)
-async def get_recommend(pregnant_id: str):
+async def get_recommend(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """基于孕周+风险标签返回个性化推荐（LLM优先，模板兜底）"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
 
-        gest_days = pregnant.gestational_age_days or 0
-        gest_week = gest_days // 7
-        gest_day = gest_days % 7
-        risk_tags = pregnant.risk_tags or []
+    gest_days = pregnant.gestational_age_days or 0
+    gest_week = gest_days // 7
+    gest_day = gest_days % 7
+    risk_tags = pregnant.risk_tags or []
 
-        # 尝试调用LLM生成个性化推荐
-        llm_result = await _try_llm_recommend(pregnant, gest_week, gest_day, risk_tags)
+    # 尝试调用LLM生成个性化推荐
+    llm_result = await _try_llm_recommend(pregnant, gest_week, gest_day, risk_tags)
 
-        if llm_result:
-            return llm_result
+    if llm_result:
+        return llm_result
 
-        # 模板兜底
-        return _fallback_recommend(pregnant, gest_week, gest_day, risk_tags)
-    finally:
-        db.close()
+    # 模板兜底
+    return _fallback_recommend(pregnant, gest_week, gest_day, risk_tags)
 
 
 async def _try_llm_recommend(pregnant: Pregnant, gest_week: int, gest_day: int, risk_tags: list) -> RecommendResponse | None:

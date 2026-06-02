@@ -1,124 +1,119 @@
 """孕妇管理 API"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ..database import SessionLocal
+from ..database import get_db
 from ..models import Pregnant, HealthDataPoint, ScheduleNode
 from ..schemas import PregnantResponse, PregnantUpdateRequest, PregnantHomeData
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/pregnant", tags=["孕妇管理"])
 
 @router.get("/{pregnant_id}", response_model=PregnantResponse)
-def get_pregnant(pregnant_id: str):
+def get_pregnant(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取孕妇完整资料"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
-        return pregnant
-    finally:
-        db.close()
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
+    return pregnant
 
 @router.put("/{pregnant_id}", response_model=PregnantResponse)
-def update_pregnant(pregnant_id: str, req: PregnantUpdateRequest):
+def update_pregnant(pregnant_id: str, req: PregnantUpdateRequest, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """更新孕妇资料（昵称、手机号、医院ID）"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
-        if req.nickname is not None:
-            pregnant.nickname = req.nickname
-        if req.phone is not None:
-            pregnant.phone = req.phone
-        if req.hospital_id is not None:
-            pregnant.hospital_id = req.hospital_id
-        if req.display_name is not None:
-            pregnant.display_name = req.display_name
-        db.commit()
-        db.refresh(pregnant)
-        return pregnant
-    finally:
-        db.close()
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
+    if req.nickname is not None:
+        pregnant.nickname = req.nickname
+    if req.phone is not None:
+        pregnant.phone = req.phone
+    if req.hospital_id is not None:
+        pregnant.hospital_id = req.hospital_id
+    if req.display_name is not None:
+        pregnant.display_name = req.display_name
+    db.commit()
+    db.refresh(pregnant)
+    return pregnant
 
 @router.get("/{pregnant_id}/home", response_model=PregnantHomeData)
-def get_pregnant_home(pregnant_id: str):
+def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取孕妇主页数据（孕周、发育信息、今日检查、推荐）"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
 
-        # 计算孕周
-        from datetime import date, datetime, timedelta
-        gest_days = pregnant.gestational_age_days or 0
-        gest_week = gest_days // 7
-        gest_day = gest_days % 7
+    # 计算孕周
+    from datetime import date, datetime, timedelta
+    gest_days = pregnant.gestational_age_days or 0
+    gest_week = gest_days // 7
+    gest_day = gest_days % 7
 
-        # 宝宝发育信息
-        baby_info = _get_baby_info(gest_week)
+    # 宝宝发育信息
+    baby_info = _get_baby_info(gest_week)
 
-        # 今日任务
-        today = date.today()
-        today_tasks = []
+    # 今日任务
+    today = date.today()
+    today_tasks = []
 
-        # 检查今日排期
-        schedule_nodes = db.query(ScheduleNode).filter(
-            ScheduleNode.pregnant_id == pregnant_id,
-            ScheduleNode.scheduled_date == today
-        ).all()
-        for node in schedule_nodes:
-            today_tasks.append({
-                "type": "checkup",
-                "title": node.item,
-                "time": "按预约时间",
-                "status": "pending" if node.status != "completed" else "done"
-            })
+    # 检查今日排期
+    schedule_nodes = db.query(ScheduleNode).filter(
+        ScheduleNode.pregnant_id == pregnant_id,
+        ScheduleNode.scheduled_date == today
+    ).all()
+    for node in schedule_nodes:
+        today_tasks.append({
+            "type": "checkup",
+            "title": node.item,
+            "time": "按预约时间",
+            "status": "pending" if node.status != "completed" else "done"
+        })
 
-        # 检查是否需要记录健康数据
-        today_str = today.isoformat()
-        recorded_today = db.query(HealthDataPoint).filter(
-            HealthDataPoint.pregnant_id == pregnant_id,
-            HealthDataPoint.recorded_at >= today_str
-        ).count()
-        if recorded_today == 0:
-            today_tasks.append({
-                "type": "health_record",
-                "title": "今日健康数据记录",
-                "time": "建议睡前完成",
-                "status": "pending"
-            })
+    # 检查是否需要记录健康数据
+    today_str = today.isoformat()
+    recorded_today = db.query(HealthDataPoint).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.recorded_at >= today_str
+    ).count()
+    if recorded_today == 0:
+        today_tasks.append({
+            "type": "health_record",
+            "title": "今日健康数据记录",
+            "time": "建议睡前完成",
+            "status": "pending"
+        })
 
-        # 近期检查
-        upcoming = db.query(ScheduleNode).filter(
-            ScheduleNode.pregnant_id == pregnant_id,
-            ScheduleNode.scheduled_date >= today,
-            ScheduleNode.scheduled_date <= today + timedelta(days=14)
-        ).order_by(ScheduleNode.scheduled_date).limit(5).all()
-        upcoming_checks = [{"date": n.scheduled_date.isoformat(), "item": n.item, "type": n.node_type} for n in upcoming]
+    # 近期检查
+    upcoming = db.query(ScheduleNode).filter(
+        ScheduleNode.pregnant_id == pregnant_id,
+        ScheduleNode.scheduled_date >= today,
+        ScheduleNode.scheduled_date <= today + timedelta(days=14)
+    ).order_by(ScheduleNode.scheduled_date).limit(5).all()
+    upcoming_checks = [{"date": n.scheduled_date.isoformat(), "item": n.item, "type": n.node_type} for n in upcoming]
 
-        # AI推荐（模板兜底）
-        recommendations = _get_recommendations(gest_week, pregnant.risk_tags or [])
+    # AI推荐（模板兜底）
+    recommendations = _get_recommendations(gest_week, pregnant.risk_tags or [])
 
-        # 健康摘要
-        health_summary = _get_health_summary(db, pregnant_id, gest_week)
+    # 健康摘要
+    health_summary = _get_health_summary(db, pregnant_id, gest_week)
 
-        return PregnantHomeData(
-            pregnant=PregnantResponse.model_validate(pregnant),
-            gestational_week=f"{gest_week}+{gest_day}",
-            gestational_day=gest_days,
-            baby_info=baby_info,
-            today_tasks=today_tasks,
-            upcoming_checks=upcoming_checks,
-            recommendations=recommendations,
-            health_summary=health_summary
-        )
-    finally:
-        db.close()
+    return PregnantHomeData(
+        pregnant=PregnantResponse.model_validate(pregnant),
+        gestational_week=f"{gest_week}+{gest_day}",
+        gestational_day=gest_days,
+        baby_info=baby_info,
+        today_tasks=today_tasks,
+        upcoming_checks=upcoming_checks,
+        recommendations=recommendations,
+        health_summary=health_summary
+    )
 
 def _get_baby_info(week: int) -> dict:
     """根据孕周返回宝宝发育信息"""
@@ -234,18 +229,16 @@ class HealthDataSubmitResponse(BaseModel):
 
 
 @router.post("/{pregnant_id}/health-data", response_model=HealthDataSubmitResponse)
-async def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
+async def submit_health_data(pregnant_id: str, req: HealthDataSubmit, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """孕妇端直接提交健康数据（不经过NLU，确保100%入库）"""
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
     from ..core.health_data_service import save_health_metrics, HealthDataSource
 
     # 验证孕妇存在
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
-    finally:
-        db.close()
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
 
     # 构建指标数据
     metrics = {}
@@ -277,7 +270,7 @@ async def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
     # ===== 自动触发规则引擎评估 =====
     if saved:
         try:
-            await _auto_evaluate_alerts(pregnant_id)
+            await _auto_evaluate_alerts(db, pregnant_id)
         except Exception as e:
             from loguru import logger
             logger.warning(f"自动预警评估失败 (pregnant_id={pregnant_id}): {e}")
@@ -290,65 +283,58 @@ async def submit_health_data(pregnant_id: str, req: HealthDataSubmit):
     )
 
 
-async def _auto_evaluate_alerts(pregnant_id: str):
+async def _auto_evaluate_alerts(db: Session, pregnant_id: str):
     """健康数据入库后自动执行规则引擎评估并创建预警"""
     from ..core.rule_engine import rule_engine
     from ..services.alert_service import alert_service
     from ..core.websocket_manager import ws_manager
-    from ..models import FgrAssessment
     from loguru import logger
-    from sqlalchemy import func
 
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            return
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        return
 
-        gest_week = (pregnant.gestational_age_days or 0) // 7
+    gest_week = (pregnant.gestational_age_days or 0) // 7
 
-        # 构建评估上下文
-        context = _build_rule_context(db, pregnant_id, gest_week)
+    # 构建评估上下文
+    context = _build_rule_context(db, pregnant_id, gest_week)
 
-        # 执行规则引擎
-        hits = rule_engine.evaluate_all(context)
-        if not hits:
-            return
+    # 执行规则引擎
+    hits = rule_engine.evaluate_all(context)
+    if not hits:
+        return
 
-        # 创建预警（alert_service 内部已做去重）
-        created = alert_service.create_alerts_from_hits(db, pregnant_id, hits, "RULE_ENGINE")
-        new_alerts = [a for a in created if a.status == "PENDING"]
+    # 创建预警（alert_service 内部已做去重）
+    created = alert_service.create_alerts_from_hits(db, pregnant_id, hits, "RULE_ENGINE")
+    new_alerts = [a for a in created if a.status == "PENDING"]
 
-        if not new_alerts:
-            return
+    if not new_alerts:
+        return
 
-        logger.info(f"自动预警: {pregnant_id} 触发 {len(new_alerts)} 条新预警")
+    logger.info(f"自动预警: {pregnant_id} 触发 {len(new_alerts)} 条新预警")
 
-        # 后台异步 LLM 分析
-        import asyncio
-        from ..services.alert_service import alert_service
-        for alert in new_alerts:
-            asyncio.create_task(alert_service.enrich_alert_with_llm(db, alert, pregnant))
+    # 后台异步 LLM 分析（传 IDs，让 task 自建 session）
+    import asyncio
+    for alert in new_alerts:
+        asyncio.create_task(alert_service.enrich_alert_with_llm(alert.id, pregnant_id))
 
-        # WebSocket 推送给医生端
-        for alert in new_alerts:
-            alert_data = {
-                "id": str(alert.id),
-                "pregnant_id": pregnant_id,
-                "patient_name": pregnant.display_name,
-                "level": alert.level,
-                "message": alert.message,
-                "trigger_source": alert.trigger_source,
-                "status": alert.status,
-                "created_at": alert.created_at.isoformat() if alert.created_at else None,
-                "gestational_age_days": pregnant.gestational_age_days,
-            }
-            try:
-                await ws_manager.broadcast_alert(alert_data)
-            except Exception as e:
-                logger.warning(f"WebSocket广播失败: {e}")
-    finally:
-        db.close()
+    # WebSocket 推送给医生端
+    for alert in new_alerts:
+        alert_data = {
+            "id": str(alert.id),
+            "pregnant_id": pregnant_id,
+            "patient_name": pregnant.display_name,
+            "level": alert.level,
+            "message": alert.message,
+            "trigger_source": alert.trigger_source,
+            "status": alert.status,
+            "created_at": alert.created_at.isoformat() if alert.created_at else None,
+            "gestational_age_days": pregnant.gestational_age_days,
+        }
+        try:
+            await ws_manager.broadcast_alert(alert_data)
+        except Exception as e:
+            logger.warning(f"WebSocket广播失败: {e}")
 
 
 def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:

@@ -1,8 +1,10 @@
 """心理健康筛查 API - EPDS爱丁堡产后抑郁量表"""
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from ..database import SessionLocal
+from sqlalchemy.orm import Session
+from ..database import get_db
 from ..models import MentalHealthScreening, Alert
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/mental-health", tags=["心理健康筛查"])
 
@@ -39,14 +41,16 @@ class EPDSResult(BaseModel):
 
 
 @router.get("/epds/questions")
-async def get_epds_questions():
+async def get_epds_questions(user: TokenPayload = Depends(get_current_user)):
     """获取EPDS量表题目"""
     return {"questions": EPDS_QUESTIONS, "total": len(EPDS_QUESTIONS)}
 
 
 @router.post("/epds/submit", response_model=EPDSResult)
-async def submit_epds(req: EPDSSubmitRequest):
+async def submit_epds(req: EPDSSubmitRequest, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """提交EPDS量表答案并计算评分"""
+    if user.role == "pregnant" and user.pregnant_id != req.pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
     # 计算总分
     total_score = 0
     for q_id, answer_idx in req.answers.items():
@@ -88,63 +92,57 @@ async def submit_epds(req: EPDSSubmitRequest):
         ]
 
     # 存储筛查结果
-    db = SessionLocal()
-    try:
-        screening = MentalHealthScreening(
+    screening = MentalHealthScreening(
+        pregnant_id=req.pregnant_id,
+        screening_type="EPDS",
+        answers=req.answers,
+        total_score=total_score,
+        risk_level=risk_level,
+    )
+    db.add(screening)
+
+    # 如果是高风险，通过 alert_service 创建告警（带去重逻辑）
+    if risk_level in ("high", "severe"):
+        from ..services.alert_service import create_alert
+        create_alert(
+            db=db,
             pregnant_id=req.pregnant_id,
-            screening_type="EPDS",
-            answers=req.answers,
-            total_score=total_score,
-            risk_level=risk_level,
+            trigger_source="EPDS_SCREENING",
+            rule_id="EPDS_HIGH_RISK",
+            domain="mental",
+            level="RED" if risk_level == "severe" else "ORANGE",
+            message=f"EPDS心理健康筛查结果：{risk_desc}（得分：{total_score}/30）",
+            details={"score": total_score, "risk_level": risk_level},
         )
-        db.add(screening)
 
-        # 如果是高风险，自动创建告警
-        if risk_level in ("high", "severe"):
-            alert = Alert(
-                pregnant_id=req.pregnant_id,
-                trigger_source="EPDS_SCREENING",
-                rule_id="EPDS_HIGH_RISK",
-                domain="mental",
-                level="RED" if risk_level == "severe" else "ORANGE",
-                message=f"EPDS心理健康筛查结果：{risk_desc}（得分：{total_score}/30）",
-                details={"score": total_score, "risk_level": risk_level},
-                status="PENDING",
-            )
-            db.add(alert)
-
-        db.commit()
-        return EPDSResult(
-            id=str(screening.id),
-            total_score=total_score,
-            risk_level=risk_level,
-            risk_description=risk_desc,
-            recommendations=recommendations,
-        )
-    finally:
-        db.close()
+    db.commit()
+    return EPDSResult(
+        id=str(screening.id),
+        total_score=total_score,
+        risk_level=risk_level,
+        risk_description=risk_desc,
+        recommendations=recommendations,
+    )
 
 
 @router.get("/epds/history/{pregnant_id}")
-async def get_epds_history(pregnant_id: str):
+async def get_epds_history(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取EPDS筛查历史"""
-    db = SessionLocal()
-    try:
-        screenings = db.query(MentalHealthScreening).filter(
-            MentalHealthScreening.pregnant_id == pregnant_id,
-            MentalHealthScreening.screening_type == "EPDS",
-        ).order_by(MentalHealthScreening.created_at.desc()).limit(10).all()
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    screenings = db.query(MentalHealthScreening).filter(
+        MentalHealthScreening.pregnant_id == pregnant_id,
+        MentalHealthScreening.screening_type == "EPDS",
+    ).order_by(MentalHealthScreening.created_at.desc()).limit(10).all()
 
-        return {
-            "screenings": [
-                {
-                    "id": str(s.id),
-                    "total_score": s.total_score,
-                    "risk_level": s.risk_level,
-                    "created_at": s.created_at.isoformat() if s.created_at else None,
-                }
-                for s in screenings
-            ]
-        }
-    finally:
-        db.close()
+    return {
+        "screenings": [
+            {
+                "id": str(s.id),
+                "total_score": s.total_score,
+                "risk_level": s.risk_level,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in screenings
+        ]
+    }

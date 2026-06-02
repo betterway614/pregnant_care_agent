@@ -28,20 +28,30 @@ _CN_DIGITS = {
 def _parse_cn_number(s: str) -> Optional[int]:
     """解析中文数字（支持百位，如一百二十=120，两百=200）"""
     result = 0
+    found_any = False  # 标记是否识别到了任何数字
     # 处理"X百Y十Z"格式
     if "百" in s:
         parts = s.split("百", 1)
         hundred_part = parts[0] or "一"  # "百"前无数字默认"一"
-        result += _CN_DIGITS.get(hundred_part, 0) * 100
+        digit = _CN_DIGITS.get(hundred_part, 0)
+        if digit > 0 or hundred_part in _CN_DIGITS:
+            found_any = True
+        result += digit * 100
         s = parts[1]
     if "十" in s:
         parts = s.split("十", 1)
         ten_part = parts[0] or "一"  # "十"前无数字默认"一"
-        result += _CN_DIGITS.get(ten_part, 0) * 10
+        digit = _CN_DIGITS.get(ten_part, 0)
+        if digit > 0 or ten_part in _CN_DIGITS:
+            found_any = True
+        result += digit * 10
         s = parts[1]
     if s:
-        result += _CN_DIGITS.get(s, 0)
-    return result if result > 0 else None
+        digit = _CN_DIGITS.get(s, 0)
+        if s in _CN_DIGITS:
+            found_any = True
+        result += digit
+    return result if found_any else None
 
 
 def _cn_to_arabic(text: str) -> str:

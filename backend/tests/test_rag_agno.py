@@ -149,19 +149,25 @@ class TestRAGEndpoints:
         """验证 RAG 关闭时返回 400"""
         from app.routers.chat import rag_ask, RAGAskRequest
         from fastapi import HTTPException
+        from app.core.auth import TokenPayload
+
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
         with patch("app.routers.chat.settings") as mock_settings:
             mock_settings.rag_enabled = False
 
             req = RAGAskRequest(question="孕期饮食")
             with pytest.raises(HTTPException) as exc_info:
-                await rag_ask(req)
+                await rag_ask(req, user=mock_user)
             assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_rag_ask_returns_results(self):
         """验证 /rag/ask 返回知识库结果"""
         from app.routers.chat import rag_ask, RAGAskRequest
+        from app.core.auth import TokenPayload
+
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
         mock_doc = MagicMock()
         mock_doc.content = "孕期应补充叶酸0.4mg/天"
@@ -175,7 +181,7 @@ class TestRAGEndpoints:
                 mock_knowledge.search.return_value = [mock_doc]
 
                 req = RAGAskRequest(question="孕期需要补充什么？")
-                resp = await rag_ask(req)
+                resp = await rag_ask(req, user=mock_user)
 
                 assert resp.rag_used is True
                 assert len(resp.chunks) > 0
@@ -186,6 +192,9 @@ class TestRAGEndpoints:
     async def test_rag_ask_empty_results(self):
         """验证 /rag/ask 无结果时返回兜底回复"""
         from app.routers.chat import rag_ask, RAGAskRequest
+        from app.core.auth import TokenPayload
+
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
 
         with patch("app.routers.chat.settings") as mock_settings:
             mock_settings.rag_enabled = True
@@ -194,7 +203,7 @@ class TestRAGEndpoints:
                 mock_knowledge.search.return_value = []
 
                 req = RAGAskRequest(question="完全无关的问题xyz")
-                resp = await rag_ask(req)
+                resp = await rag_ask(req, user=mock_user)
 
                 assert resp.rag_used is False
                 assert "抱歉" in resp.answer or "咨询" in resp.answer

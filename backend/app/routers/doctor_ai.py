@@ -3,15 +3,17 @@ import json
 import asyncio
 import time
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
+from sqlalchemy.orm import Session
 from ..utils.timezone import beijing_now
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
-from ..database import SessionLocal
+from ..database import SessionLocal, get_db
 from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder, AgentAuditLog
-from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse
+from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse, ChatStreamRequest
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
+from ..core.auth import extract_user_from_header, get_current_user, TokenPayload
 from ..config import settings
 from loguru import logger
 
@@ -92,44 +94,43 @@ router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
 
 @router.post("/analyze/{pregnant_id}", response_model=DoctorAnalyzeResponse)
-async def doctor_analyze(pregnant_id: str, req: DoctorAnalyzeRequest = None):
+async def doctor_analyze(pregnant_id: str, req: DoctorAnalyzeRequest = None, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
     """AI综合分析孕妇数据，返回含证据引用的分析结果"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
+    if user.role != "doctor":
+        raise HTTPException(status_code=403, detail="需要医生权限")
 
-        gest_days = pregnant.gestational_age_days or 0
-        gest_week = gest_days // 7
-        gest_day = gest_days % 7
-        risk_tags = pregnant.risk_tags or []
-        query = req.query if req else ""
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
 
-        # 收集综合分析所需数据
-        analysis_context = _collect_doctor_analysis_context(db, pregnant_id, gest_week, gest_day)
+    gest_days = pregnant.gestational_age_days or 0
+    gest_week = gest_days // 7
+    gest_day = gest_days % 7
+    risk_tags = pregnant.risk_tags or []
+    query = req.query if req else ""
 
-        # 尝试LLM综合分析
-        llm_result = await _try_llm_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
-                                                    analysis_context, query)
-        if llm_result:
-            result = llm_result
-        else:
-            # 模板兜底
-            result = _fallback_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
-                                              analysis_context, query)
+    # 收集综合分析所需数据
+    analysis_context = _collect_doctor_analysis_context(db, pregnant_id, gest_week, gest_day)
 
-        # 应用医生草稿安全后处理：拦截确定性诊断结论
-        from ..core.agno_guardrails import apply_doctor_draft_safety
-        result.analysis = apply_doctor_draft_safety(result.analysis or "")
-        result.risk_summary = apply_doctor_draft_safety(result.risk_summary or "")
-        result.suggested_orders = apply_doctor_draft_safety(result.suggested_orders or "")
+    # 尝试LLM综合分析
+    llm_result = await _try_llm_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
+                                                analysis_context, query)
+    if llm_result:
+        result = llm_result
+    else:
+        # 模板兜底
+        result = _fallback_doctor_analyze(pregnant, gest_week, gest_day, risk_tags,
+                                          analysis_context, query)
 
-        # 分析完成后不再自动创建医嘱草稿（去重：统一由 POST /orders/generate 负责）
-        # suggested_orders 仅作为分析结果中的文本建议展示
-        return result
-    finally:
-        db.close()
+    # 应用医生草稿安全后处理：拦截确定性诊断结论
+    from ..core.agno_guardrails import apply_doctor_draft_safety
+    result.analysis = apply_doctor_draft_safety(result.analysis or "")
+    result.risk_summary = apply_doctor_draft_safety(result.risk_summary or "")
+    result.suggested_orders = apply_doctor_draft_safety(result.suggested_orders or "")
+
+    # 分析完成后不再自动创建医嘱草稿（去重：统一由 POST /orders/generate 负责）
+    # suggested_orders 仅作为分析结果中的文本建议展示
+    return result
 
 
 def _collect_doctor_analysis_context(db, pregnant_id: str, gest_week: int, gest_day: int) -> dict:
@@ -600,13 +601,15 @@ async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: s
 
 
 @router.post("/chat/stream")
-async def doctor_chat_stream(req: dict):
+async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends(get_current_user)):
     """医生 AI 持续对话（SSE 流式）— 使用 Agno Agent 自动工具路由"""
-    message = req.get("message", "")
-    pregnant_id = req.get("pregnant_id", "")
-    message_type = req.get("message_type", "TEXT")
-    audio_data = req.get("audio_data")
-    audio_format = req.get("audio_format", "webm")
+    if user.role != "doctor":
+        raise HTTPException(status_code=403, detail="需要医生权限")
+    message = req.message
+    pregnant_id = req.pregnant_id
+    message_type = req.message_type
+    audio_data = req.audio_data
+    audio_format = req.audio_format
 
     # ASR 预处理：音频输入转文本（使用专用 ASR 服务）
     if message_type == "AUDIO" and audio_data:
@@ -704,112 +707,111 @@ from ..schemas import NurseDoctorIssueResponse
 
 
 @router.get("/issues", response_model=list[NurseDoctorIssueResponse])
-async def list_issues(status: str = "pending"):
+async def list_issues(status: str = "pending", user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
     """获取待处理的问题列表"""
+    if user.role != "doctor":
+        raise HTTPException(status_code=403, detail="需要医生权限")
     from ..models import NurseDoctorIssue
 
-    db = SessionLocal()
-    try:
-        issues = db.query(NurseDoctorIssue).filter(
-            NurseDoctorIssue.status == status
-        ).order_by(
-            NurseDoctorIssue.priority.desc(),
-            NurseDoctorIssue.created_at.desc()
-        ).limit(20).all()
+    issues = db.query(NurseDoctorIssue).filter(
+        NurseDoctorIssue.status == status
+    ).order_by(
+        NurseDoctorIssue.priority.desc(),
+        NurseDoctorIssue.created_at.desc()
+    ).limit(20).all()
 
-        # 批量查询孕妇信息，避免 N+1 查询
-        pregnant_ids = list(set(i.pregnant_id for i in issues))
-        pregnant_map = {}
-        if pregnant_ids:
-            pregnants = db.query(Pregnant).filter(Pregnant.pregnant_id.in_(pregnant_ids)).all()
-            pregnant_map = {p.pregnant_id: p for p in pregnants}
+    # 批量查询孕妇信息，避免 N+1 查询
+    pregnant_ids = list(set(i.pregnant_id for i in issues))
+    pregnant_map = {}
+    if pregnant_ids:
+        pregnants = db.query(Pregnant).filter(Pregnant.pregnant_id.in_(pregnant_ids)).all()
+        pregnant_map = {p.pregnant_id: p for p in pregnants}
 
-        result = []
-        for issue in issues:
-            pregnant = pregnant_map.get(issue.pregnant_id)
-            result.append(NurseDoctorIssueResponse(
-                id=str(issue.id),
-                pregnant_id=issue.pregnant_id,
-                patient_name=pregnant.display_name if pregnant else "未知",
-                reported_by=issue.reported_by,
-                issue_type=issue.issue_type,
-                title=issue.title,
-                description=issue.description,
-                priority=issue.priority,
-                status=issue.status,
-                assigned_to=issue.assigned_to,
-                resolution=issue.resolution,
-                created_at=issue.created_at,
-            ))
+    result = []
+    for issue in issues:
+        pregnant = pregnant_map.get(issue.pregnant_id)
+        result.append(NurseDoctorIssueResponse(
+            id=str(issue.id),
+            pregnant_id=issue.pregnant_id,
+            patient_name=pregnant.display_name if pregnant else "未知",
+            reported_by=issue.reported_by,
+            issue_type=issue.issue_type,
+            title=issue.title,
+            description=issue.description,
+            priority=issue.priority,
+            status=issue.status,
+            assigned_to=issue.assigned_to,
+            resolution=issue.resolution,
+            created_at=issue.created_at,
+        ))
 
-        return result
-    finally:
-        db.close()
+    return result
 
 
 @router.put("/issues/{issue_id}/resolve")
-async def resolve_issue(issue_id: str, resolution: str = ""):
+async def resolve_issue(issue_id: str, resolution: str = "", user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
     """处理问题"""
+    if user.role != "doctor":
+        raise HTTPException(status_code=403, detail="需要医生权限")
     from uuid import UUID
     from ..models import NurseDoctorIssue
 
-    db = SessionLocal()
-    try:
-        issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == UUID(issue_id)).first()
-        if not issue:
-            raise HTTPException(404, "问题不存在")
+    doctor_id = user.sub
 
-        issue.status = "resolved"
-        issue.resolution = resolution or "已处理"
-        issue.resolved_at = beijing_now()
-        issue.assigned_to = "current-doctor"
-        db.commit()
+    issue = db.query(NurseDoctorIssue).filter(NurseDoctorIssue.id == UUID(issue_id)).first()
+    if not issue:
+        raise HTTPException(404, "问题不存在")
 
-        return {"success": True, "message": "问题已处理"}
-    finally:
-        db.close()
+    issue.status = "resolved"
+    issue.resolution = resolution or "已处理"
+    issue.resolved_at = beijing_now()
+    issue.assigned_to = doctor_id
+    db.commit()
+
+    return {"success": True, "message": "问题已处理"}
 
 
 # ==================== 医生端 - 报告生成 ====================
 
 @router.post("/report/{pregnant_id}")
-async def generate_report(pregnant_id: str):
+async def generate_report(pregnant_id: str, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
     """生成孕期健康报告"""
-    db = SessionLocal()
-    try:
-        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        if not pregnant:
-            raise HTTPException(404, "孕妇不存在")
+    if user.role != "doctor":
+        raise HTTPException(status_code=403, detail="需要医生权限")
 
-        gest_days = pregnant.gestational_age_days or 0
-        gest_week = gest_days // 7
-        gest_day = gest_days % 7
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
+    if not pregnant:
+        raise HTTPException(404, "孕妇不存在")
 
-        # 收集数据
-        patient_summary = f"""孕妇：{pregnant.display_name}
+    gest_days = pregnant.gestational_age_days or 0
+    gest_week = gest_days // 7
+    gest_day = gest_days % 7
+
+    # 收集数据
+    patient_summary = f"""孕妇：{pregnant.display_name}
 孕周：{gest_week}周+{gest_day}天
 风险标签：{', '.join(pregnant.risk_tags) if pregnant.risk_tags else '无'}
 管理时间：{pregnant.created_at.strftime('%Y-%m-%d') if pregnant.created_at else '未知'}"""
 
-        # 健康数据
-        from ..services.patient_context_service import get_recent_health_data
-        health_points = get_recent_health_data(db, pregnant_id, limit=20, days=30)
-        health_lines = []
-        for point in health_points[:10]:
-            health_lines.append(f"- {point['metric']}: {point['value']}{point['unit']} ({point['recorded_at'][:10]})")
-        health_data = "\n".join(health_lines) if health_lines else "暂无健康数据"
+    # 健康数据
+    from ..services.patient_context_service import get_recent_health_data
+    health_points = get_recent_health_data(db, pregnant_id, limit=20, days=30)
+    health_lines = []
+    for point in health_points[:10]:
+        health_lines.append(f"- {point['metric']}: {point['value']}{point['unit']} ({point['recorded_at'][:10]})")
+    health_data = "\n".join(health_lines) if health_lines else "暂无健康数据"
 
-        # 预警记录
-        alerts = db.query(Alert).filter(
-            Alert.pregnant_id == pregnant_id
-        ).order_by(Alert.created_at.desc()).limit(5).all()
-        alert_lines = []
-        for alert in alerts:
-            alert_lines.append(f"- [{alert.level}] {alert.message} ({alert.created_at.strftime('%Y-%m-%d')})")
-        alerts_text = "\n".join(alert_lines) if alert_lines else "暂无预警记录"
+    # 预警记录
+    alerts = db.query(Alert).filter(
+        Alert.pregnant_id == pregnant_id
+    ).order_by(Alert.created_at.desc()).limit(5).all()
+    alert_lines = []
+    for alert in alerts:
+        alert_lines.append(f"- [{alert.level}] {alert.message} ({alert.created_at.strftime('%Y-%m-%d')})")
+    alerts_text = "\n".join(alert_lines) if alert_lines else "暂无预警记录"
 
-        # 生成报告
-        prompt = f"""请根据以下信息生成一份结构化的孕期健康报告：
+    # 生成报告
+    prompt = f"""请根据以下信息生成一份结构化的孕期健康报告：
 
 {patient_summary}
 
@@ -825,44 +827,42 @@ async def generate_report(pregnant_id: str):
 3. 风险评估
 4. 建议"""
 
-        from ..core.agno_medical_agents import get_doctor_chat_agent, DOCTOR_AGENT_VARIANT_MAP
-        from ..core.agno_tools import resolve_doctor_tools_by_intent
+    from ..core.agno_medical_agents import get_doctor_chat_agent, DOCTOR_AGENT_VARIANT_MAP
+    from ..core.agno_tools import resolve_doctor_tools_by_intent
 
-        # 意图分类（report 端点）
-        intent_variant = "analyze"
-        intent_classification = "ANALYZE"
-        if prompt.strip():
-            try:
-                from ..core.nlu_engine import nlu_engine
-                nlu_result = nlu_engine.parse(prompt.strip())
-                intent_classification = nlu_result.intent
-                _, intent_variant = resolve_doctor_tools_by_intent({
-                    "intent": nlu_result.intent,
-                    "entities": nlu_result.entities,
-                })
-            except Exception as e:
-                logger.warning("医生端报告意图分类降级: %s", e)
+    # 意图分类（report 端点）
+    intent_variant = "analyze"
+    intent_classification = "ANALYZE"
+    if prompt.strip():
+        try:
+            from ..core.nlu_engine import nlu_engine
+            nlu_result = nlu_engine.parse(prompt.strip())
+            intent_classification = nlu_result.intent
+            _, intent_variant = resolve_doctor_tools_by_intent({
+                "intent": nlu_result.intent,
+                "entities": nlu_result.entities,
+            })
+        except Exception as e:
+            logger.warning("医生端报告意图分类降级: %s", e)
 
-        agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
-        agent = agent_factory()
-        t0 = time.time()
-        response = await agent.arun(input=prompt, user_id=pregnant_id)
-        elapsed_ms = int((time.time() - t0) * 1000)
-        _save_doctor_audit_log(
-            session_id=f"doctor_report_{pregnant_id}",
-            user_id=pregnant_id,
-            agent_variant=intent_variant,
-            intent_classification=intent_classification,
-            run_response=response,
-            total_latency_ms=elapsed_ms,
-        )
-        report_content = response.content or ""
+    agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
+    agent = agent_factory()
+    t0 = time.time()
+    response = await agent.arun(input=prompt, user_id=pregnant_id)
+    elapsed_ms = int((time.time() - t0) * 1000)
+    _save_doctor_audit_log(
+        session_id=f"doctor_report_{pregnant_id}",
+        user_id=pregnant_id,
+        agent_variant=intent_variant,
+        intent_classification=intent_classification,
+        run_response=response,
+        total_latency_ms=elapsed_ms,
+    )
+    report_content = response.content or ""
 
-        return {
-            "pregnant_id": pregnant_id,
-            "patient_name": pregnant.display_name,
-            "report": report_content,
-            "generated_at": beijing_now().isoformat(),
-        }
-    finally:
-        db.close()
+    return {
+        "pregnant_id": pregnant_id,
+        "patient_name": pregnant.display_name,
+        "report": report_content,
+        "generated_at": beijing_now().isoformat(),
+    }

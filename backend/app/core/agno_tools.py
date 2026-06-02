@@ -30,8 +30,53 @@ from agno.tools import tool
 from ..config import settings
 
 # NLU 结果上下文：由路由层注入，供 agno_get_nlu_result 工具读取
-# key: session_id, value: NLU result dict
-_nlu_context: dict[str, dict] = {}
+# key: session_id, value: (nlu_dict, timestamp)
+# 使用带时间戳的结构，支持自动过期清理，防止内存泄漏
+import threading
+import time as _time
+
+_nlu_context: dict[str, tuple[dict, float]] = {}
+_nlu_context_lock = threading.Lock()
+_NLU_CONTEXT_TTL = 600  # 10 分钟过期
+
+
+def set_nlu_context(session_id: str, nlu_dict: dict) -> None:
+    """线程安全地设置 NLU 上下文"""
+    with _nlu_context_lock:
+        _nlu_context[session_id] = (nlu_dict, _time.time())
+
+
+def get_nlu_context(session_id: str) -> dict | None:
+    """线程安全地获取 NLU 上下文，过期条目自动清理"""
+    with _nlu_context_lock:
+        entry = _nlu_context.get(session_id)
+        if entry is None:
+            return None
+        nlu_dict, ts = entry
+        if _time.time() - ts > _NLU_CONTEXT_TTL:
+            del _nlu_context[session_id]
+            return None
+        return nlu_dict
+
+
+def pop_nlu_context(session_id: str) -> dict | None:
+    """线程安全地弹出 NLU 上下文"""
+    with _nlu_context_lock:
+        entry = _nlu_context.pop(session_id, None)
+        if entry is None:
+            return None
+        nlu_dict, ts = entry
+        return nlu_dict
+
+
+def cleanup_expired_nlu_context() -> int:
+    """清理所有过期的 NLU 上下文条目，返回清理数量"""
+    now = _time.time()
+    with _nlu_context_lock:
+        expired = [k for k, (_, ts) in _nlu_context.items() if now - ts > _NLU_CONTEXT_TTL]
+        for k in expired:
+            del _nlu_context[k]
+        return len(expired)
 
 
 def _resolve_pid(pregnant_id: str, run_context: RunContext | None) -> str:
@@ -68,9 +113,9 @@ def agno_get_nlu_result(run_context: RunContext | None = None) -> dict:
         nlu = run_context.session_state.get("nlu_result")
         if nlu:
             return nlu
-    # 从模块级上下文读取（按 session_id 查找）
+    # 从模块级上下文读取（按 session_id 查找，线程安全）
     if run_context is not None and hasattr(run_context, "session_id"):
-        nlu = _nlu_context.get(run_context.session_id)
+        nlu = get_nlu_context(run_context.session_id)
         if nlu:
             return nlu
     return {
@@ -884,7 +929,7 @@ INTENT_TO_GROUP: dict[str, str] = {
     "health_data_report": "record",
     "emotion_express": "chat",
     "knowledge_query": "qa",
-    "schedule_inquiry": "complex",
+    "schedule_inquiry": "qa",         # 日程查询走知识问答组
     "emergency": "emergency",
     "suicide_risk": "emergency",
     "greeting": "chat",
@@ -899,9 +944,6 @@ INTENT_TO_GROUP: dict[str, str] = {
     "ask_knowledge": "qa",
     "ask_symptom": "qa",
     "ask_exam": "qa",
-    "emergency": "emergency",
-    "health_data_report": "record",
-    "schedule_inquiry": "qa",
 }
 
 

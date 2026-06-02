@@ -15,6 +15,7 @@ export const useAppStore = defineStore('app', () => {
   const currentPregnantId = ref(localStorage.getItem('currentPregnantId') || '')
   const currentPregnant = ref<Pregnant | null>(null)
   const isLoggedIn = ref(!!localStorage.getItem('isLoggedIn'))
+  const currentUserId = ref(localStorage.getItem('currentUserId') || '')
 
   const roleName = computed(() => ({
     nurse: '助孕师小护',
@@ -54,11 +55,15 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /** 登录 */
-  function login(role: UserRole, pregnantId?: string) {
+  function login(role: UserRole, pregnantId?: string, userId?: string) {
     currentRole.value = role
     isLoggedIn.value = true
     localStorage.setItem('isLoggedIn', 'true')
     localStorage.setItem('currentRole', role)
+    if (userId) {
+      currentUserId.value = userId
+      localStorage.setItem('currentUserId', userId)
+    }
     if (pregnantId) {
       setPregnant(pregnantId)
     }
@@ -69,9 +74,11 @@ export const useAppStore = defineStore('app', () => {
     isLoggedIn.value = false
     currentPregnantId.value = ''
     currentPregnant.value = null
+    currentUserId.value = ''
     localStorage.removeItem('isLoggedIn')
     localStorage.removeItem('currentPregnantId')
     localStorage.removeItem('currentRole')
+    localStorage.removeItem('currentUserId')
     localStorage.removeItem('token')
   }
 
@@ -81,7 +88,7 @@ export const useAppStore = defineStore('app', () => {
     roleName, roleIcon,
     fetchStats, toggleSidebar, setRole,
     // 新增认证相关
-    currentPregnantId, currentPregnant, isLoggedIn,
+    currentPregnantId, currentPregnant, isLoggedIn, currentUserId,
     setPregnant, login, logout,
   }
 })

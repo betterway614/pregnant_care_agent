@@ -16,6 +16,7 @@ from datetime import date
 from app.database import Base, get_db
 from app.models import Pregnant, FgrAssessment, Alert
 from app.main import app
+from app.core.auth import get_current_user, TokenPayload, create_token
 
 # ── 测试数据库 ──
 TEST_DB_PATH = os.path.join(os.path.dirname(__file__), "test_fgr_upload.db")
@@ -55,8 +56,11 @@ def client(db_session):
         finally:
             pass
 
+    mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    token = create_token(mock_user)
+    yield TestClient(app, headers={"Authorization": f"Bearer {token}"})
     app.dependency_overrides.clear()
 
 

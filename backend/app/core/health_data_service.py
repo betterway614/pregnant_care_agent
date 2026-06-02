@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from ..utils.timezone import beijing_now
 from enum import Enum

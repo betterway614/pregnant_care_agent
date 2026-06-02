@@ -49,6 +49,17 @@ class RequestLogMiddleware:
         # ── 请求入口日志（在业务处理之前输出，即使后续卡死也能看到） ──
         logger.info("[REQ] {} {} body={}", method, path, body_str[:500])
 
+        # ── 将已读取的 body 回放给下游处理器 ──
+        # 否则下游中间件/路由会收到空 body，导致 POST/PUT 请求丢失数据
+        body_replayed = False
+
+        async def replay_receive():
+            nonlocal body_replayed
+            if not body_replayed:
+                body_replayed = True
+                return {"type": "http.request", "body": body_bytes, "more_body": False}
+            return {"type": "http.request", "body": b"", "more_body": False}
+
         # ── 收集响应体 ──
         resp_body = b""
         resp_status = 200
@@ -61,9 +72,9 @@ class RequestLogMiddleware:
                 resp_body += msg.get("body", b"")
             await send(msg)
 
-        # ── 执行后续中间件 ──
+        # ── 执行后续中间件（使用 replay_receive 替代原始 receive） ──
         try:
-            await self.app(scope, receive, send_wrapper)
+            await self.app(scope, replay_receive, send_wrapper)
         except Exception:
             elapsed = time.time() - start
             logger.error("[REQ] {} {} 异常 ({:.0f}ms)", method, path, elapsed * 1000)

@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from app.core.auth import get_current_user, TokenPayload
 
 
 class TestTTSServiceBrowserMode:
@@ -92,6 +93,8 @@ class TestTTSRouterConfig:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
         with patch("app.routers.tts.get_tts_mode", return_value="browser"):
             client = TestClient(app)
@@ -109,6 +112,8 @@ class TestTTSRouterConfig:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
         with patch("app.routers.tts.get_tts_mode", return_value="local"):
             client = TestClient(app)
@@ -126,6 +131,8 @@ class TestTTSRouterConfig:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
         client = TestClient(app)
         resp = client.post("/api/v1/tts/synthesize", json={"text": "", "role": "pregnant"})

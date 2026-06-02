@@ -26,7 +26,7 @@ from ..database import db_call, SessionLocal
 from ..models import AgentAuditLog
 from ..core.conversation_store import conversation_store
 from ..config import settings, get_asr_mode
-from .agno_tools import _nlu_context
+from .agno_tools import set_nlu_context, pop_nlu_context
 
 
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
@@ -229,7 +229,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
             # 注入 NLU 结果到模块级上下文
-            _nlu_context[session_id] = nlu_dict
+            set_nlu_context(session_id, nlu_dict)
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -316,7 +316,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
             logger.warning("非流式对话持久化失败 session_id={}", session_id, exc_info=True)
 
     # 清理 NLU 上下文
-    _nlu_context.pop(session_id, None)
+    pop_nlu_context(session_id)
 
     return ChatResponse(
         content=content,
@@ -368,7 +368,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             from .agno_tools import resolve_tools_by_intent
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
             # 注入 NLU 结果到模块级上下文
-            _nlu_context[session_id] = nlu_dict
+            set_nlu_context(session_id, nlu_dict)
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -522,4 +522,4 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             logger.warning("流式对话持久化失败 session_id={}", session_id, exc_info=True)
 
     # 清理 NLU 上下文
-    _nlu_context.pop(session_id, None)
+    pop_nlu_context(session_id)

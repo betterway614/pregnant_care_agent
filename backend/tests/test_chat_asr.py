@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from app.core.auth import get_current_user, TokenPayload
 
 # 测试用音频数据
 TEST_AUDIO_B64 = "dGVzdA=="  # "test" 的 base64
@@ -139,6 +140,8 @@ class TestChatASREndpoint:
 
         app = FastAPI()
         app.include_router(router)
+        mock_user = TokenPayload(sub="test-admin", role="admin", pregnant_id="")
+        app.dependency_overrides[get_current_user] = lambda: mock_user
         return TestClient(app)
 
     def test_asr_endpoint_success(self):
@@ -335,7 +338,8 @@ class TestNonStreamWithASRPreprocessing:
         with patch("app.core.agno_chat_handler._transcribe_audio_pregnant",
                    new_callable=AsyncMock, return_value="产检时间是什么时候"), \
              patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
-             patch("app.core.agno_chat_handler.settings") as mock_settings:
+             patch("app.core.agno_chat_handler.settings") as mock_settings, \
+             patch("app.core.nlu_engine.nlu_engine.parse", side_effect=RuntimeError("NLU mock")):
             mock_settings.persist_chat_messages = False
 
             resp = await handle_chat_with_agno(req)

@@ -92,7 +92,7 @@ def create_knowledge(config: dict | None = None) -> Knowledge:
     )
 
     logger.info(
-        "Knowledge 创建完成: search_type={}, max_results={}, embedder={}, reranker={}",
+        "Knowledge 创建完成: search_type=%s, max_results=%s, embedder=%s, reranker=%s",
         search_type_str, max_results, embedder_model,
         type(reranker).__name__ if reranker else "none",
     )

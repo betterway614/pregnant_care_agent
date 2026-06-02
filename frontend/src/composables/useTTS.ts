@@ -110,6 +110,10 @@ export function useTTS(options: TTSOptions = {}) {
     if (isSupported.value) speechSynthesis.cancel()
     if (currentAudio) {
       currentAudio.pause()
+      // 释放 blob URL 避免内存泄漏
+      if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
+        URL.revokeObjectURL(currentAudio.src)
+      }
       currentAudio = null
     }
     if (abortController) {

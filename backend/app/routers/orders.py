@@ -8,7 +8,7 @@ from datetime import datetime
 from ..database import get_db
 from ..utils.timezone import beijing_now
 from ..models import MedicalOrder, Pregnant, Alert
-from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderExplainResponse, OrderDocumentResponse
+from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderUpdateRequest, OrderExplainResponse, OrderDocumentResponse
 from ..services import order_service
 from ..core import get_llm_client
 
@@ -210,18 +210,18 @@ def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{order_id}", response_model=OrderResponse)
-def update_order(order_id: str, data: dict, db: Session = Depends(get_db)):
+def update_order(order_id: str, data: OrderUpdateRequest, db: Session = Depends(get_db)):
     """更新医嘱（内容修改时自动标记 modified_by_doctor）"""
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
-    if "content" in data:
-        order.content = data["content"]
+    if data.content is not None:
+        order.content = data.content
         order.modified_by_doctor = True  # 医生已修改AI生成的医嘱
-    if "order_type" in data:
-        order.order_type = data["order_type"]
-    if "doctor_notes" in data:
-        order.doctor_notes = data["doctor_notes"]
+    if data.order_type is not None:
+        order.order_type = data.order_type
+    if data.doctor_notes is not None:
+        order.doctor_notes = data.doctor_notes
     db.commit()
     db.refresh(order)
 

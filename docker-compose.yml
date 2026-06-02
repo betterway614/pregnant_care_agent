@@ -14,6 +14,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
       - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
       - FGR_MODE=${FGR_MODE:-mock}
+      - DB_TYPE=postgres
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
@@ -22,6 +23,7 @@ services:
       - REDIS_HOST=redis
       - SEED_DATA=true
       - RAG_ENABLED=true
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
       - EMBEDDING_API=${EMBEDDING_API:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-m3}
     depends_on:
