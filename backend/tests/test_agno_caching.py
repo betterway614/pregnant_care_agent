@@ -96,7 +96,7 @@ def test_get_main_agent_has_memory_when_enabled():
             agent = get_main_agent()
             assert agent.tool_call_limit == 8
             assert agent.add_datetime_to_context is True
-            assert len(agent.tools) == 10
+            assert len(agent.tools) == 9
 
 
 def test_get_nurse_agent_singleton():

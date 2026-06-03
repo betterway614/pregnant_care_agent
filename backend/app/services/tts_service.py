@@ -12,6 +12,10 @@ from ..config import settings, get_tts_mode
 class TTSService:
     """统一 TTS 服务
 
+    支持两种使用方式:
+    1. 注入模式: 通过 __init__ 传入 TTSBackend 实现（OCP 合规）
+    2. 旧模式: 保留原有 if/elif 分发逻辑（向后兼容）
+
     模式（后端处理的两种模式）：
     - cloud: DashScope CosyVoice API
     - local: edge-tts（微软 Edge TTS，免费高质量中文）
@@ -19,12 +23,27 @@ class TTSService:
     注意: browser 模式由前端 SpeechSynthesis 处理，不经过此服务。
     """
 
+    def __init__(self, backend=None) -> None:
+        """Args:
+            backend: 可选的 TTSBackend 实现。传入时优先使用。
+        """
+        self._backend = backend
+
     async def synthesize(self, text: str, role: str = "pregnant") -> Optional[bytes]:
         """将文本转为音频 bytes（MP3 格式）。
 
         Returns:
             MP3 音频字节，失败返回 None
         """
+        # 优先使用注入的后端（OCP 合规路径）
+        if self._backend is not None:
+            try:
+                return await self._backend.synthesize(text)
+            except Exception as e:
+                logger.error("[TTS] 后端合成失败: {}", e)
+                return None
+
+        # 回退到旧的 if/elif 分发逻辑（向后兼容）
         mode = get_tts_mode(role)
         logger.info("[TTS] role={}, mode={}, text_len={}", role, mode, len(text))
 

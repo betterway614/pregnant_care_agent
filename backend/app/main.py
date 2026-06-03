@@ -235,6 +235,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("FGR 模型初始化失败，回退到 mock 模式: {}", e)
 
+    # 初始化依赖注入容器
+    try:
+        from .container import setup_container
+        setup_container()
+    except Exception as e:
+        logger.warning("DI 容器初始化失败，使用旧模式: {}", e)
+
     logger.info("{} v{} 启动成功", settings.app_name, settings.app_version)
     logger.info("  LLM模式: {}", settings.llm_mode)
     logger.info("  FGR模式: {}", settings.fgr_mode)

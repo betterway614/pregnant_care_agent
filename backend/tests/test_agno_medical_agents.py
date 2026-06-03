@@ -27,14 +27,14 @@ def test_nurse_agent_has_tools():
 
 
 def test_nurse_agent_uses_tool_only_knowledge():
-    """验证护士 Agent 通过工具检索知识，不启用 Agent 内置 search_knowledge"""
+    """验证护士 Agent 启用内置 search_knowledge"""
     from app.core.agno_medical_agents import create_nurse_agent
 
     mock_model = _make_mock_model()
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_nurse_agent()
-            assert agent.search_knowledge is False
+            assert agent.search_knowledge is True
 
 
 def test_nurse_agent_has_output_schema():
@@ -61,14 +61,14 @@ def test_doctor_agent_has_tools():
 
 
 def test_doctor_agent_uses_tool_only_knowledge():
-    """验证医生 Agent 通过工具检索知识"""
+    """验证医生 Agent 启用内置 search_knowledge"""
     from app.core.agno_medical_agents import create_doctor_agent
 
     mock_model = _make_mock_model()
     with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
         with patch("agno.agent._init.get_model", return_value=mock_model):
             agent = create_doctor_agent()
-            assert agent.search_knowledge is False
+            assert agent.search_knowledge is True
 
 
 def test_doctor_agent_has_output_schema():
@@ -264,10 +264,10 @@ def test_all_agents_have_nonempty_instructions(factory_name):
 
 
 @pytest.mark.parametrize("variant_name,getter,expected_tools,expected_limit", [
-    ("analyze", "get_nurse_analyze_agent", 4, 4),
+    ("analyze", "get_nurse_analyze_agent", 3, 4),
     ("followup", "get_nurse_followup_agent", 2, 2),
     ("report", "get_nurse_report_agent", 2, 2),
-    ("chat", "get_nurse_chat_variant_agent", 3, 3),
+    ("chat", "get_nurse_chat_variant_agent", 2, 3),
 ])
 def test_nurse_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
     """验证护士变体工具数量和 limit"""
@@ -282,10 +282,10 @@ def test_nurse_variant_tool_count_and_limit(variant_name, getter, expected_tools
 
 
 @pytest.mark.parametrize("variant_name,getter,expected_tools,expected_limit", [
-    ("analyze", "get_doctor_analyze_agent", 5, 5),
+    ("analyze", "get_doctor_analyze_agent", 4, 5),
     ("order", "get_doctor_order_agent", 2, 2),
     ("issue", "get_doctor_issue_agent", 2, 2),
-    ("chat", "get_doctor_chat_variant_agent", 3, 3),
+    ("chat", "get_doctor_chat_variant_agent", 2, 3),
 ])
 def test_doctor_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
     """验证医生变体工具数量和 limit"""

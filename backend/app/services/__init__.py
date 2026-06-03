@@ -3,6 +3,8 @@ from .followup_service import followup_service, FollowUpService
 from .order_service import order_service, OrderService
 from .asr_service import asr_service, ASRService
 from .tts_service import tts_service, TTSService
+from .alert_actions import register_action, get_action, list_actions
+from .followup_template_selector import select_template, register_template_rule, TemplateRule
 
 __all__ = [
     "schedule_engine", "ScheduleEngine",
@@ -10,4 +12,6 @@ __all__ = [
     "order_service", "OrderService",
     "asr_service", "ASRService",
     "tts_service", "TTSService",
+    "register_action", "get_action", "list_actions",
+    "select_template", "register_template_rule", "TemplateRule",
 ]

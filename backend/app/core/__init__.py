@@ -15,6 +15,7 @@ from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
 from .rule_engine import rule_engine, RuleEngine, Rule
 from .agno_structured import extract_structured_content
+from .state_machine import followup_fsm, FollowUpStatus, InvalidTransition
 
 __all__ = [
     "create_main_agent", "get_main_agent",
@@ -30,4 +31,5 @@ __all__ = [
     "create_care_team", "get_care_team",
     "get_alert_analysis_workflow",
     "extract_structured_content",
+    "followup_fsm", "FollowUpStatus", "InvalidTransition",
 ]

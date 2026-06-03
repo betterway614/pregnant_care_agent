@@ -14,11 +14,21 @@ from ..config import settings, get_asr_mode
 class ASRService:
     """统一 ASR 服务
 
+    支持两种使用方式:
+    1. 注入模式: 通过 __init__ 传入 ASRBackend 实现（OCP 合规）
+    2. 旧模式: 保留原有 if/elif 分发逻辑（向后兼容）
+
     模式：
     - cloud: DashScope 兼容 REST API。
     - local: 默认调用本地 FunASR HTTP API；也可通过 ASR_LOCAL_BACKEND=whisper
              切回 openai-whisper 本地推理。
     """
+
+    def __init__(self, backend=None) -> None:
+        """Args:
+            backend: 可选的 ASRBackend 实现。传入时优先使用。
+        """
+        self._backend = backend
 
     async def transcribe(
         self, audio_base64: str, audio_format: str, role: str = "pregnant"
@@ -28,6 +38,15 @@ class ASRService:
         Returns:
             转录文本，失败时返回 None
         """
+        # 优先使用注入的后端（OCP 合规路径）
+        if self._backend is not None:
+            try:
+                return await self._backend.transcribe(audio_base64, audio_format)
+            except Exception as e:
+                logger.error("[ASR] 后端转录失败: {}", e)
+                return None
+
+        # 回退到旧的 if/elif 分发逻辑（向后兼容）
         mode = get_asr_mode(role)
         logger.info("[ASR] role={}, mode={}", role, mode)
 
