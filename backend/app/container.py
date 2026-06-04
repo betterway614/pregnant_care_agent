@@ -66,6 +66,7 @@ def setup_container() -> None:
     from .interfaces.notification import NotificationService
     from .interfaces.asr_backend import ASRBackend
     from .interfaces.tts_backend import TTSBackend
+    from .interfaces.repositories import PatientRepository, AlertRepository, FollowUpRepository
     from .config import settings
 
     # --- 键值存储 ---
@@ -110,9 +111,25 @@ def setup_container() -> None:
         from .services.tts_backends import MockTTSBackend
         return MockTTSBackend()
 
+    # --- 仓储实现 ---
+    def make_patient_repo():
+        from .services.repos.sqlalchemy_repos import SqlAlchemyPatientRepo
+        return SqlAlchemyPatientRepo()
+
+    def make_alert_repo():
+        from .services.repos.sqlalchemy_repos import SqlAlchemyAlertRepo
+        return SqlAlchemyAlertRepo()
+
+    def make_followup_repo():
+        from .services.repos.sqlalchemy_repos import SqlAlchemyFollowUpRepo
+        return SqlAlchemyFollowUpRepo()
+
     container.register_singleton(KeyValueStore, make_kv_store)
     container.register_singleton(NotificationService, make_notification_service)
     container.register_singleton(ASRBackend, make_asr_backend)
     container.register_singleton(TTSBackend, make_tts_backend)
+    container.register_singleton(PatientRepository, make_patient_repo)
+    container.register_singleton(AlertRepository, make_alert_repo)
+    container.register_singleton(FollowUpRepository, make_followup_repo)
 
     container.initialize()

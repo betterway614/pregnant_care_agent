@@ -2,6 +2,9 @@
 健康数据工具 — 持久化、查询、提醒、趋势分析、心理筛查
 
 职责: 体重/血压/胎动/血糖/心率/睡眠数据的保存、查询、趋势分析。
+
+DIP 改进: 优先通过 run_context.dependencies 获取仓储实例，
+回退到直接 DB 访问以保持向后兼容。
 """
 from __future__ import annotations
 
@@ -14,6 +17,13 @@ from ...utils.timezone import beijing_now
 from .common import _resolve_pid
 
 
+def _get_patient_repo(run_context: RunContext | None):
+    """从 RunContext.dependencies 获取 PatientRepository，不存在则返回 None"""
+    if run_context and hasattr(run_context, "dependencies") and run_context.dependencies:
+        return run_context.dependencies.get("patient_repo")
+    return None
+
+
 # ==================== 健康数据持久化 ====================
 
 
@@ -23,7 +33,7 @@ def _save_health_data_sync(
     fetal_movement: float, blood_sugar: float,
     heart_rate: float, sleep_hours: float, steps: float,
 ) -> dict:
-    """同步保存健康数据（在线程池中执行）"""
+    """同步保存健康数据（在线程池中执行） — 直接 DB 回退路径"""
     from ...database import SessionLocal
     from ...models import HealthDataPoint
 
@@ -71,6 +81,20 @@ async def agno_save_health_data(
     """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
+    metrics = {}
+    for name, val in [("weight", weight), ("sbp", sbp), ("dbp", dbp),
+                       ("fetal_movement", fetal_movement), ("blood_sugar", blood_sugar),
+                       ("heart_rate", heart_rate), ("sleep_hours", sleep_hours), ("steps", steps)]:
+        if val and val > 0:
+            metrics[name] = val
+
+    # DIP: 优先使用仓储接口
+    repo = _get_patient_repo(run_context)
+    if repo is not None:
+        saved = await asyncio.to_thread(repo.save_health_metrics, pid, metrics, "CHAT")
+        return {"saved_metrics": saved, "count": len(saved)}
+
+    # 回退: 直接 DB 访问
     return await asyncio.to_thread(
         _save_health_data_sync, pid, weight, sbp, dbp,
         fetal_movement, blood_sugar, heart_rate, sleep_hours, steps,
@@ -81,7 +105,7 @@ async def agno_save_health_data(
 
 
 def _get_patient_context_sync(pregnant_id: str) -> dict:
-    """同步获取患者上下文（在线程池中执行）"""
+    """同步获取患者上下文 — 直接 DB 回退路径"""
     from ...database import SessionLocal
     from ...services.patient_context_service import get_patient_basic, get_recent_health_data
 
@@ -109,6 +133,18 @@ async def agno_get_patient_context(pregnant_id: str = "", run_context: RunContex
     """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
+
+    # DIP: 优先使用仓储接口
+    repo = _get_patient_repo(run_context)
+    if repo is not None:
+        basic = await asyncio.to_thread(repo.get_by_id, pid)
+        if not basic:
+            return {"error": "孕妇不存在"}
+        recent = await asyncio.to_thread(repo.get_recent_health_data, pid, 7)
+        alerts = await asyncio.to_thread(repo.get_active_alerts, pid)
+        return {**basic, "recent_data": recent, "active_alerts": alerts}
+
+    # 回退: 直接 DB 访问
     return await asyncio.to_thread(_get_patient_context_sync, pid)
 
 
@@ -135,7 +171,7 @@ def agno_should_ask_bp(pregnant_id: str = "", run_context: RunContext | None = N
 
 
 def _analyze_health_trends_sync(pregnant_id: str) -> dict:
-    """同步分析健康趋势（在线程池中执行）"""
+    """同步分析健康趋势 — 直接 DB 回退路径"""
     from datetime import timedelta
     from ...database import SessionLocal
     from ...models import Pregnant, HealthDataPoint
@@ -203,6 +239,5 @@ def agno_get_epds_result(total_score: int) -> dict:
                 "risk_description": desc,
                 "recommendations": recs,
             }
-    # 超出范围时返回最严重级别
     _, level, desc, recs = _EPDS_THRESHOLDS[-1]
     return {"total_score": total_score, "risk_level": level, "risk_description": desc, "recommendations": recs}

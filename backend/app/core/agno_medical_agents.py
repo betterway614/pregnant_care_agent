@@ -1,211 +1,53 @@
-"""护士/医生 AI 专用 Agent — 意图识别 + 工具路由 + Structured Output
+"""护士/医生 AI 专用 Agent 工厂
 
-充分利用 Agno 框架原生能力：
-- 工具路由：Agent 根据用户意图自动选择合适的工具
-- tool_call_limit：限制工具调用次数，控制 token 消耗
-- max_tool_calls_from_history：限制历史工具调用，减少上下文 token
-- output_schema：结构化输出，类型安全
-- session_state + SqliteDb：工具间上下文持久化
+职责: 创建和管理护士/医生/随访 Agent 变体实例。
 
-安全设计：每个角色使用独立的 SqliteDb，防止敏感信息泄露
-- 孕妇端（小安）：agent_sessions_pregnant.db
-- 护士端（小护）：agent_sessions_nurse.db
-- 医生端（智医）：agent_sessions_doctor.db
+重构: Schema 定义已移至 core/schemas/，格式化器已移至 core/formatters.py。
+本模块仅保留 Agent 工厂函数和路由映射。
 """
 from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import BaseModel, Field
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from .agno_client import get_agno_model
 from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
-    NURSE_TOOLS,
-    DOCTOR_TOOLS,
-    NURSE_TOOL_GROUPS,
-    DOCTOR_TOOL_GROUPS,
+    NURSE_TOOLS, DOCTOR_TOOLS, NURSE_TOOL_GROUPS, DOCTOR_TOOL_GROUPS,
 )
+from .schemas import (
+    NurseAnalysisOutput, DoctorAnalysisOutput,
+    FollowUpGenerateOutput, FollowUpAnalysisOutput, FollowUpAiReviewOutput,
+    ChatOutput, FollowUpQuestion,
+)
+from .formatters import format_structured_output_to_markdown
 from .prompts import (
-    get_nurse_system_prompt_instructions,
-    get_nurse_chat_system_prompt_instructions,
-    get_doctor_system_prompt_instructions,
-    get_doctor_chat_system_prompt_instructions,
-    get_followup_generate_instructions,
-    get_followup_analysis_instructions,
-    get_followup_review_instructions,
-    get_nurse_followup_prompt_instructions,
-    get_nurse_report_prompt_instructions,
-    get_doctor_issue_prompt_instructions,
+    get_nurse_system_prompt_instructions, get_nurse_chat_system_prompt_instructions,
+    get_doctor_system_prompt_instructions, get_doctor_chat_system_prompt_instructions,
+    get_followup_generate_instructions, get_followup_analysis_instructions,
+    get_followup_review_instructions, get_nurse_followup_prompt_instructions,
+    get_nurse_report_prompt_instructions, get_doctor_issue_prompt_instructions,
 )
 
 import os
 
 # Agent 会话持久化数据库路径（每个角色独立，防止敏感信息泄露）
-_db_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-)
-
-# 每个角色独立的数据库文件
+_db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),)
 _pregnant_db_path = os.path.join(_db_dir, "agent_sessions_pregnant.db")
 _nurse_db_path = os.path.join(_db_dir, "agent_sessions_nurse.db")
 _doctor_db_path = os.path.join(_db_dir, "agent_sessions_doctor.db")
 
 
 def _create_pregnant_db():
-    """创建孕妇端 Agent 专用 SqliteDb"""
     return SqliteDb(db_file=_pregnant_db_path)
 
-
 def _create_nurse_db():
-    """创建护士端 Agent 专用 SqliteDb"""
     return SqliteDb(db_file=_nurse_db_path)
 
-
 def _create_doctor_db():
-    """创建医生端 Agent 专用 SqliteDb"""
     return SqliteDb(db_file=_doctor_db_path)
-
-
-# ==================== 结构化输出子模型 ====================
-
-
-class FollowUpQuestion(BaseModel):
-    """随访问题条目"""
-    question: str = Field(description="问题文本")
-    purpose: str = Field(description="该问题的目的/考察重点")
-
-
-# ==================== Structured Output Schemas ====================
-
-
-class NurseAnalysisOutput(BaseModel):
-    """护士分析结果 — 结构化输出"""
-    summary: str = Field(description="综合概述（100-200字），概括孕妇当前整体状况")
-    risk_assessment: str = Field(description="风险评估（100-200字），分析当前主要风险因素")
-    alert_level: str = Field(description="预警级别：RED（红色高危）、ORANGE（橙色预警）、YELLOW（黄色关注）或 NONE（无需预警）")
-    nursing_suggestions: str = Field(description="护理建议（150-300字），具体的护理措施和健康教育要点")
-    followup_focus: list[str] = Field(description="随访重点（3-5个项目），列出随访时需要特别关注的内容")
-
-
-class DoctorAnalysisOutput(BaseModel):
-    """医生分析结果 — 结构化输出"""
-    analysis: str = Field(description="综合分析（300-500字），涵盖孕妇基本情况、关键健康指标趋势、风险评估、现有医嘱评价")
-    evidence_references: list[str] = Field(description="证据引用（3-5条），引用相关临床指南")
-    suggested_orders: str = Field(description="建议医嘱（100-300字），具体的下一步处理建议")
-    risk_summary: str = Field(description="风险摘要（50-100字），一句话总结当前核心风险和建议")
-    reasoning_chain: list[str] = Field(description="推理链，展示从数据到结论的逐步推理过程")
-
-
-class FollowUpGenerateOutput(BaseModel):
-    """随访对话脚本生成结果"""
-    opening_message: str = Field(description="亲切的开场白（30-50字）")
-    questions: list[FollowUpQuestion] = Field(description="随访问题列表（4-6个问题）")
-    closing_message: str = Field(description="温暖的结束语（30-50字）")
-
-
-class FollowUpAnalysisOutput(BaseModel):
-    """随访完成后 LLM 结构化分析结果"""
-    warm_summary: str = Field(description="温馨总结（30-50字），语气温和自然")
-    abnormal_indicators: list[str] = Field(description="异常指标列表，无异常则为空列表")
-    trend_analysis: str = Field(description="与历史数据对比的趋势分析（50-100字）")
-    personalized_advice: str = Field(description="基于回答内容的个性化建议（50-100字）")
-    nurse_action_suggestion: str = Field(description="护士行动建议")
-
-
-class FollowUpAiReviewOutput(BaseModel):
-    """护士审核随访时的 AI 辅助分析结果"""
-    summary: str = Field(description="本次随访要点摘要（100-200字）")
-    abnormal_flags: list[str] = Field(description="异常指标标红列表，无异常则为空列表")
-    action_needed: bool = Field(description="是否需要上报医生")
-    recommendation: str = Field(description="审核建议：确认通过/需进一步沟通/紧急上报")
-    detail_analysis: str = Field(description="详细分析（100-200字）")
-
-
-class ChatOutput(BaseModel):
-    """对话输出 — 用于流式对话场景"""
-    content: str = Field(description="回复内容")
-    tools_used: list[str] = Field(default_factory=list, description="使用的工具列表")
-
-
-def format_structured_output_to_markdown(content: object) -> str | None:
-    """将结构化输出 Pydantic 模型转换为可读的 Markdown 文本。
-
-    当 Agent 使用 output_schema 时，Agno 框架不会产生 RunEvent.run_content
-    流式事件。此函数将 run_response.content 转为前端可渲染的 Markdown。
-    如果 content 已是字符串，直接返回；若非预期类型，返回 None。
-    """
-    if content is None:
-        return None
-    if isinstance(content, str):
-        return content if content.strip() else None
-
-    # NurseAnalysisOutput
-    if isinstance(content, NurseAnalysisOutput):
-        parts: list[str] = []
-        if content.summary:
-            parts.append(f"## 综合概述\n\n{content.summary}")
-        if content.risk_assessment:
-            parts.append(f"## 风险评估\n\n{content.risk_assessment}")
-        if content.alert_level and content.alert_level != "NONE":
-            parts.append(f"## 预警级别\n\n{content.alert_level}")
-        if content.nursing_suggestions:
-            parts.append(f"## 护理建议\n\n{content.nursing_suggestions}")
-        if content.followup_focus:
-            items = "\n".join(f"- {item}" for item in content.followup_focus)
-            parts.append(f"## 随访重点\n\n{items}")
-        return "\n\n".join(parts) if parts else None
-
-    # DoctorAnalysisOutput
-    if isinstance(content, DoctorAnalysisOutput):
-        parts: list[str] = []
-        if content.analysis:
-            parts.append(f"## 综合分析\n\n{content.analysis}")
-        if content.evidence_references:
-            items = "\n".join(f"- {ref}" for ref in content.evidence_references)
-            parts.append(f"## 证据引用\n\n{items}")
-        if content.suggested_orders:
-            parts.append(f"## 建议医嘱\n\n{content.suggested_orders}")
-        if content.risk_summary:
-            parts.append(f"## 风险摘要\n\n{content.risk_summary}")
-        if content.reasoning_chain:
-            items = "\n".join(f"- {step}" for step in content.reasoning_chain)
-            parts.append(f"## 推理链\n\n{items}")
-        return "\n\n".join(parts) if parts else None
-
-    # FollowUpGenerateOutput
-    if isinstance(content, FollowUpGenerateOutput):
-        parts: list[str] = []
-        if content.opening_message:
-            parts.append(content.opening_message)
-        if content.questions:
-            for i, q in enumerate(content.questions, 1):
-                parts.append(f"**{i}. {q.question}**")
-                if q.purpose:
-                    parts.append(f"*目的: {q.purpose}*")
-        if content.closing_message:
-            parts.append(content.closing_message)
-        return "\n\n".join(parts) if parts else None
-
-    # FollowUpAnalysisOutput
-    if isinstance(content, FollowUpAnalysisOutput):
-        parts: list[str] = []
-        if content.warm_summary:
-            parts.append(f"## 温馨总结\n\n{content.warm_summary}")
-        if content.abnormal_indicators:
-            items = "\n".join(f"- {item}" for item in content.abnormal_indicators)
-            parts.append(f"## 异常指标\n\n{items}")
-        if content.trend_analysis:
-            parts.append(f"## 趋势分析\n\n{content.trend_analysis}")
-        if content.personalized_advice:
-            parts.append(f"## 个性化建议\n\n{content.personalized_advice}")
-        if content.nurse_action_suggestion:
-            parts.append(f"## 护士行动建议\n\n{content.nurse_action_suggestion}")
-        return "\n\n".join(parts) if parts else None
-
-    return None
 
 
 def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
