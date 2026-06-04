@@ -1,5 +1,9 @@
 from .schedule_engine import schedule_engine, ScheduleEngine
 from .followup_service import followup_service, FollowUpService
+from .batch_followup import (
+    batch_followup_service, BatchFollowupService,
+    BatchTriggerResult, BatchAnalyzeSummary,
+)
 from .order_service import order_service, OrderService
 from .asr_service import asr_service, ASRService
 from .tts_service import tts_service, TTSService
@@ -9,6 +13,8 @@ from .followup_template_selector import select_template, register_template_rule,
 __all__ = [
     "schedule_engine", "ScheduleEngine",
     "followup_service", "FollowUpService",
+    "batch_followup_service", "BatchFollowupService",
+    "BatchTriggerResult", "BatchAnalyzeSummary",
     "order_service", "OrderService",
     "asr_service", "ASRService",
     "tts_service", "TTSService",

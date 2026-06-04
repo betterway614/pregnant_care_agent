@@ -426,3 +426,29 @@ def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:
         context["sleep_hours"] = sleep.value
 
     return context
+
+
+# ==================== 主动通知 & 孕记 ====================
+
+
+@router.get("/{pregnant_id}/proactive-notifications")
+def get_proactive_notifications(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
+    """获取孕妇的主动健康通知列表"""
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    from ..services.proactive_monitor import ProactiveMonitorService
+
+    notifications = ProactiveMonitorService.scan_notifications(db, pregnant_id)
+    return [n.model_dump() for n in notifications]
+
+
+@router.get("/{pregnant_id}/diary")
+def get_pregnancy_diary(pregnant_id: str, weeks: int = 4, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
+    """获取孕妇孕记 — 按周汇总健康数据的温暖叙事"""
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    from ..services.pregnancy_diary import PregnancyDiaryService
+
+    service = PregnancyDiaryService()
+    diary = service.generate_weekly_diary(db, pregnant_id, weeks=weeks)
+    return diary.model_dump()

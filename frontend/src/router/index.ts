@@ -60,6 +60,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, role: 'pregnant' },
     children: [
       { path: 'home', name: 'PregnantHome', component: () => import('@/views/pregnant/PregnantHome.vue'), meta: { title: '孕期首页' } },
+      { path: 'diary', name: 'PregnancyDiary', component: () => import('@/views/pregnant/PregnancyDiary.vue'), meta: { title: '孕期日记', hideTabBar: true } },
       { path: 'chat', name: 'PregnantChat', component: () => import('@/views/pregnant/PregnantChat.vue'), meta: { title: '百科知识' } },
       { path: 'schedule', name: 'PregnantSchedule', component: () => import('@/views/pregnant/PregnantSchedule.vue'), meta: { title: '推荐' } },
       {

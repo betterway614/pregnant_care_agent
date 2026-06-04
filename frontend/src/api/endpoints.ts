@@ -358,3 +358,35 @@ export const mentalHealthApi = {
     client.post<{ id: string; total_score: number; risk_level: string; risk_description: string; recommendations: string[] }>('/mental-health/epds/submit', data),
   getHistory: (pregnantId: string) => client.get<{ screenings: Array<{ id: string; total_score: number; risk_level: string; created_at: string }> }>(`/mental-health/epds/history/${pregnantId}`),
 }
+
+// 主动推送通知
+export const proactiveApi = {
+  getNotifications: (pregnantId: string) =>
+    client.get<any[]>(`/proactive/notifications/${pregnantId}`),
+  getUnreadCount: (pregnantId: string) =>
+    client.get<{ count: number }>(`/proactive/unread-count/${pregnantId}`),
+}
+
+// 孕期日记
+export const diaryApi = {
+  get: (pregnantId: string, weeks?: number) =>
+    client.get<any>(`/pregnant/${pregnantId}/diary`, { params: { weeks } }),
+}
+
+// 护士晨间简报
+export const nurseBriefingApi = {
+  getMorningBriefing: () =>
+    client.get<any>('/nurse/morning-briefing'),
+  batchTriggerFollowups: (pregnantIds: string[], templateId: string) =>
+    client.post<any>('/nurse/followup/batch-trigger', { pregnant_ids: pregnantIds, template_id: templateId }),
+}
+
+// 预警通知
+export const alertNotificationApi = {
+  getNotifications: (pregnantId: string, unreadOnly?: boolean) =>
+    client.get<any[]>(`/alerts/notifications/${pregnantId}`, { params: { unread_only: unreadOnly } }),
+  markAllRead: (pregnantId: string) =>
+    client.put(`/alerts/notifications/${pregnantId}/read-all`),
+  markRead: (alertId: string, pregnantId: string) =>
+    client.put(`/alerts/notifications/${alertId}/read`, { pregnant_id: pregnantId }),
+}

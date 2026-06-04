@@ -1177,3 +1177,34 @@ async def list_issues(status: str = "pending", user: TokenPayload = Depends(get_
         ))
 
     return result
+
+
+# ==================== 每日晨报 & 批量随访 ====================
+
+
+@router.get("/morning-briefing")
+async def get_morning_briefing(user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
+    """获取每日晨报 — 汇总全院孕妇预警、随访和建议"""
+    if user.role not in ("nurse", "doctor"):
+        raise HTTPException(status_code=403, detail="需要护士或医生权限")
+    from ..services.morning_briefing import MorningBriefingService
+
+    briefing = MorningBriefingService.generate(db)
+    return briefing
+
+
+class BatchTriggerRequest(BaseModel):
+    pregnant_ids: list[str]
+    template_id: str | None = None
+
+
+@router.post("/followup/batch-trigger")
+async def batch_trigger_followup(req: BatchTriggerRequest, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
+    """批量触发随访记录"""
+    if user.role not in ("nurse", "doctor"):
+        raise HTTPException(status_code=403, detail="需要护士或医生权限")
+    from ..services.batch_followup import BatchFollowupService
+
+    service = BatchFollowupService()
+    result = service.batch_trigger(db, pregnant_ids=req.pregnant_ids, template_id=req.template_id)
+    return result.to_dict()

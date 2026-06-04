@@ -35,6 +35,78 @@
       </el-col>
     </el-row>
 
+    <!-- 智能晨会简报 -->
+    <div class="briefing-section" v-if="briefing">
+      <div class="content-card briefing-card">
+        <div class="content-card__header" @click="briefingExpanded = !briefingExpanded">
+          <div class="briefing-header-left">
+            <el-icon class="briefing-icon"><Sunny /></el-icon>
+            <span class="content-card__title">今日晨会简报</span>
+            <el-tag size="small" type="info">{{ briefing.date }}</el-tag>
+          </div>
+          <div class="briefing-header-right">
+            <el-icon class="expand-icon" :class="{ 'is-rotated': briefingExpanded }"><ArrowDown /></el-icon>
+          </div>
+        </div>
+        <!-- 摘要行（始终显示） -->
+        <div class="briefing-summary" v-if="briefing.summary">
+          {{ briefing.summary }}
+        </div>
+        <!-- 展开详情 -->
+        <transition name="briefing-slide">
+          <div v-show="briefingExpanded" class="briefing-body">
+            <!-- 风险分层 -->
+            <div class="briefing-risk-row">
+              <div class="briefing-risk-chip risk-red" v-if="briefing.red_patients.length">
+                <span class="risk-count">{{ briefing.red_patients.length }}</span>
+                <span class="risk-label">红色预警</span>
+              </div>
+              <div class="briefing-risk-chip risk-orange" v-if="briefing.orange_patients.length">
+                <span class="risk-count">{{ briefing.orange_patients.length }}</span>
+                <span class="risk-label">橙色关注</span>
+              </div>
+              <div class="briefing-risk-chip risk-yellow" v-if="briefing.yellow_patients.length">
+                <span class="risk-count">{{ briefing.yellow_patients.length }}</span>
+                <span class="risk-label">黄色提醒</span>
+              </div>
+              <div class="briefing-risk-chip risk-none" v-if="!briefing.red_patients.length && !briefing.orange_patients.length && !briefing.yellow_patients.length">
+                <el-icon><CircleCheck /></el-icon>
+                <span class="risk-label">暂无预警</span>
+              </div>
+            </div>
+
+            <!-- 红色患者列表 -->
+            <div v-if="briefing.red_patients.length" class="briefing-patient-list">
+              <div class="briefing-patient-title">🔴 红色预警患者</div>
+              <div
+                v-for="p in briefing.red_patients"
+                :key="p.pregnant_id"
+                class="briefing-patient-item"
+                @click="$router.push(`/nurse/pregnant/${p.pregnant_id}`)"
+              >
+                <span class="bp-name">{{ p.display_name }}</span>
+                <span class="bp-gest">孕{{ p.gest_week }}周</span>
+                <span class="bp-alert">{{ p.latest_alert_message }}</span>
+                <el-tag size="small" type="danger">{{ p.alert_count }}条预警</el-tag>
+              </div>
+            </div>
+
+            <!-- AI 建议 -->
+            <div v-if="briefing.ai_recommendations.length" class="briefing-recommendations">
+              <div class="briefing-patient-title">💡 AI 建议</div>
+              <div
+                v-for="(rec, idx) in briefing.ai_recommendations"
+                :key="idx"
+                class="briefing-rec-item"
+              >
+                {{ rec }}
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </div>
+
     <!-- 主要内容 -->
     <el-row :gutter="16">
       <!-- 最近预警 -->
@@ -115,8 +187,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Bell, Document } from '@element-plus/icons-vue'
-import { dashboardApi, alertApi, followUpApi } from '@/api/endpoints'
+import { Refresh, Bell, Document, Sunny, ArrowDown, CircleCheck } from '@element-plus/icons-vue'
+import { dashboardApi, alertApi, followUpApi, nurseBriefingApi } from '@/api/endpoints'
 import { getNurseWebSocketClient } from '@/utils/websocket'
 import { ElNotification } from 'element-plus'
 import type { DashboardStats, Alert, FollowUpRecord, Pregnant } from '@/types'
@@ -136,6 +208,29 @@ const stats = ref<DashboardStats>({
 })
 const recentAlerts = ref<Alert[]>([])
 const recentFollowUps = ref<FollowUpRecord[]>([])
+
+/** 晨会简报 */
+interface BriefingPatient {
+  pregnant_id: string
+  display_name: string
+  gest_week: number
+  risk_level: string
+  alert_count: number
+  latest_alert_message?: string
+}
+interface MorningBriefing {
+  date: string
+  total_patients: number
+  red_patients: BriefingPatient[]
+  orange_patients: BriefingPatient[]
+  yellow_patients: BriefingPatient[]
+  today_followups: number
+  pending_reviews: number
+  ai_recommendations: string[]
+  summary: string
+}
+const briefing = ref<MorningBriefing | null>(null)
+const briefingExpanded = ref(true)
 
 /** 定时刷新间隔（非预警数据） */
 const REFRESH_INTERVAL = 120000 // 2分钟
@@ -213,6 +308,16 @@ function formatTime(t?: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/** 加载晨会简报 */
+async function fetchBriefing() {
+  try {
+    const res = await nurseBriefingApi.getMorningBriefing()
+    briefing.value = res.data
+  } catch (e) {
+    console.warn('[Dashboard] 加载晨会简报失败:', e)
+  }
+}
+
 /** 加载所有数据 */
 async function fetchData() {
   loading.value = true
@@ -233,6 +338,8 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+  // 晨会简报独立加载（不影响主数据）
+  fetchBriefing()
 }
 
 /** 点击预警行跳转 */
@@ -342,5 +449,152 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* ========== 晨会简报 ========== */
+.briefing-section {
+  margin-bottom: 20px;
+}
+.briefing-card {
+  border-left: 3px solid var(--primary);
+}
+.briefing-card .content-card__header {
+  cursor: pointer;
+  user-select: none;
+}
+.briefing-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.briefing-icon {
+  color: #F59E0B;
+  font-size: 20px;
+}
+.briefing-header-right {
+  display: flex;
+  align-items: center;
+}
+.expand-icon {
+  transition: transform 0.3s;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.expand-icon.is-rotated {
+  transform: rotate(180deg);
+}
+.briefing-summary {
+  padding: 0 20px 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.briefing-body {
+  padding: 0 20px 16px;
+}
+.briefing-risk-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.briefing-risk-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.risk-red {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+.risk-orange {
+  background: #FFEDD5;
+  color: #EA580C;
+}
+.risk-yellow {
+  background: #FEF9C3;
+  color: #CA8A04;
+}
+.risk-none {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+.risk-count {
+  font-size: 18px;
+  font-weight: 700;
+}
+.briefing-patient-list {
+  margin-bottom: 16px;
+}
+.briefing-patient-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+.briefing-patient-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.briefing-patient-item:hover {
+  background: var(--primary-bg);
+}
+.bp-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 60px;
+}
+.bp-gest {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 50px;
+}
+.bp-alert {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefing-recommendations {
+  margin-top: 4px;
+}
+.briefing-rec-item {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border-light);
+}
+.briefing-rec-item:last-child {
+  border-bottom: none;
+}
+.briefing-slide-enter-active,
+.briefing-slide-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.briefing-slide-enter-from,
+.briefing-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.briefing-slide-enter-to,
+.briefing-slide-leave-from {
+  opacity: 1;
+  max-height: 500px;
 }
 </style>

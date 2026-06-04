@@ -17,7 +17,7 @@
       <div class="hero-card">
         <div class="hero-header">
           <div>
-            <div class="hero-greeting">早上好，{{ pregnantName }}</div>
+            <div class="hero-greeting">{{ greetingText }}，{{ pregnantName }}</div>
             <div class="hero-week">孕{{ gestWeek }}周+{{ gestDay }}天 · 距预产期{{ remainDays }}天</div>
           </div>
           <div class="hero-avatar">
@@ -104,6 +104,41 @@
         </div>
       </div>
 
+      <!-- ==================== 通知消息列表 ==================== -->
+      <div class="notifications-section" v-if="alertNotifications.length > 0 || proactiveNotifications.length > 0">
+        <div
+          v-for="item in alertNotifications.slice(0, 3)"
+          :key="'alert-' + item.id"
+          class="notice-card interactive-card"
+          :class="item.level === 'critical' ? 'notice-red' : item.level === 'warning' ? 'notice-orange' : 'notice-yellow'"
+          @click="item.action_route ? router.push(item.action_route) : null"
+        >
+          <div class="notice-icon-wrap">
+            <el-icon><Warning /></el-icon>
+          </div>
+          <div class="notice-content">
+            <div class="notice-title">{{ item.title }}</div>
+            <div class="notice-body">{{ item.body }}</div>
+          </div>
+          <el-icon class="notice-arrow"><ArrowRight /></el-icon>
+        </div>
+        <div
+          v-for="item in proactiveNotifications.slice(0, 3)"
+          :key="'proactive-' + item.id"
+          class="notice-card interactive-card"
+          @click="item.action_route ? router.push(item.action_route) : null"
+        >
+          <div class="notice-icon-wrap">
+            <el-icon><ChatRound /></el-icon>
+          </div>
+          <div class="notice-content">
+            <div class="notice-title">{{ item.title }}</div>
+            <div class="notice-body">{{ item.body }}</div>
+          </div>
+          <el-icon class="notice-arrow"><ArrowRight /></el-icon>
+        </div>
+      </div>
+
       <!-- ==================== 模块导航 (Segmented Control) ==================== -->
       <div class="segmented-control">
         <div class="segment-item" :class="{ active: currentTab === 'assistant' }" @click="currentTab = 'assistant'">日常助手</div>
@@ -114,13 +149,13 @@
       <transition name="fade-slide" mode="out-in">
         <!-- Tab 1: 日常助手 -->
         <div v-if="currentTab === 'assistant'" class="tab-content" key="assistant">
-          <!-- 3. 高频工具区 (Quick Tools) -->
+          <!-- 3. 快捷操作区 (Quick Actions) — 每个入口直达具体功能页 -->
           <div class="section-container tools-section">
-            <h3 class="section-title">常用工具</h3>
+            <h3 class="section-title">快捷操作</h3>
             <div class="bento-grid">
-              <div 
-                v-for="tool in tools" 
-                :key="tool.label" 
+              <div
+                v-for="tool in tools"
+                :key="tool.label"
                 class="bento-item interactive-card glass-card"
                 :class="tool.color"
                 @click="tool.action()"
@@ -129,30 +164,43 @@
                   <el-icon :size="28"><component :is="tool.icon" /></el-icon>
                 </div>
                 <span class="bento-label">{{ tool.label }}</span>
+                <span class="bento-desc">{{ tool.desc }}</span>
               </div>
             </div>
           </div>
 
-          <!-- 4. 今日打卡任务 (Daily Tasks) -->
+          <!-- 4. 今日待办 (Daily Checklist) — 与快捷操作互补，打卡+快捷录入 -->
           <div class="section-container tasks-section">
-            <h3 class="section-title">今日打卡</h3>
+            <div class="section-header">
+              <h3 class="section-title">今日待办</h3>
+              <span class="section-action" @click="router.push('/pregnant/tools/health-record')">
+                快捷录入 <el-icon><ArrowRight /></el-icon>
+              </span>
+            </div>
             <div class="task-grid">
               <div
                 v-for="(task, idx) in todayTasks"
                 :key="idx"
                 class="task-item interactive-card glass-card"
                 :class="{ 'is-done': task.done }"
-                @click="toggleTask(task)"
+                @click="handleTaskClick(task)"
               >
                 <div class="task-icon" :class="task.color">
                   <el-icon :size="20"><component :is="task.icon" /></el-icon>
                 </div>
                 <div class="task-content">
                   <span class="task-text">{{ task.title }}</span>
+                  <span class="task-hint">{{ task.hint }}</span>
                 </div>
-                <div class="task-checkbox">
-                  <el-icon v-if="task.done" color="#fff" :size="16"><Check /></el-icon>
-                </div>
+                <!-- 纯打卡项显示 checkbox，快捷入口显示箭头 -->
+                <template v-if="task.route">
+                  <el-icon class="task-arrow"><ArrowRight /></el-icon>
+                </template>
+                <template v-else>
+                  <div class="task-checkbox" @click.stop="toggleTask(task)">
+                    <el-icon v-if="task.done" color="#fff" :size="16"><Check /></el-icon>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -167,8 +215,9 @@
               <div
                 v-for="trend in healthTrends"
                 :key="trend.metric"
-                class="trend-card glass-card"
+                class="trend-card glass-card interactive-card"
                 :class="{ 'is-warning': trend.is_normal === false }"
+                @click="router.push('/pregnant/tools/health-trend')"
               >
                 <div class="trend-header">
                   <div class="trend-title-wrap">
@@ -192,6 +241,7 @@
           <div v-else class="empty-state glass-card">
             <el-icon :size="32" color="#94A3B8"><Document /></el-icon>
             <p>暂无近期健康数据记录</p>
+            <button class="empty-cta" @click="router.push('/pregnant/tools/health-record')">去记录第一条数据</button>
           </div>
         </div>
 
@@ -212,8 +262,21 @@
               </div>
             </div>
 
+            <!-- 孕期日记入口 -->
+            <div class="diary-entry-card glass-card interactive-card" @click="router.push('/pregnant/diary')">
+              <div class="diary-entry-icon">📔</div>
+              <div class="diary-entry-content">
+                <div class="diary-entry-title">查看孕期日记</div>
+                <div class="diary-entry-desc">AI 为你记录的每周孕期故事</div>
+              </div>
+              <el-icon class="diary-entry-arrow"><ArrowRight /></el-icon>
+            </div>
+
             <h3 class="section-title mt-4">专家建议</h3>
-            <el-collapse v-if="recommend" class="soft-collapse glass-card" style="padding: 12px 16px; border-radius: 16px;">
+            <div v-if="!recommend" class="recommend-skeleton glass-card">
+              <div class="skeleton-line" v-for="i in 3" :key="i"></div>
+            </div>
+            <el-collapse v-else class="soft-collapse glass-card" style="padding: 12px 16px; border-radius: 16px;">
               <el-collapse-item title="饮食建议" name="diet">
                 <template #title>
                   <div class="collapse-title"><el-icon><Food /></el-icon> 饮食建议</div>
@@ -244,13 +307,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { 
-  Loading, Check, Clock, ScaleToOriginal, ColdDrink, Opportunity, 
-  Calendar, Search, Document, Grid, Bell, ArrowRight, DocumentChecked, 
+import {
+  Loading, Check, ScaleToOriginal, Opportunity,
+  Calendar, Document, Bell, ArrowRight, DocumentChecked,
   ChatRound, Avatar, Moon, Female, Food, Bicycle, Warning,
-  Odometer, Sunny, ArrowDown
+  Odometer, Sunny, ArrowDown, TrendCharts, ChatDotSquare, Edit
 } from '@element-plus/icons-vue'
-import { pregnantApi, recommendApi, followUpApi, chatApi, orderApi } from '@/api/endpoints'
+import { pregnantApi, recommendApi, followUpApi, chatApi, orderApi, proactiveApi, alertNotificationApi } from '@/api/endpoints'
 import { trendName } from '@/utils/labelMaps'
 
 const router = useRouter()
@@ -263,6 +326,8 @@ const expandedNotice = ref<string | null>(null)
 const proactiveGreeting = ref<{ message: string; greeting_type: string; icon: string } | null>(null)
 const healthTrends = ref<Array<{ metric: string; current_value: number; unit: string; trend: string; summary: string; is_normal: boolean | null }>>([])
 const pendingOrders = ref<any[]>([])
+const proactiveNotifications = ref<any[]>([])
+const alertNotifications = ref<any[]>([])
 
 const hasNotices = computed(() => pendingFollowUps.value.length > 0 || pendingOrders.value.length > 0 || proactiveGreeting.value)
 
@@ -274,6 +339,16 @@ const babyInfo = computed(() => homeData.value?.baby_info || {})
 const babySize = computed(() => babyInfo.value?.size || '未知')
 const babyDesc = computed(() => babyInfo.value?.milestone || '正在健康发育中')
 
+/** 根据当前时间动态生成问候语 */
+const greetingText = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return '夜深了'
+  if (h < 11) return '早上好'
+  if (h < 14) return '中午好'
+  if (h < 18) return '下午好'
+  return '晚上好'
+})
+
 const momChanges = computed(() => {
   const w = gestWeek.value
   if (w <= 12) return '可能出现早孕反应，乳房胀痛，尿频。记得补充叶酸。'
@@ -281,27 +356,34 @@ const momChanges = computed(() => {
   return '腹部明显增大，可能感到腰酸背痛。建议左侧卧位休息，准备待产包。'
 })
 
+// ---- 快捷操作：5 个独立入口，每个直达不同功能页 ----
+const tools = [
+  { label: '健康录入', icon: 'Edit', color: 'text-rose', desc: '体重/血压/胎动', action: () => router.push('/pregnant/tools/health-record') },
+  { label: '胎动计数', icon: 'Opportunity', color: 'text-indigo', desc: '记录宝宝每次踢动', action: () => router.push('/pregnant/tools/fetal-movement') },
+  { label: '健康趋势', icon: 'TrendCharts', color: 'text-emerald', desc: '数据曲线一目了然', action: () => router.push('/pregnant/tools/health-trend') },
+  { label: '检查日程', icon: 'Calendar', color: 'text-amber', desc: '产检安排早知道', action: () => router.push('/pregnant/schedule') },
+  { label: '问小安', icon: 'ChatDotSquare', color: 'text-indigo', desc: 'AI 孕期百科问答', action: () => router.push('/pregnant/chat') },
+]
+
+// ---- 今日待办：打卡项 + 快捷录入入口，与快捷操作互补 ----
 const todayTasks = ref([
-  { title: '体重记录', icon: 'ScaleToOriginal', color: 'bg-rose', done: false },
-  { title: '血压测量', icon: 'ColdDrink', color: 'bg-sky', done: false },
-  { title: '胎动计数', icon: 'Opportunity', color: 'bg-indigo', done: false },
-  { title: '补充叶酸', icon: 'Check', color: 'bg-orange', done: false },
+  { title: '健康数据录入', icon: 'Edit', color: 'bg-rose', done: false, hint: '体重/血压/胎动一键记录', route: '/pregnant/tools/health-record' },
+  { title: '数胎动', icon: 'Opportunity', color: 'bg-indigo', done: false, hint: '点击打卡或计数', route: '/pregnant/tools/fetal-movement' },
+  { title: '补充叶酸', icon: 'Check', color: 'bg-orange', done: false, hint: '点击标记已完成', route: '' },
 ])
 
 function toggleTask(task: any) {
   task.done = !task.done
 }
 
-const tools = [
-  { label: '体重记录', icon: 'ScaleToOriginal', color: 'text-rose', action: () => router.push('/pregnant/tools') },
-  { label: '血压记录', icon: 'ColdDrink', color: 'text-sky', action: () => router.push('/pregnant/tools') },
-  { label: '胎动计数', icon: 'Opportunity', color: 'text-indigo', action: () => router.push('/pregnant/tools') },
-  { label: '检查日程', icon: 'Calendar', color: 'text-emerald', action: () => router.push('/pregnant/schedule') },
-  { label: '知识百科', icon: 'Search', color: 'text-amber', action: () => router.push('/pregnant/chat') },
-  { label: '数胎动', icon: 'Document', color: 'text-rose', action: () => router.push('/pregnant/tools') },
-  { label: '产检提醒', icon: 'Clock', color: 'text-emerald', action: () => router.push('/pregnant/schedule') },
-  { label: '全部工具', icon: 'Grid', color: 'text-slate', action: () => router.push('/pregnant/tools') },
-]
+/** 点击待办项：有对应页面的跳转，纯打卡项直接切换状态 */
+function handleTaskClick(task: any) {
+  if (task.route) {
+    router.push(task.route)
+  } else {
+    toggleTask(task)
+  }
+}
 
 async function fetchFollowUps() {
   try {
@@ -314,7 +396,7 @@ async function fetchFollowUps() {
       pendingFollowUps.value = [...((draftRes.data as any[]) || []), ...((inProgressRes.data as any[]) || [])]
         .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
     }
-  } catch {}
+  } catch (e) { console.warn('[Home] fetchFollowUps failed:', e) }
 }
 
 function goToFollowUp(recordId: string) {
@@ -332,7 +414,7 @@ async function fetchProactiveGreeting() {
       const res = await chatApi.getProactive(pid)
       proactiveGreeting.value = res.data
     }
-  } catch {}
+  } catch (e) { console.warn('[Home] fetchProactiveGreeting failed:', e) }
 }
 
 async function fetchHealthTrends() {
@@ -342,7 +424,7 @@ async function fetchHealthTrends() {
       const res = await chatApi.getTrends(pid)
       healthTrends.value = res.data?.trends || []
     }
-  } catch {}
+  } catch (e) { console.warn('[Home] fetchHealthTrends failed:', e) }
 }
 
 const loadPregnantOrders = async () => {
@@ -352,7 +434,18 @@ const loadPregnantOrders = async () => {
       const res = await orderApi.getPregnantOrders(pid)
       pendingOrders.value = (res.data || []).filter((o: any) => o.status === 'signed' && !o.acknowledged_at)
     }
-  } catch {}
+  } catch (e) { console.warn('[Home] loadPregnantOrders failed:', e) }
+}
+
+async function fetchNotifications() {
+  const pid = localStorage.getItem('currentPregnantId') || ''
+  if (!pid) return
+  const [alertRes, proactiveRes] = await Promise.all([
+    alertNotificationApi.getNotifications(pid, true).catch(() => ({ data: [] })),
+    proactiveApi.getNotifications(pid).catch(() => ({ data: [] })),
+  ])
+  alertNotifications.value = alertRes.data || []
+  proactiveNotifications.value = proactiveRes.data || []
 }
 
 
@@ -418,11 +511,13 @@ onMounted(() => {
   fetchProactiveGreeting()
   fetchHealthTrends()
   loadPregnantOrders()
+  fetchNotifications()
 })
 
 onActivated(() => {
   fetchFollowUps()
   loadPregnantOrders()
+  fetchNotifications()
 })
 </script>
 
@@ -679,20 +774,37 @@ onActivated(() => {
   transform: translateY(-10px);
 }
 
-/* ========== 3. 通用区块标题 ========== */
+/* ========== 通用工具类 ========== */
+.mt-4 { margin-top: 16px; }
+
+/* ========== 3. 通用区块标题 + 区块头部 ========== */
 .section-container { margin-bottom: 28px; }
 .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: var(--c-slate-800); }
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.section-header .section-title { margin-bottom: 0; }
+.section-action {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 600; color: var(--c-rose);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.section-action:active { opacity: 0.7; }
 
-/* ========== 4. 高频工具区 (Bento Grid) ========== */
+/* ========== 4. 快捷操作区 (Bento Grid 3×2) ========== */
 .bento-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
 }
 .bento-item {
-  border-radius: 16px; padding: 16px 8px;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  box-shadow: var(--card-shadow); min-height: 84px; justify-content: center;
+  border-radius: 16px; padding: 16px 8px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  box-shadow: var(--card-shadow); min-height: 96px; justify-content: center;
 }
-.bento-label { font-size: 12px; font-weight: 500; text-align: center; }
+.bento-label { font-size: 13px; font-weight: 600; text-align: center; }
+.bento-desc { font-size: 11px; color: var(--c-slate-400); text-align: center; line-height: 1.3; }
 
 /* 文本颜色助手 */
 .text-rose { color: var(--c-rose); }
@@ -702,15 +814,15 @@ onActivated(() => {
 .text-amber { color: var(--c-amber); }
 .text-slate { color: var(--c-slate-600); }
 
-/* ========== 5. 今日任务 ========== */
-.task-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+/* ========== 5. 今日待办 ========== */
+.task-grid { display: flex; flex-direction: column; gap: 10px; }
 .task-item {
-  border-radius: 16px; padding: 12px;
-  display: flex; align-items: center; gap: 8px; min-height: 64px;
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px; min-height: 64px;
   box-shadow: var(--card-shadow);
 }
 .task-icon {
-  width: 36px; height: 36px; border-radius: 12px;
+  width: 40px; height: 40px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; color: white;
   flex-shrink: 0;
 }
@@ -718,16 +830,19 @@ onActivated(() => {
 .bg-sky { background: var(--c-sky); }
 .bg-indigo { background: var(--c-indigo); }
 .bg-orange { background: var(--c-orange); }
-.task-content { flex: 1; min-width: 0; }
+.task-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .task-text { font-size: 14px; font-weight: 600; transition: color 0.3s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.task-hint { font-size: 11px; color: var(--c-slate-400); }
 .task-checkbox {
-  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--c-slate-400);
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--c-slate-400);
   display: flex; align-items: center; justify-content: center; transition: all 0.3s;
   background: rgba(255,255,255,0.5);
   flex-shrink: 0;
 }
 .task-item.is-done .task-text { color: var(--c-slate-400); text-decoration: line-through; }
+.task-item.is-done .task-hint { color: var(--c-slate-300); }
 .task-item.is-done .task-checkbox { background: var(--c-emerald); border-color: var(--c-emerald); }
+.task-arrow { color: var(--c-slate-400); font-size: 14px; flex-shrink: 0; }
 
 /* ========== 6. 健康趋势 ========== */
 .trend-list { 
@@ -746,6 +861,12 @@ onActivated(() => {
   padding: 32px 16px; border-radius: 16px; gap: 12px;
   color: var(--c-slate-400); font-size: 14px;
 }
+.empty-cta {
+  margin-top: 4px; padding: 8px 20px; border: none; border-radius: 20px;
+  background: linear-gradient(135deg, var(--c-rose), #E11D48); color: #fff;
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.2s;
+}
+.empty-cta:active { transform: scale(0.96); }
 .trend-card.is-warning { background: linear-gradient(135deg, rgba(255,247,237,0.9), rgba(255,255,255,0.7)) !important; border-color: rgba(251,146,60,0.3); }
 
 .trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
@@ -790,6 +911,42 @@ onActivated(() => {
 }
 .change-card p { font-size: 13px; color: var(--c-slate-600); line-height: 1.5; margin: 0; }
 
+/* 骨架屏 */
+.recommend-skeleton {
+  border-radius: 16px; padding: 20px 16px; display: flex; flex-direction: column; gap: 14px;
+}
+.skeleton-line {
+  height: 16px; border-radius: 8px;
+  background: linear-gradient(90deg, rgba(148,163,184,0.1) 25%, rgba(148,163,184,0.2) 50%, rgba(148,163,184,0.1) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+.skeleton-line:nth-child(1) { width: 40%; }
+.skeleton-line:nth-child(2) { width: 100%; }
+.skeleton-line:nth-child(3) { width: 70%; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 孕期日记入口 */
+.diary-entry-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  margin-top: 16px;
+  box-shadow: var(--card-shadow);
+  background: linear-gradient(135deg, rgba(253, 242, 248, 0.8), rgba(255, 255, 255, 0.7)) !important;
+  border: 1px solid rgba(251, 113, 133, 0.2);
+}
+.diary-entry-icon { font-size: 32px; }
+.diary-entry-content { flex: 1; }
+.diary-entry-title { font-size: 15px; font-weight: 600; color: var(--c-slate-800); margin-bottom: 2px; }
+.diary-entry-desc { font-size: 12px; color: var(--c-slate-400); }
+.diary-entry-arrow { color: var(--c-slate-400); font-size: 16px; }
+
 /* 折叠面板美化 */
 .soft-collapse { border: none; background: transparent; }
 .collapse-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
@@ -802,5 +959,90 @@ onActivated(() => {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 60vh; color: var(--c-slate-600); gap: 16px;
   position: relative; z-index: 1;
+}
+
+/* ========== 通知消息列表 ========== */
+.notifications-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.notice-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 12px rgba(148, 163, 184, 0.05);
+}
+.notice-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--c-slate-600);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+.notice-red .notice-icon-wrap {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+.notice-orange .notice-icon-wrap {
+  background: rgba(251, 146, 60, 0.12);
+  color: var(--c-orange);
+}
+.notice-yellow .notice-icon-wrap {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--c-amber);
+}
+.notice-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notice-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-slate-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notice-body {
+  font-size: 12px;
+  color: var(--c-slate-500);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.notice-arrow {
+  color: var(--c-slate-400);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.notice-red {
+  background: linear-gradient(135deg, rgba(254, 226, 226, 0.85), rgba(255, 255, 255, 0.7));
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.notice-orange {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.85), rgba(255, 255, 255, 0.7));
+  border-color: rgba(251, 146, 60, 0.2);
+}
+.notice-yellow {
+  background: linear-gradient(135deg, rgba(254, 249, 195, 0.85), rgba(255, 255, 255, 0.7));
+  border-color: rgba(251, 191, 36, 0.2);
 }
 </style>

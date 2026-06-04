@@ -349,3 +349,38 @@ def repair_alert_details(db: Session = Depends(get_db)):
     from ..services.alert_service import alert_service
     repaired = alert_service.repair_details(db)
     return {"message": f"修复了 {repaired} 条预警的 details 字段", "repaired": repaired}
+
+
+# ==================== 孕妇端通知 API ====================
+
+
+@router.get("/pregnant/{pregnant_id}/notifications")
+def get_pregnant_notifications(pregnant_id: str, unread_only: bool = False, db: Session = Depends(get_db)):
+    """获取孕妇的通知列表（预警、随访、医嘱）"""
+    from ..services.pregnant_notification import PregnantNotificationService
+
+    service = PregnantNotificationService()
+    notifications = service.get_notifications(db, pregnant_id, unread_only=unread_only)
+    return [n.model_dump() for n in notifications]
+
+
+@router.put("/pregnant/{pregnant_id}/notifications/read-all")
+def mark_all_notifications_read(pregnant_id: str, db: Session = Depends(get_db)):
+    """标记该孕妇所有通知为已读"""
+    from ..services.pregnant_notification import PregnantNotificationService
+
+    service = PregnantNotificationService()
+    count = service.mark_all_read(db, pregnant_id)
+    return {"marked_count": count}
+
+
+@router.put("/notifications/{alert_id}/read")
+def mark_notification_read(alert_id: str, pregnant_id: str, db: Session = Depends(get_db)):
+    """标记单条通知为已读"""
+    from ..services.pregnant_notification import PregnantNotificationService
+
+    service = PregnantNotificationService()
+    success = service.mark_read(db, alert_id, pregnant_id)
+    if not success:
+        raise HTTPException(404, "通知不存在或无权限")
+    return {"success": True}
