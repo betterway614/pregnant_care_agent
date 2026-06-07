@@ -270,18 +270,121 @@ class FGRPredictor:
 _PREDICTOR = None
 
 
-def create_predictor(backend: str | None = None):
-    """按配置创建 FGR predictor，保留 PyTorch/CUDA 路径并扩展 ONNX ROCm/NPU。"""
-    from .hardware_detect import select_backend
+def _detect_gpu_vendor() -> str:
+    """检测 GPU 厂商：nvidia / amd / unknown"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            cuda_version = torch.version.cuda or ""
+            # AMD ROCm 版本格式如 "6.1"，NVIDIA CUDA 格式如 "12.1"
+            if any(pat in cuda_version for pat in ["6.", "7.", "11.", "12.", "18."]):
+                return "nvidia"
+            # AMD ROCm torch 在 torch.version.hip 中标记
+            if getattr(torch.version, "hip", None):
+                return "amd"
+            return "nvidia"
+    except Exception:
+        pass
+    return "unknown"
 
-    actual_backend = select_backend(backend or "pytorch")
-    if actual_backend == "pytorch":
-        return FGRPredictor()
-    if actual_backend in {"onnx_npu", "onnx_igpu", "onnx_cpu"}:
-        from .onnx_predictor import ONNXFGRPredictor
-        return ONNXFGRPredictor(actual_backend)
-    if actual_backend == "mock":
+
+def _probe_npu_service(backend: str = "onnx_npu") -> tuple[bool, "NPUPredictorService | None", str, str]:
+    """探测 NPU 服务是否可用，返回 (success, service_or_None, hardware, provider)。
+
+    成功时返回已初始化的 NPUPredictorService，可直接返回给调用者。
+    """
+    try:
+        from .npu_service import NPUPredictorService
+        svc = NPUPredictorService(backend)
+        svc.initialize()
+        return True, svc, svc.hardware, svc.execution_provider
+    except Exception as e:
+        logger.debug("[FGR-探测] NPU 服务不可用 ({}): {}", backend, e)
+        return False, None, "", ""
+
+
+def create_predictor(backend: str | None = None):
+    """按配置创建 FGR predictor，支持完整的硬件 fallback 链。
+
+    Fallback 链（自动模式，backend=None 时）：
+      NVIDIA: CUDA → CPU
+      AMD:    NPU → ROCm → CPU
+      未知:   CPU
+
+    显式指定 backend 时行为：
+      - onnx_npu / npu: 启动 NPU 子进程；NPU 不可用时 fallback 到 ROCm → CPU
+      - onnx_igpu / rocm: ONNX MIGraphX；不可用时 fallback 到 CPU
+      - pytorch / cuda: PyTorch 自动检测设备
+      - mock: 不加载模型
+    """
+    from .npu_service import NPUPredictorService
+
+    requested = (backend or "pytorch").strip().lower()
+
+    # ── 显式指定 backend 的 fallback 链 ──────────────────────────────
+    if requested in {"onnx_npu", "npu", "vitisai"}:
+        # 优先 NPU；不可用时降级 ROCm → CPU
+        ok, svc, hw, ep = _probe_npu_service("onnx_npu")
+        if ok:
+            return svc  # 已初始化，直接返回
+        logger.warning("[FGR-后端] NPU 不可用，尝试 ROCm 回退...")
+        ok2, svc2, hw2, ep2 = _probe_npu_service("onnx_igpu")
+        if ok2:
+            logger.info("[FGR-后端] 使用 ROCm (hardware={})", hw2)
+            return svc2
+        logger.warning("[FGR-后端] ROCm 也不可用，使用 CPU 回退")
+        _, svc_cpu, _, _ = _probe_npu_service("onnx_cpu")
+        return svc_cpu
+
+    if requested in {"onnx_igpu", "rocm", "onnx_rocm", "igpu"}:
+        ok, svc, hw, ep = _probe_npu_service("onnx_igpu")
+        if ok:
+            return svc
+        logger.warning("[FGR-后端] ROCm 不可用，使用 CPU 回退")
+        _, svc_cpu, _, _ = _probe_npu_service("onnx_cpu")
+        return svc_cpu
+
+    if requested in {"onnx_cpu", "cpu"}:
+        ok, svc, hw, ep = _probe_npu_service("onnx_cpu")
+        return svc if ok else None
+
+    if requested == "mock":
         return None
+
+    # ── 自动检测最佳后端（backend=None 或 pytorch/cuda）────────────
+    if requested in {"pytorch", "cuda", "torch", "pytorch_cuda", ""}:
+        gpu = _detect_gpu_vendor()
+        if gpu == "nvidia":
+            logger.info("[FGR-后端] 检测到 NVIDIA GPU，使用 CUDA/PyTorch")
+            return FGRPredictor()
+        if gpu == "amd":
+            # AMD: 优先 NPU，回退 ROCm → CPU
+            ok, svc, hw, ep = _probe_npu_service("onnx_npu")
+            if ok:
+                logger.info("[FGR-后端] 检测到 AMD GPU + NPU (hardware={})，使用 NPU", hw)
+                return svc
+            ok2, svc2, hw2, ep2 = _probe_npu_service("onnx_igpu")
+            if ok2:
+                logger.info("[FGR-后端] 检测到 AMD GPU + ROCm (hardware={})，使用 ROCm", hw2)
+                return svc2
+            logger.warning("[FGR-后端] AMD GPU NPU/ROCm 均不可用，使用 CPU 回退")
+            _, svc_cpu, _, _ = _probe_npu_service("onnx_cpu")
+            return svc_cpu
+        # unknown / 无 GPU 或检测失败：AMD 环境下优先尝试 NPU（VitisAI 子进程独立于 torch）
+        # NVIDIA 环境下回退 CPU
+        logger.info("[FGR-后端] GPU 检测结果={}，优先探测 AMD NPU...", gpu)
+        ok_npu, svc_npu, hw, ep = _probe_npu_service("onnx_npu")
+        if ok_npu:
+            logger.info("[FGR-后端] NPU 可用 (hardware={})，使用 NPU", hw)
+            return svc_npu
+        ok_rocm, svc_rocm, hw2, ep2 = _probe_npu_service("onnx_igpu")
+        if ok_rocm:
+            logger.info("[FGR-后端] ROCm 可用 (hardware={})，使用 ROCm", hw2)
+            return svc_rocm
+        logger.warning("[FGR-后端] NPU/ROCm 均不可用，使用 CPU 回退")
+        _, svc_cpu, _, _ = _probe_npu_service("onnx_cpu")
+        return svc_cpu
+
     raise ValueError(f"不支持的 FGR 后端: {backend}")
 
 

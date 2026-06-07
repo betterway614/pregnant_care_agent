@@ -272,6 +272,9 @@ async def lifespan(app: FastAPI):
     if settings.fgr_mode:
         from fgr_compete.predictor import _PREDICTOR as fgr_predictor
         if fgr_predictor is not None:
+            # 关闭 NPU 子进程（如有）
+            if hasattr(fgr_predictor, "close"):
+                fgr_predictor.close()
             logger.info("FGR 预测模型已释放")
     logger.info("应用关闭")
 

@@ -7,4 +7,5 @@ from .predictor import (
     initialize_predictor_for_backend,
 )
 from .onnx_predictor import ONNXFGRPredictor
+from .npu_service import NPUPredictorService, shutdown_npu_service
 from .model import ResNet18DualFusion
