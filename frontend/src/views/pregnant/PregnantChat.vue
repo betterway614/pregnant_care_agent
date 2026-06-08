@@ -833,6 +833,17 @@ async function handleSend() {
         content: data.content || '抱歉，我暂时无法回复，请稍后再试。',
         timestamp: new Date().toISOString(),
       })
+      // 自动播报助手消息
+      if (autoPlayTTS.value && data.content && !isMuted.value) {
+        ttsSpeakingId.value = loadingMsg.id
+        speak(cleanForTTS(data.content))
+        const checkEnd = setInterval(() => {
+          if (!isSpeaking.value) {
+            ttsSpeakingId.value = null
+            clearInterval(checkEnd)
+          }
+        }, 500)
+      }
     } catch {
       chatStore.updateMessage(loadingMsg.id, {
         loading: false,
@@ -1678,6 +1689,7 @@ onMounted(async () => {
 }
 .user-action-btn:hover { background: rgba(251, 113, 133, 0.08); color: #E11D48; }
 .user-action-btn.active { color: #FB7185; background: #FFF1F2; }
+.user-action-btn.active:hover { background: #FFE4E6; }
 
 /* ==================== 主区域 ==================== */
 .messages-container {
