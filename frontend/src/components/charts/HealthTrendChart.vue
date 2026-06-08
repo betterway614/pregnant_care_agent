@@ -196,6 +196,68 @@ function buildSingleOption(sList: TrendSeries[]) {
   const first = sList[0]
   const xAxisData = getAxisData(first)
   const interval = calculateInterval(xAxisData.length)
+
+  // ── 按单位分组：相同单位的指标共享一个 Y 轴，最多 left/right 两个轴 ──
+  // 超过 2 种单位时，只取出现频率最高的 2 组，其余指标归入"其他"轴
+  const unitGroups = new Map<string, TrendSeries[]>()
+  for (const s of sList) {
+    const key = s.unit || '_no_unit'
+    if (!unitGroups.has(key)) unitGroups.set(key, [])
+    unitGroups.get(key)!.push(s)
+  }
+  // 按组内指标数降序排列，最多保留 2 组
+  const sortedUnits = [...unitGroups.entries()].sort((a, b) => b[1].length - a[1].length)
+  const primaryUnits = sortedUnits.slice(0, 2)
+  const overflowUnits = sortedUnits.slice(2)
+  // 超出的指标合并到最近的主轴（按单位相似度或默认左轴）
+  if (overflowUnits.length > 0) {
+    const fallbackGroup = primaryUnits[0] // 归入第一组（左轴）
+    for (const [, overflowSeries] of overflowUnits) {
+      fallbackGroup[1].push(...overflowSeries)
+    }
+  }
+
+  const yAxisDefs: any[] = []
+  const unitToAxisIdx = new Map<string, number>()
+  let axisIdx = 0
+  for (const [unit, group] of primaryUnits) {
+    // 计算该组的全局 min/max，让同单位指标共享刻度
+    const allVals = group.flatMap(s => s.data.map(d => d.value))
+    const groupMin = allVals.length ? Math.floor(Math.min(...allVals) * 0.9) : 0
+    const groupMax = allVals.length ? Math.ceil(Math.max(...allVals) * 1.1) : 100
+    yAxisDefs.push({
+      type: 'value',
+      name: unit === '_no_unit' ? '' : unit,
+      position: axisIdx % 2 === 0 ? 'left' : 'right',
+      min: groupMin,
+      max: groupMax,
+      nameTextStyle: { fontSize: 11, color: '#909399', padding: axisIdx % 2 === 0 ? [0, 40, 0, 0] : [0, 0, 0, 40] },
+      axisLine: { show: false },
+      // 只在第一个轴显示分割线，避免多轴时线条重叠
+      splitLine: axisIdx === 0 ? { lineStyle: { color: '#F2F6FC', type: 'dashed' } } : { show: false },
+    })
+    unitToAxisIdx.set(unit, axisIdx)
+    axisIdx++
+  }
+  // 超出的指标映射到第一轴，并记录溢出指标名称供提示
+  for (const [unit] of overflowUnits) {
+    unitToAxisIdx.set(unit, 0)
+  }
+  const overflowNames = overflowUnits.flatMap(([, series]) => series.map(s => s.name))
+  if (overflowNames.length > 0) {
+    console.warn(`[HealthTrendChart] 指标单位过多，以下指标已合并到左轴显示：${overflowNames.join('、')}`)
+  }
+
+  // 只有 1 个 Y 轴时去掉 name 避免重复显示单位（tooltip 已有）
+  if (yAxisDefs.length === 1) {
+    yAxisDefs[0].name = ''
+  }
+
+  const series = sList.map(s => {
+    const unitKey = s.unit || '_no_unit'
+    return { ...buildLineSeries(s), yAxisIndex: unitToAxisIdx.get(unitKey)! }
+  })
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -229,15 +291,8 @@ function buildSingleOption(sList: TrendSeries[]) {
       axisLine: { lineStyle: { color: '#E4E7ED' } },
       axisTick: { show: false },
     },
-    yAxis: sList.map((s, i) => ({
-      type: 'value',
-      name: s.unit,
-      position: i % 2 === 0 ? 'left' : 'right',
-      nameTextStyle: { fontSize: 11, color: '#909399' },
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#F2F6FC', type: 'dashed' } },
-    })),
-    series: sList.map((s, i) => ({ ...buildLineSeries(s), yAxisIndex: i })),
+    yAxis: yAxisDefs,
+    series,
   }
 }
 
