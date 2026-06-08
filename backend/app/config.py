@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "Qwen3.6-35B-A3B"
+    # 视觉模型（处理图片消息时使用；留空则 fallback llm_model）
+    llm_vision_model: str = "qwen-vl-max"
     ollama_host: str = "http://localhost:11434"
     local_model: str = "Qwen3.6-35B-A3B"
     # vLLM / SGLang 等 OpenAI 兼容本地推理服务（留空则自动使用 ollama_host）

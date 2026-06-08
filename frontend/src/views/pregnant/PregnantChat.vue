@@ -295,6 +295,20 @@
       </transition>
 
       <div class="input-pill-wrapper">
+        <!-- 待发送图片预览 -->
+        <div v-if="pendingImages.length > 0" class="pending-images-bar">
+          <div
+            v-for="img in pendingImages"
+            :key="img.uid"
+            class="pending-image-item"
+          >
+            <img :src="getPreviewUrl(img)" class="pending-image-thumb" />
+            <button class="pending-image-remove" @click="removePendingImage(img.uid)">
+              <el-icon :size="12"><Close /></el-icon>
+            </button>
+          </div>
+        </div>
+
         <!-- 录音浮层（按住录制时显示） -->
         <transition name="record-overlay-fade">
           <div v-if="isRecording" class="record-overlay">
@@ -336,45 +350,22 @@
             <el-icon :size="20"><Microphone /></el-icon>
           </button>
 
-          <!-- 图片上传按钮 -->
-          <el-popover trigger="click" :width="180" :show-arrow="false" placement="top-end">
-            <template #reference>
-              <button
-                class="toolbar-btn interactive-card"
-                :disabled="isUploadingImage"
-                aria-label="上传图片"
-              >
-                <el-icon :size="20"><Picture /></el-icon>
-              </button>
-            </template>
-            <div class="image-source-menu">
-              <button class="image-source-item" @click="triggerImageUpload('camera')">
-                <el-icon :size="18"><Camera /></el-icon>
-                <span>拍照</span>
-              </button>
-              <button class="image-source-item" @click="triggerImageUpload('album')">
-                <el-icon :size="18"><Picture /></el-icon>
-                <span>从相册选择</span>
-              </button>
-            </div>
-          </el-popover>
-          <!-- 相册选择 input（无 capture 属性） -->
-          <input
-            ref="albumInputRef"
-            type="file"
+          <!-- 图片上传（el-upload，不自动上传，支持多选） -->
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :show-file-list="false"
             accept="image/*"
-            style="display: none"
-            @change="handleImageSelected"
-          />
-          <!-- 拍照 input（带 capture 属性） -->
-          <input
-            ref="cameraInputRef"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style="display: none"
-            @change="handleImageSelected"
-          />
+            multiple
+            :on-change="handleImageChanged"
+          >
+            <button
+              class="toolbar-btn interactive-card"
+              aria-label="上传图片"
+            >
+              <el-icon :size="20"><Picture /></el-icon>
+            </button>
+          </el-upload>
 
           <el-input
             ref="inputRef"
@@ -402,7 +393,7 @@
           <button
             v-else
             class="send-btn interactive-card"
-            :disabled="!inputText.trim() || chatStore.loading"
+            :disabled="(!inputText.trim() && pendingImages.length === 0) || chatStore.loading"
             @click="handleSend"
             aria-label="发送"
           >
@@ -485,6 +476,7 @@ import { useChatStore } from '@/stores/chat'
 import type { ChatMessage } from '@/stores/chat'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import type { UploadFile, UploadInstance } from 'element-plus'
 import { useScroll } from '@vueuse/core'
 import { useTTS } from '@/composables/useTTS'
 import { StructuredAnalysisCard } from '@/components/agent-fab'
@@ -566,10 +558,10 @@ const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ mode: 'backen
 const ttsSpeakingId = ref<string | null>(null)
 const autoPlayTTS = ref(true) // 自动播报开关
 
-// 图片上传
-const albumInputRef = ref<HTMLInputElement | null>(null)
-const cameraInputRef = ref<HTMLInputElement | null>(null)
-const isUploadingImage = ref(false)
+// 图片上传（基于 el-upload）
+const uploadRef = ref<UploadInstance | null>(null)
+const pendingImages = ref<UploadFile[]>([])
+const MAX_IMAGE_COUNT = 9
 
 // 编辑
 const editDialogVisible = ref(false)
@@ -797,7 +789,16 @@ function handleToggleTTS(msg: ChatMessage) {
 /* ==================== 发送消息 ==================== */
 async function handleSend() {
   const text = inputText.value.trim()
-  if (!text || chatStore.loading) return
+  const images = pendingImages.value
+
+  // 需要有文字或图片才能发送
+  if ((!text && images.length === 0) || chatStore.loading) return
+
+  // 如果有待发送图片，走图片+文字组合发送
+  if (images.length > 0) {
+    await sendImageWithText(text, images)
+    return
+  }
 
   inputText.value = ''
   urgentDetected.value = false
@@ -1257,48 +1258,32 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
   scrollToBottom()
 }
 
-// ---- 图片上传 ----
-function triggerImageUpload(source: 'camera' | 'album' = 'album') {
-  if (source === 'camera') {
-    cameraInputRef.value?.click()
-  } else {
-    albumInputRef.value?.click()
-  }
+// ---- 图片上传（基于 el-upload）----
+function getPreviewUrl(img: UploadFile): string {
+  if (img.url) return img.url
+  if (img.raw) return URL.createObjectURL(img.raw)
+  return ''
 }
 
-async function handleImageSelected(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  input.value = '' // 清空以允许重复选择同一文件
-
-  if (file.size > 10 * 1024 * 1024) {
-    ElMessage.warning('图片大小不能超过 10MB')
+/** el-upload on-change 回调：文件选择后自动加入暂存区 */
+function handleImageChanged(uploadFile: UploadFile) {
+  if (pendingImages.value.length >= MAX_IMAGE_COUNT) {
+    ElMessage.warning(`最多选择 ${MAX_IMAGE_COUNT} 张图片`)
     return
   }
-
-  isUploadingImage.value = true
-
-  try {
-    const base64 = await fileToBase64(file)
-    const imageUrl = URL.createObjectURL(file)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpeg'
-    const imageFormat = ext === 'jpg' ? 'jpeg' : ext
-
-    chatStore.addMessage('user', '', {
-      isUrgent: false,
-      messageType: 'image' as any,
-      audioUrl: imageUrl, // 复用 audioUrl 字段存储图片预览 URL
-    })
-
-    await sendImageMessage(base64, imageFormat, file.name)
-  } catch {
-    ElMessage.error('图片处理失败，请重试')
-  } finally {
-    isUploadingImage.value = false
+  if (uploadFile.raw && uploadFile.raw.size > 10 * 1024 * 1024) {
+    ElMessage.warning(`"${uploadFile.name}" 超过 10MB，已跳过`)
+    return
   }
+  pendingImages.value.push(uploadFile)
 }
 
+function removePendingImage(uid: number | string) {
+  const idx = pendingImages.value.findIndex((f) => f.uid === uid)
+  if (idx !== -1) pendingImages.value.splice(idx, 1)
+}
+
+/** 将 File 对象转为 base64（不含 data: 前缀） */
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -1311,25 +1296,57 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-async function sendImageMessage(base64: string, imageFormat: string, fileName: string) {
+/** 发送图片+文字组合消息 */
+async function sendImageWithText(text: string, images: UploadFile[]) {
+  const imgCount = images.length
+
+  // 1. 先在 UI 中添加用户消息（图片预览 + 文字）
+  for (const img of images) {
+    const previewUrl = img.url || URL.createObjectURL(img.raw!)
+    chatStore.addMessage('user', '', {
+      isUrgent: false,
+      messageType: 'image' as any,
+      audioUrl: previewUrl,
+    })
+  }
+  if (text) {
+    chatStore.addMessage('user', text, { isUrgent: false })
+  }
+
+  // 2. 清空输入区
+  inputText.value = ''
+  pendingImages.value = []
+  urgentDetected.value = false
+
+  // 3. 构建请求（将 File 转 base64）
   chatStore.loading = true
   const loadingMsg = chatStore.addMessage('assistant', '', { loading: true })
   scrollToBottom()
 
+  const imageItems = await Promise.all(
+    images.map(async (img) => {
+      const raw = img.raw!
+      const base64 = await fileToBase64(raw)
+      const ext = raw.name.split('.').pop()?.toLowerCase() || 'jpeg'
+      return { data: base64, format: ext === 'jpg' ? 'jpeg' : ext }
+    }),
+  )
+
+  const defaultMsg = imgCount > 1 ? `请分析这${imgCount}张图片并给出回复` : '请分析这张图片并给出回复'
   const req: ChatRequest = {
     pregnant_id: pregnantId.value,
-    message: '请分析这张图片',
+    message: text || defaultMsg,
     session_id: chatStore.sessionId || undefined,
     message_type: 'IMAGE',
-    audio_data: base64,        // 复用 audio_data 字段传输图片 base64
-    audio_format: imageFormat,  // 复用 audio_format 字段传输图片格式
+    images: imageItems,
     ...(followupRecordId.value ? { record_id: followupRecordId.value } : {}),
   }
 
+  // 4. 发送 SSE 流式请求
   chatStore.updateMessage(loadingMsg.id, {
     loading: true,
     thinking: true,
-    thinkingMessage: '小安正在听取语音...',
+    thinkingMessage: '小安正在分析图片...',
     content: '',
   })
   chatStore.streaming = true
@@ -1365,7 +1382,6 @@ async function sendImageMessage(base64: string, imageFormat: string, fileName: s
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
         })
-        // 自动播报助手消息
         if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
           ttsSpeakingId.value = loadingMsg.id
           speak(cleanForTTS(loadingMsg.content))
@@ -2202,6 +2218,54 @@ onMounted(async () => {
 
 .input-hint { font-size: 11px; color: #94A3B8; }
 
+/* ==================== 待发送图片预览 ==================== */
+.pending-images-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  width: 100%;
+}
+.pending-images-bar::-webkit-scrollbar { display: none; }
+.pending-image-item {
+  position: relative;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pending-image-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pending-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+}
+.pending-image-remove:hover {
+  background: rgba(239, 68, 68, 0.8);
+}
+
 /* ==================== 图片来源选择菜单 ==================== */
 .image-source-menu {
   display: flex;
@@ -2437,6 +2501,9 @@ onMounted(async () => {
   /* 图片气泡 */
   .image-bubble { max-width: 200px; }
 
+  /* 待发送图片预览 */
+  .pending-image-item { width: 56px; height: 56px; border-radius: 10px; }
+
   /* 消息操作栏：触摸设备始终可见 */
   .message-actions { opacity: 0.6; }
   .msg-action-btn { width: 32px; height: 32px; }
@@ -2526,6 +2593,11 @@ onMounted(async () => {
 
   /* 图片气泡：全宽适配 */
   .image-bubble { max-width: 180px; }
+
+  /* 待发送图片预览：小屏 */
+  .pending-images-bar { gap: 6px; padding: 6px 2px; }
+  .pending-image-item { width: 48px; height: 48px; border-radius: 8px; }
+  .pending-image-remove { width: 16px; height: 16px; top: 1px; right: 1px; }
 
   /* 消息操作按钮：更小 tap target */
   .msg-action-btn { width: 28px; height: 28px; }

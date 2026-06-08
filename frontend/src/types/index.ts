@@ -206,14 +206,20 @@ export interface DashboardStats {
 }
 
 // 对话
+export interface ImageItem {
+  data: string   // base64 编码的图片数据
+  format: string // 图片格式: jpeg, png, webp, gif
+}
+
 export interface ChatRequest {
   pregnant_id: string
   message: string
   session_id?: string
-  message_type?: string  // TEXT | AUDIO
+  message_type?: string  // TEXT | AUDIO | IMAGE
   record_id?: string  // 随访记录ID，存在时进入随访Agent模式
   audio_data?: string  // base64 编码的音频数据（message_type=AUDIO 时使用）
   audio_format?: string  // 音频格式: webm, wav, mp3
+  images?: ImageItem[]  // 多张图片（message_type=IMAGE 时使用）
 }
 
 export interface ChatResponse {

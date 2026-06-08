@@ -106,6 +106,12 @@ class ScheduleNodeUpdate(BaseModel):
 
 
 # === Chat ===
+class ImageItem(BaseModel):
+    """单张图片数据"""
+    data: str  # base64 编码的图片数据
+    format: str = "jpeg"  # 图片格式: jpeg, png, webp, gif
+
+
 class ChatSendRequest(BaseModel):
     pregnant_id: str
     message: str
@@ -114,6 +120,7 @@ class ChatSendRequest(BaseModel):
     record_id: Optional[str] = None  # 随访记录ID，存在时进入随访Agent模式
     audio_data: Optional[str] = None  # base64 编码的音频数据（message_type=AUDIO 时使用）
     audio_format: str = "webm"  # 音频格式: webm, wav, mp3
+    images: Optional[list[ImageItem]] = None  # 多张图片（message_type=IMAGE 时使用）
 
 
 class ChatStreamRequest(BaseModel):

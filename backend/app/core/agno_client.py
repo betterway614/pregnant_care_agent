@@ -129,6 +129,34 @@ def get_agno_model(role: AgentRole = "pregnant"):
     return _model_cache[role]
 
 
+def get_vision_model(role: AgentRole = "pregnant"):
+    """返回视觉模型实例（处理图片消息时使用）"""
+    cache_key = f"{role}_vision"
+    if cache_key in _model_cache:
+        return _model_cache[cache_key]
+
+    from agno.models.openai import OpenAIChat
+
+    vision_model_id = settings.llm_vision_model
+    if not vision_model_id:
+        vision_model_id = _resolve_model_id(role)
+
+    temperature = _resolve_temperature(role)
+    max_tokens = _resolve_max_tokens(role)
+
+    model = OpenAIChat(
+        id=vision_model_id,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        role_map={"system": "system", "user": "user", "assistant": "assistant", "tool": "tool"},
+    )
+    _model_cache[cache_key] = model
+    logger.info("创建视觉模型 role={} model={}", role, vision_model_id)
+    return model
+
+
 def reset_agno_client(role: AgentRole = None):
     """重置模型缓存（配置变更后调用）"""
     global _model_cache

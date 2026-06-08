@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any, Union
 
 from agno.agent import RunEvent
+from agno.media import Image as AgnoImage
 from loguru import logger
 
 from ..schemas import ChatSendRequest, ChatResponse
@@ -148,42 +149,63 @@ async def _transcribe_audio_pregnant(audio_data: str, audio_format: str) -> str:
     return "（语音识别失败，请重试或使用文字输入）"
 
 
-def _build_multimodal_input(req: ChatSendRequest, transcribed_text: str | None = None) -> Union[str, List[Dict[str, Any]]]:
-    """构建多模态消息 input
+def _build_multimodal_input(req: ChatSendRequest, transcribed_text: str | None = None) -> str:
+    """构建消息 input 文本
 
-    - AUDIO：始终使用 ASR 转录后的纯文本（音频不会嵌入主对话请求）
-    - IMAGE：构建包含图片的 content array（图片 token 远小于音频）
+    - AUDIO：始终使用 ASR 转录后的纯文本
+    - IMAGE：返回附带文字说明（图片通过 _build_images 单独传递给 Agent）
     - TEXT：纯文本
 
     Returns:
-        纯文本时返回字符串；图片消息时返回 content array
+        消息文本字符串
     """
     if req.message_type == "AUDIO" and req.audio_data:
-        # 音频始终使用转录文本，避免原始音频字节浪费 token
         return transcribed_text or "（语音识别失败，请重试或使用文字输入）"
 
-    if req.message_type == "IMAGE" and req.audio_data:
-        content_parts: List[Dict[str, Any]] = []
-        text = req.message.strip() or "请分析这张图片并给出回复"
-        content_parts.append({"type": "text", "text": text})
+    if req.message_type == "IMAGE":
+        img_count = _count_images(req)
+        default_text = f"请分析这{img_count}张图片并给出回复" if img_count > 1 else "请分析这张图片并给出回复"
+        return req.message.strip() or default_text
 
-        # IMAGE: 使用 image_url 格式（OpenAI 兼容多模态模型）
-        fmt = req.audio_format or "jpeg"
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/{fmt};base64,{req.audio_data}",
-            },
-        })
-
-        logger.info(
-            "构建多模态消息 IMAGE pregnant_id={} data_len={}",
-            req.pregnant_id[:8], len(req.audio_data),
-        )
-        return content_parts
-
-    # 纯文本消息
     return req.message.strip()
+
+
+def _count_images(req: ChatSendRequest) -> int:
+    """计算请求中的图片数量"""
+    if req.images:
+        return len(req.images)
+    if req.audio_data and req.message_type == "IMAGE":
+        return 1
+    return 0
+
+
+def _build_images(req: ChatSendRequest) -> list[AgnoImage] | None:
+    """从请求中提取图片，构建 Agno Image 对象列表
+
+    Agno 框架通过 agent.arun(images=...) 参数传递多模态图片，
+    框架内部会自动转换为 OpenAI 兼容的 image_url 格式。
+    """
+    if req.message_type != "IMAGE":
+        return None
+
+    images: list[AgnoImage] = []
+
+    if req.images:
+        # 新的多图字段
+        for img in req.images:
+            fmt = img.format or "jpeg"
+            images.append(AgnoImage(url=f"data:image/{fmt};base64,{img.data}"))
+    elif req.audio_data:
+        # 兼容旧的单图字段
+        fmt = req.audio_format or "jpeg"
+        images.append(AgnoImage(url=f"data:image/{fmt};base64,{req.audio_data}"))
+
+    if images:
+        logger.info(
+            "构建图片对象 IMAGE pregnant_id={} count={}",
+            req.pregnant_id[:8], len(images),
+        )
+    return images if images else None
 
 
 async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
@@ -199,6 +221,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
 
     agent_input = _build_multimodal_input(req, transcribed_text)
+    agent_images = _build_images(req)  # 多模态图片（通过 Agno images 参数传递）
 
     # 1. 快速意图分类（复用 NLU 引擎，不通过 Agent 减少一次 LLM 调用）
     nlu_result = None
@@ -233,8 +256,8 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
-    # 复杂症状/检查查询走工作流（多步编排）
-    if intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
+    # 复杂症状/检查查询走工作流（多步编排）；图片消息跳过（工作流不支持多模态）
+    if not agent_images and intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
         try:
             from .agno_workflow import create_prenatal_workflow
             workflow = create_prenatal_workflow()
@@ -283,6 +306,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     # 4. arun
     response = await agent.arun(
         input=agent_input,
+        images=agent_images,
         user_id=req.pregnant_id,
         session_id=session_id,
     )
@@ -338,6 +362,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         transcribed_text = await _transcribe_audio_pregnant(req.audio_data, req.audio_format)
 
     agent_input = _build_multimodal_input(req, transcribed_text)
+    agent_images = _build_images(req)  # 多模态图片（通过 Agno images 参数传递）
 
     # 1. 快速意图分类
     nlu_result = None
@@ -372,8 +397,8 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
-    # 复杂症状/检查查询走工作流（多步编排）
-    if intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
+    # 复杂症状/检查查询走工作流（多步编排）；图片消息跳过（工作流不支持多模态）
+    if not agent_images and intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
         try:
             from .agno_workflow import create_prenatal_workflow
             workflow = create_prenatal_workflow()
@@ -441,6 +466,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     try:
         async for chunk in agent.arun(
             input=agent_input,
+            images=agent_images,
             stream=True,
             stream_events=True,
             user_id=req.pregnant_id,
