@@ -68,13 +68,14 @@ class PregnantNotificationService:
         now = beijing_now()
         notifications: list[PregnantNotification] = []
 
-        # ---- 1a. 预警通知 (PENDING / CONFIRMED) ----
+        # ---- 1a. 预警通知 (PENDING / CONFIRMED，排除 FGR 算法预警) ----
         try:
             alerts = (
                 db.query(Alert)
                 .filter(
                     Alert.pregnant_id == pregnant_id,
                     Alert.status.in_(["PENDING", "CONFIRMED"]),
+                    Alert.trigger_source != "FGR_ALGORITHM",
                 )
                 .all()
             )
@@ -246,6 +247,7 @@ class PregnantNotificationService:
                 .filter(
                     Alert.pregnant_id == pregnant_id,
                     Alert.status.in_(["PENDING", "CONFIRMED"]),
+                    Alert.trigger_source != "FGR_ALGORITHM",
                 )
                 .all()
             )
@@ -296,6 +298,7 @@ class PregnantNotificationService:
                 .filter(
                     Alert.pregnant_id == pregnant_id,
                     Alert.status.in_(["PENDING", "CONFIRMED"]),
+                    Alert.trigger_source != "FGR_ALGORITHM",
                 )
                 .all()
             )

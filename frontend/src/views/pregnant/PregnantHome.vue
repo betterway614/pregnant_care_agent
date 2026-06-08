@@ -550,8 +550,10 @@ async function fetchNotifications() {
   ])
   // 预警通知：仅保留 alert 类型（随访/医嘱由行动中心展示）
   alertNotifications.value = (alertRes.data || []).filter((n: any) => n.type === 'alert')
-  // 主动提醒：仅保留重要事项（血压异常、产检、随访、医嘱），过滤已忽略的
+  // 主动提醒：仅保留重要事项（血压异常、产检），过滤日常记录提醒和已忽略的
   proactiveNotifications.value = (proactiveRes.data || []).filter((n: any) => {
+    // 日常数据记录提醒属于「今日待办」，不在通知栏显示
+    if (n.type === 'missed_record') return false
     // 随访/医嘱由行动中心展示，不在通知列表重复
     if (n.type === 'followup_pending' || n.type === 'order_pending') return false
     const dismissKey = `pro_${n.type}_${n.action_route || ''}`

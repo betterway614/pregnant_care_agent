@@ -143,6 +143,18 @@ export function useTTS(options: TTSOptions = {}) {
     // 移除列表标记
     cleaned = cleaned.replace(/^[\s]*[-*+]\s+/gm, '')
     cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '')
+    // 移除 emoji 表情（Unicode 范围）
+    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // 情感符号
+    cleaned = cleaned.replace(/[\u{1F300}-\u{1F5FF}]/gu, '')  // 符号和象形文字
+    cleaned = cleaned.replace(/[\u{1F680}-\u{1F6FF}]/gu, '')  // 交通和地图符号
+    cleaned = cleaned.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')  // 旗帜
+    cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '')    // 杂项符号
+    cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '')    // 装饰符号
+    cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}]/gu, '')    // 变体选择符
+    cleaned = cleaned.replace(/[\u{200D}]/gu, '')              // 零宽连接符
+    cleaned = cleaned.replace(/[\u{1F900}-\u{1F9FF}]/gu, '')  // 补充符号
+    cleaned = cleaned.replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')  // 棋子符号
+    cleaned = cleaned.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')  // 符号扩展
     // 清理多余空白
     cleaned = cleaned.replace(/\n{2,}/g, '。')
     cleaned = cleaned.replace(/\n/g, '，')
