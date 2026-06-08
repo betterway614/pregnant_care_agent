@@ -1,12 +1,16 @@
-"""Agent 审计日志查询 API"""
+"""Agent 审计日志查询 + API 配置管理 API"""
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional, Literal
 from ..database import get_db
 from ..models import AgentAuditLog
+from ..config import settings
 from ..core.auth import get_current_user, TokenPayload
 import logging
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -301,3 +305,307 @@ def get_audit_dashboard(
             for log in recent_logs
         ],
     }
+
+
+# ==================== API 配置管理 ====================
+
+# 预定义云端供应商
+CLOUD_PROVIDERS = [
+    {
+        "id": "dashscope",
+        "name": "百炼平台 (DashScope)",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key": "",
+        "default_model": "qwen-plus",
+        "available_models": [
+            "qwen-plus",
+            "qwen-turbo",
+            "qwen-max",
+            "qwen-long",
+            "Qwen3.6-35B-A3B",
+            "qwen-vl-max",
+            "qwen-vl-plus",
+        ],
+        "description": "阿里云百炼平台，提供通义千问系列模型",
+    },
+    {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "",
+        "default_model": "deepseek-chat",
+        "available_models": [
+            "deepseek-chat",
+            "deepseek-reasoner",
+        ],
+        "description": "DeepSeek 提供高性价比的推理模型",
+    },
+    {
+        "id": "openai",
+        "name": "OpenAI 兼容接口",
+        "base_url": "https://api.openai.com/v1",
+        "api_key": "",
+        "default_model": "gpt-4o",
+        "available_models": [
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-3.5-turbo",
+        ],
+        "description": "OpenAI 或兼容 OpenAI API 的第三方服务",
+    },
+]
+
+
+class ApiConfigUpdate(BaseModel):
+    llm_mode: Optional[Literal["cloud", "local", "mock", "mixed"]] = None
+    local_base_url: Optional[str] = None
+    ollama_host: Optional[str] = None
+    local_model: Optional[str] = None
+    cloud_provider: Optional[str] = None
+    cloud_api_key: Optional[str] = None
+    cloud_base_url: Optional[str] = None
+    cloud_model: Optional[str] = None
+    cloud_vision_model: Optional[str] = None
+    llm_pregnant_mode: Optional[str] = None
+    llm_nurse_mode: Optional[str] = None
+    llm_doctor_mode: Optional[str] = None
+    llm_pregnant_model: Optional[str] = None
+    llm_nurse_model: Optional[str] = None
+    llm_doctor_model: Optional[str] = None
+
+
+class ApiTestRequest(BaseModel):
+    mode: Literal["local", "cloud"]
+    provider: Optional[str] = None
+
+
+def _detect_cloud_provider() -> str:
+    """根据当前 base_url 推断当前使用的供应商"""
+    base_url = settings.llm_base_url
+    if "dashscope" in base_url or "aliyuncs" in base_url:
+        return "dashscope"
+    if "deepseek" in base_url:
+        return "deepseek"
+    if "openai" in base_url:
+        return "openai"
+    return "dashscope"
+
+
+@router.get("/api-config")
+def get_api_config(user: TokenPayload = Depends(get_current_user)):
+    """获取当前 API 配置"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    current_provider = _detect_cloud_provider()
+
+    # 填充当前 API key 到对应供应商
+    providers = []
+    for p in CLOUD_PROVIDERS:
+        provider = {**p}
+        if provider["id"] == current_provider:
+            provider["api_key"] = settings.llm_api_key
+            provider["base_url"] = settings.llm_base_url
+        providers.append(provider)
+
+    return {
+        "llm_mode": settings.llm_mode,
+        "local_base_url": settings.local_base_url or settings.ollama_host,
+        "ollama_host": settings.ollama_host,
+        "local_model": settings.local_model,
+        "cloud_provider": current_provider,
+        "cloud_api_key": settings.llm_api_key,
+        "cloud_base_url": settings.llm_base_url,
+        "cloud_model": settings.llm_model,
+        "cloud_vision_model": settings.llm_vision_model,
+        "available_providers": providers,
+        "llm_pregnant_mode": settings.llm_pregnant_mode,
+        "llm_nurse_mode": settings.llm_nurse_mode,
+        "llm_doctor_mode": settings.llm_doctor_mode,
+        "llm_pregnant_model": settings.llm_pregnant_model,
+        "llm_nurse_model": settings.llm_nurse_model,
+        "llm_doctor_model": settings.llm_doctor_model,
+    }
+
+
+@router.put("/api-config")
+def update_api_config(
+    body: ApiConfigUpdate,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """更新 API 配置（写入 .env 文件）"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    import os
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", ".env")
+    env_path = os.path.normpath(env_path)
+
+    # 读取现有 .env 内容
+    env_lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            env_lines = f.readlines()
+
+    # 构建 key -> line index 映射
+    env_map: dict[str, int] = {}
+    for i, line in enumerate(env_lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            env_map[key] = i
+
+    # 字段到环境变量名的映射
+    field_to_env = {
+        "llm_mode": "LLM_MODE",
+        "local_base_url": "LOCAL_BASE_URL",
+        "ollama_host": "OLLAMA_HOST",
+        "local_model": "LOCAL_MODEL",
+        "cloud_api_key": "LLM_API_KEY",
+        "cloud_base_url": "LLM_BASE_URL",
+        "cloud_model": "LLM_MODEL",
+        "cloud_vision_model": "LLM_VISION_MODEL",
+        "llm_pregnant_mode": "LLM_PREGNANT_MODE",
+        "llm_nurse_mode": "LLM_NURSE_MODE",
+        "llm_doctor_mode": "LLM_DOCTOR_MODE",
+        "llm_pregnant_model": "LLM_PREGNANT_MODEL",
+        "llm_nurse_model": "LLM_NURSE_MODEL",
+        "llm_doctor_model": "LLM_DOCTOR_MODEL",
+    }
+
+    # 处理 cloud_provider 特殊逻辑
+    updates = body.model_dump(exclude_none=True)
+    if "cloud_provider" in updates:
+        provider_id = updates.pop("cloud_provider")
+        for p in CLOUD_PROVIDERS:
+            if p["id"] == provider_id:
+                # 如果 base_url 未显式指定，则使用供应商默认
+                if "cloud_base_url" not in updates:
+                    updates["cloud_base_url"] = p["base_url"]
+                # 如果 model 未显式指定，则使用供应商默认
+                if "cloud_model" not in updates:
+                    updates["cloud_model"] = p["default_model"]
+                break
+
+    # 应用更新到内存配置 + .env 文件
+    changed_keys = []
+    for field, value in updates.items():
+        env_key = field_to_env.get(field)
+        if not env_key:
+            continue
+
+        # 更新内存中的 settings
+        if hasattr(settings, env_key.lower()):
+            setattr(settings, env_key.lower(), value)
+        elif field == "cloud_api_key":
+            settings.llm_api_key = value
+        elif field == "cloud_base_url":
+            settings.llm_base_url = value
+        elif field == "cloud_model":
+            settings.llm_model = value
+        elif field == "cloud_vision_model":
+            settings.llm_vision_model = value
+
+        # 更新 .env 文件
+        new_line = f'{env_key}="{value}"\n'
+        if env_key in env_map:
+            env_lines[env_map[env_key]] = new_line
+        else:
+            env_lines.append(new_line)
+        changed_keys.append(env_key)
+
+    # 写回 .env
+    if changed_keys:
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(env_lines)
+        logger.info("API 配置已更新: {}", ", ".join(changed_keys))
+
+    return {
+        "message": "配置已保存，部分配置重启后生效",
+        "config": get_api_config(user),
+    }
+
+
+@router.post("/api-config/test")
+async def test_api_connection(
+    body: ApiTestRequest,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """测试 API 连接"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    if body.mode == "local":
+        base_url = settings.local_base_url or settings.ollama_host
+        url = f"{base_url}/v1/models"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = [m.get("id", "") for m in data.get("data", [])]
+                    return {
+                        "success": True,
+                        "message": f"连接成功，发现 {len(models)} 个模型",
+                        "model": models[0] if models else None,
+                    }
+                return {
+                    "success": False,
+                    "message": f"连接失败: HTTP {resp.status_code}",
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"连接失败: {str(e)}",
+            }
+
+    # 云端测试
+    provider_id = body.provider or _detect_cloud_provider()
+    provider = next((p for p in CLOUD_PROVIDERS if p["id"] == provider_id), None)
+    if not provider:
+        return {"success": False, "message": f"未知供应商: {provider_id}"}
+
+    base_url = settings.llm_base_url
+    api_key = settings.llm_api_key
+    model = settings.llm_model
+
+    if not api_key:
+        return {"success": False, "message": "未配置 API Key"}
+
+    url = f"{base_url}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 5,
+    }
+
+    import time
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            latency = round((time.time() - start) * 1000)
+            if resp.status_code == 200:
+                return {
+                    "success": True,
+                    "message": "连接成功",
+                    "latency_ms": latency,
+                    "model": model,
+                }
+            error_detail = resp.text[:200]
+            return {
+                "success": False,
+                "message": f"请求失败: HTTP {resp.status_code} - {error_detail}",
+                "latency_ms": latency,
+            }
+    except Exception as e:
+        latency = round((time.time() - start) * 1000)
+        return {
+            "success": False,
+            "message": f"连接失败: {str(e)}",
+            "latency_ms": latency,
+        }

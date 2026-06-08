@@ -34,6 +34,10 @@
           <el-icon><Collection /></el-icon>
           <template #title>知识库管理</template>
         </el-menu-item>
+        <el-menu-item index="/admin/api-config">
+          <el-icon><Promotion /></el-icon>
+          <template #title>API 配置</template>
+        </el-menu-item>
       </el-menu>
 
       <div class="admin-sidebar__footer">

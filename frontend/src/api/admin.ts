@@ -1,4 +1,4 @@
-/* Admin 审计日志 + 知识库管理 API */
+/* Admin 审计日志 + 知识库管理 + API配置 API */
 import client from './client'
 import type {
   AdminDashboardResponse,
@@ -16,6 +16,9 @@ import type {
   KnowledgeChunkListResponse,
   ChunkStatsResponse,
   AutoTagResponse,
+  ApiConfig,
+  ApiConfigUpdate,
+  ApiTestResult,
 } from '@/types'
 
 export const adminApi = {
@@ -134,4 +137,14 @@ export const adminApi = {
 
   getChunkStats: () =>
     client.get<ChunkStatsResponse>('/admin/knowledge/chunks/stats'),
+
+  // ── API 配置管理 ──
+  getApiConfig: () =>
+    client.get<ApiConfig>('/admin/api-config'),
+
+  updateApiConfig: (config: ApiConfigUpdate) =>
+    client.put<{ message: string; config: ApiConfig }>('/admin/api-config', config),
+
+  testApiConnection: (mode: 'local' | 'cloud', provider?: string) =>
+    client.post<ApiTestResult>('/admin/api-config/test', { mode, provider }),
 }

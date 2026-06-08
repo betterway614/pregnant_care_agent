@@ -91,6 +91,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'audit-trail', name: 'AdminAuditTrail', component: () => import('@/views/admin/AuditTrail.vue'), meta: { title: '对话审计追溯' } },
       { path: 'route-monitor', name: 'AdminRouteMonitor', component: () => import('@/views/admin/RouteMonitor.vue'), meta: { title: '路由监控' } },
       { path: 'knowledge', name: 'AdminKnowledge', component: () => import('@/views/admin/KnowledgeBase.vue'), meta: { title: '知识库管理' } },
+      { path: 'api-config', name: 'AdminApiConfig', component: () => import('@/views/admin/ApiConfig.vue'), meta: { title: 'API 配置' } },
     ],
   },
 ]

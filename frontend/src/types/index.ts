@@ -593,3 +593,68 @@ export interface KnowledgeIngestResponse {
   total: number
   errors: Array<{ filename: string; error: string }>
 }
+
+// ==================== API 配置管理类型 ====================
+
+/** 云端供应商信息 */
+export interface CloudProvider {
+  id: string
+  name: string
+  base_url: string
+  api_key: string
+  default_model: string
+  available_models: string[]
+  description: string
+}
+
+/** API 配置（获取） */
+export interface ApiConfig {
+  // 模式
+  llm_mode: 'cloud' | 'local' | 'mock' | 'mixed'
+  // 本地配置
+  local_base_url: string
+  ollama_host: string
+  local_model: string
+  // 云端配置
+  cloud_provider: string
+  cloud_api_key: string
+  cloud_base_url: string
+  cloud_model: string
+  cloud_vision_model: string
+  // 可用供应商列表
+  available_providers: CloudProvider[]
+  // 角色专属配置
+  llm_pregnant_mode: string
+  llm_nurse_mode: string
+  llm_doctor_mode: string
+  llm_pregnant_model: string
+  llm_nurse_model: string
+  llm_doctor_model: string
+}
+
+/** API 配置更新请求 */
+export interface ApiConfigUpdate {
+  llm_mode?: 'cloud' | 'local' | 'mock' | 'mixed'
+  local_base_url?: string
+  ollama_host?: string
+  local_model?: string
+  cloud_provider?: string
+  cloud_api_key?: string
+  cloud_base_url?: string
+  cloud_model?: string
+  cloud_vision_model?: string
+  llm_pregnant_mode?: string
+  llm_nurse_mode?: string
+  llm_doctor_mode?: string
+  llm_pregnant_model?: string
+  llm_nurse_model?: string
+  llm_doctor_model?: string
+}
+
+/** API 连接测试结果 */
+export interface ApiTestResult {
+  success: boolean
+  message: string
+  latency_ms?: number
+  model?: string
+}
