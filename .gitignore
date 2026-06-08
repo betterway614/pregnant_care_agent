@@ -1,4 +1,4 @@
-# Python
+# ==================== Python ====================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -7,35 +7,53 @@ __pycache__/
 dist/
 build/
 *.egg
-*.db
+.pytest_cache/
 
-# Environment
+# ==================== Environment & Secrets ====================
 .env
+.env.*
 .venv/
 venv/
 env/
+backend/app/.jwt_secret
 
-# Node
+# ==================== Database ====================
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ==================== Logs ====================
+*.log
+*.log.zip
+logs/
+backend/logs/
+
+# ==================== Node / Frontend ====================
 node_modules/
 frontend/dist/
 frontend/.cert/
+*.tsbuildinfo
 
-# IDE
+# ==================== IDE & Editor ====================
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
+.superpowers/
 
-# OS
+# ==================== OS ====================
 .DS_Store
 Thumbs.db
 
-# Docker
+# ==================== Docker ====================
 pgdata/
 redisdata/
 
-# Logs
-*.log
+# ==================== Large Files / Models ====================
+pretrained_models/
 
 # FGR large model weights / generated artifacts
 backend/fgr_compete/**/*.pth
@@ -49,11 +67,24 @@ backend/fgr_compete/cache/
 backend/fgr_compete/uploads/
 backend/fgr_compete/diagnostic_reports/
 backend/fgr_compete/photo/
+backend/fgr_compete/patient_image_map.json
 
-# Personal files
+# CosyVoice 仓库（太大）
+../CosyVoice/
+
+# ==================== Vendor Dependencies ====================
+backend/fgr_compete/_vendor/
+
+# ==================== Personal / Private Files ====================
 简历*.md
 面试*.md
-*.log.zip
+workspace/
 
-# Secrets
-backend/app/.jwt_secret
+# ==================== Build & Compiler Artifacts ====================
+backend/AIECompiler.log
+backend/original-info-signature.txt
+backend/original-model-signature.txt
+
+# ==================== Misc ====================
+*.bak
+*.tmp
