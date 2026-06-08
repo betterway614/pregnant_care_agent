@@ -70,7 +70,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { UserFilled, Lock, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { client } from '@/api/client'
+import client from '@/api/client'
 import { useAppStore } from '@/stores/app'
 import type { FormInstance, FormRules } from 'element-plus'
 
@@ -96,7 +96,7 @@ async function handleLogin() {
 
   loggingIn.value = true
   try {
-    const res = await client.post('/api/v1/auth/login', {
+    const res = await client.post('/auth/login', {
       hospital_id: form.hospital_id.trim(),
       password: form.password.trim(),
     })

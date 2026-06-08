@@ -442,6 +442,20 @@ def get_proactive_notifications(pregnant_id: str, db: Session = Depends(get_db),
     return [n.model_dump() for n in notifications]
 
 
+@router.get("/{pregnant_id}/daily-task-status")
+def get_daily_task_status(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
+    """查询今日各项健康数据是否已记录，供前端「今日待办」展示动态完成状态。
+
+    Returns:
+        {"weight": bool, "blood_pressure": bool, "fetal_movement": bool}
+    """
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    from ..services.proactive_monitor import get_daily_task_status
+
+    return get_daily_task_status(db, pregnant_id)
+
+
 @router.get("/{pregnant_id}/diary")
 def get_pregnancy_diary(pregnant_id: str, weeks: int = 4, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
     """获取孕妇孕记 — 按周汇总健康数据的温暖叙事"""

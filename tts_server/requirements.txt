@@ -1,0 +1,25 @@
+# CosyVoice2 TTS 服务依赖
+# 注意: PyTorch ROCm 版本需单独安装（见下方说明）
+
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+pydantic>=2.0.0
+numpy>=1.22.0
+scipy>=1.10.0
+
+# PyTorch ROCm: 需要从 https://download.pytorch.org/whl/rocm6.2 安装
+# pip install torch torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+# torch>=2.0.0
+# torchaudio>=2.0.0
+
+# CosyVoice2 推理依赖
+modelscope>=1.10.0
+# cosyvoice 需要从源码安装:
+#   git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git
+#   cd CosyVoice && pip install -r requirements.txt
+
+conformer>=0.3.2
+onnxruntime>=1.16.0
+pydub>=0.25.1
+soundfile>=0.12.1
+librosa>=0.10.0

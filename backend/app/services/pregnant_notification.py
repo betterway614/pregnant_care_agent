@@ -93,7 +93,7 @@ class PregnantNotificationService:
                     icon=self._alert_icon(level),
                     level=level,
                     is_read=is_read,
-                    action_route=f"/alerts/{alert.id}",
+                    action_route=None,
                     created_at=alert.created_at or now,
                 ))
         except Exception as exc:
@@ -127,24 +127,25 @@ class PregnantNotificationService:
                     icon="clipboard-list",
                     level="INFO",
                     is_read=is_read,
-                    action_route=f"/followups/{fu.id}",
+                    action_route=f"/pregnant/tools/followup/{fu.id}",
                     created_at=fu.follow_up_date or fu.created_at or now,
                 ))
         except Exception as exc:
             logger.error("获取随访通知失败: pregnant_id={}, error={}", pregnant_id, exc)
 
-        # ---- 1c. 医嘱待确认通知 (draft 状态) ----
+        # ---- 1c. 医嘱待确认通知 (已签署但孕妇未确认) ----
         try:
             orders = (
                 db.query(MedicalOrder)
                 .filter(
                     MedicalOrder.pregnant_id == pregnant_id,
-                    MedicalOrder.status == "draft",
+                    MedicalOrder.status == "signed",
+                    MedicalOrder.acknowledged_at.is_(None),
                 )
                 .all()
             )
             for order in orders:
-                is_read = order.acknowledged_at is not None
+                is_read = False  # acknowledged_at is None 意味着未读
                 if unread_only and is_read:
                     continue
 
@@ -159,7 +160,7 @@ class PregnantNotificationService:
                     icon="file-text",
                     level="ORANGE",
                     is_read=is_read,
-                    action_route=f"/orders/{order.id}",
+                    action_route=f"/pregnant/orders/{order.id}",
                     created_at=order.created_at or now,
                 ))
         except Exception as exc:
@@ -327,13 +328,12 @@ class PregnantNotificationService:
                 db.query(MedicalOrder)
                 .filter(
                     MedicalOrder.pregnant_id == pregnant_id,
-                    MedicalOrder.status == "draft",
+                    MedicalOrder.status == "signed",
+                    MedicalOrder.acknowledged_at.is_(None),
                 )
                 .all()
             )
-            for order in orders:
-                if order.acknowledged_at is None:
-                    count += 1
+            count += len(orders)
         except Exception as exc:
             logger.error("get_unread_count(医嘱) 失败: pregnant_id={}, error={}", pregnant_id, exc)
 

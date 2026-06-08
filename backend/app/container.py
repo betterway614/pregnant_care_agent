@@ -106,8 +106,16 @@ def setup_container() -> None:
             from .services.tts_backends import DashScopeTTSBackend
             return DashScopeTTSBackend(getattr(settings, "tts_api_key", ""))
         elif mode == "local":
-            from .services.tts_backends import EdgeTTSBackend
-            return EdgeTTSBackend()
+            if settings.tts_local_backend == "cosyvoice":
+                from .services.tts_backends import CosyVoiceLocalBackend
+                return CosyVoiceLocalBackend(
+                    base_url=settings.tts_local_cosyvoice_url,
+                    speaker=settings.tts_local_cosyvoice_speaker,
+                    timeout=settings.tts_local_cosyvoice_timeout,
+                )
+            else:
+                from .services.tts_backends import EdgeTTSBackend
+                return EdgeTTSBackend()
         from .services.tts_backends import MockTTSBackend
         return MockTTSBackend()
 

@@ -74,6 +74,9 @@
     <div class="user-info-bar">
       <span class="user-name">{{ displayName || '孕妈' }}</span>
       <div class="user-actions">
+        <button class="user-action-btn interactive-card" :class="{ active: autoPlayTTS }" @click="toggleAutoPlayTTS" :aria-label="autoPlayTTS ? '关闭自动播报' : '开启自动播报'" :title="autoPlayTTS ? '自动播报已开启' : '自动播报已关闭'">
+          <el-icon :size="16"><Headset /></el-icon>
+        </button>
         <button class="user-action-btn interactive-card" :class="{ active: isMuted }" @click="toggleMute" :aria-label="isMuted ? '取消静音' : '静音'">
           <el-icon :size="16"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
         </button>
@@ -558,9 +561,10 @@ let recordingSeconds = 0
 const playingMsgId = ref<string | null>(null)
 let audioEl: HTMLAudioElement | null = null
 
-// TTS 播报
-const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'pregnant' })
+// TTS 播报（使用后端 CosyVoice 服务）
+const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ mode: 'backend', role: 'pregnant' })
 const ttsSpeakingId = ref<string | null>(null)
+const autoPlayTTS = ref(true) // 自动播报开关
 
 // 图片上传
 const albumInputRef = ref<HTMLInputElement | null>(null)
@@ -650,6 +654,15 @@ function handleBack() {
 function toggleMute() {
   isMuted.value = !isMuted.value
   ElMessage.info(isMuted.value ? '已静音' : '已取消静音')
+}
+
+function toggleAutoPlayTTS() {
+  autoPlayTTS.value = !autoPlayTTS.value
+  ElMessage.info(autoPlayTTS.value ? '自动播报已开启' : '自动播报已关闭')
+  if (!autoPlayTTS.value) {
+    stopTTS()
+    ttsSpeakingId.value = null
+  }
 }
 
 /* ==================== 新建对话 ==================== */
@@ -867,6 +880,17 @@ async function handleSend() {
             toolSteps: metadata?.tool_steps || [],
             timestamp: new Date().toISOString(),
           })
+          // 自动播报助手消息
+          if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
+            ttsSpeakingId.value = loadingMsg.id
+            speak(cleanForTTS(loadingMsg.content))
+            const checkEnd = setInterval(() => {
+              if (!isSpeaking.value) {
+                ttsSpeakingId.value = null
+                clearInterval(checkEnd)
+              }
+            }, 500)
+          }
         },
         onError(err: Error) {
           console.error('SSE error:', err)
@@ -1184,6 +1208,17 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
             chatStore.updateMessage(userAudioMsg.id, { transcribedText: metadata.transcribed_text })
           }
         }
+        // 自动播报助手消息
+        if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
+          ttsSpeakingId.value = loadingMsg.id
+          speak(cleanForTTS(loadingMsg.content))
+          const checkEnd = setInterval(() => {
+            if (!isSpeaking.value) {
+              ttsSpeakingId.value = null
+              clearInterval(checkEnd)
+            }
+          }, 500)
+        }
       },
       onError(err: Error) {
         console.error('Audio SSE error:', err)
@@ -1319,6 +1354,17 @@ async function sendImageMessage(base64: string, imageFormat: string, fileName: s
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
         })
+        // 自动播报助手消息
+        if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
+          ttsSpeakingId.value = loadingMsg.id
+          speak(cleanForTTS(loadingMsg.content))
+          const checkEnd = setInterval(() => {
+            if (!isSpeaking.value) {
+              ttsSpeakingId.value = null
+              clearInterval(checkEnd)
+            }
+          }, 500)
+        }
       },
       onError(err: Error) {
         console.error('Image SSE error:', err)

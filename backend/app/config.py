@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     asr_local_model: str = "base"
 
     # TTS配置 - 全局默认
-    tts_mode: Literal["browser", "cloud", "local"] = "browser"
+    tts_mode: Literal["browser", "cloud", "local"] = "local"
     tts_pregnant_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_nurse_mode: Literal["browser", "cloud", "local", ""] = ""
     tts_doctor_mode: Literal["browser", "cloud", "local", ""] = ""
@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     tts_cloud_model: str = "cosyvoice-v1"
     tts_cloud_voice: str = "longxiaochun"
     tts_local_voice: str = "zh-CN-XiaoxiaoNeural"
+    # TTS本地后端选择
+    tts_local_backend: Literal["edge", "cosyvoice"] = "cosyvoice"
+    # CosyVoice2 本地服务配置
+    tts_local_cosyvoice_url: str = "http://127.0.0.1:9880"
+    tts_local_cosyvoice_speaker: str = "中文女"
+    tts_local_cosyvoice_timeout: float = 30.0
 
     # FGR配置
     fgr_mode: bool = True

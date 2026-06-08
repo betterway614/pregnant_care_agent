@@ -137,6 +137,10 @@ export const pregnantApi = {
   get: (pregnantId: string) => client.get<Pregnant>(`/pregnant/${pregnantId}`),
   update: (pregnantId: string, data: Partial<Pregnant>) => client.put<Pregnant>(`/pregnant/${pregnantId}`, data),
   getHome: (pregnantId: string) => client.get<HomeResponse>(`/pregnant/${pregnantId}/home`),
+  getDailyTaskStatus: (pregnantId: string) =>
+    client.get<{ weight: boolean; blood_pressure: boolean; fetal_movement: boolean }>(
+      `/pregnant/${pregnantId}/daily-task-status`
+    ),
   submitHealthData: (pregnantId: string, data: {
     weight?: number
     systolic?: number
@@ -362,9 +366,7 @@ export const mentalHealthApi = {
 // 主动推送通知
 export const proactiveApi = {
   getNotifications: (pregnantId: string) =>
-    client.get<any[]>(`/proactive/notifications/${pregnantId}`),
-  getUnreadCount: (pregnantId: string) =>
-    client.get<{ count: number }>(`/proactive/unread-count/${pregnantId}`),
+    client.get<any[]>(`/pregnant/${pregnantId}/proactive-notifications`),
 }
 
 // 孕期日记
@@ -384,9 +386,9 @@ export const nurseBriefingApi = {
 // 预警通知
 export const alertNotificationApi = {
   getNotifications: (pregnantId: string, unreadOnly?: boolean) =>
-    client.get<any[]>(`/alerts/notifications/${pregnantId}`, { params: { unread_only: unreadOnly } }),
+    client.get<any[]>(`/alerts/pregnant/${pregnantId}/notifications`, { params: { unread_only: unreadOnly } }),
   markAllRead: (pregnantId: string) =>
-    client.put(`/alerts/notifications/${pregnantId}/read-all`),
+    client.put(`/alerts/pregnant/${pregnantId}/notifications/read-all`),
   markRead: (alertId: string, pregnantId: string) =>
     client.put(`/alerts/notifications/${alertId}/read`, { pregnant_id: pregnantId }),
 }

@@ -38,16 +38,18 @@
       <!-- 2. 动态行动中心 (Action Center - 通知与待办) -->
       <div class="action-center" v-if="hasNotices">
         <!-- 随访通知 -->
-        <div 
-          v-if="pendingFollowUps.length > 0" 
+        <div
+          v-if="pendingFollowUps.length > 0"
           class="compact-notice followup-notice interactive-card"
-          @click="goToFollowUp(pendingFollowUps[0].id)"
         >
-          <div class="c-notice-left">
+          <div class="c-notice-left" @click="goToFollowUp(pendingFollowUps[0].id)">
             <div class="c-notice-icon"><el-icon><Bell /></el-icon><span class="pulse-dot"></span></div>
             <span class="c-notice-title">您有新的随访对话</span>
           </div>
-          <div class="c-notice-right">去回复 <el-icon><ArrowRight /></el-icon></div>
+          <div class="c-notice-right">
+            <span class="dismiss-btn" @click.stop="dismissActionCenter('followup')">忽略</span>
+            <span class="go-link" @click="goToFollowUp(pendingFollowUps[0].id)">去回复 <el-icon><ArrowRight /></el-icon></span>
+          </div>
         </div>
 
         <!-- 医嘱通知 -->
@@ -65,6 +67,7 @@
               <span class="c-notice-title">{{ pendingOrders.length }} 条新医嘱待查看</span>
             </div>
             <div class="c-notice-right">
+              <span class="dismiss-btn" @click.stop="dismissActionCenter('order')">忽略</span>
               <el-icon class="expand-icon" :class="{ 'is-rotated': expandedNotice === 'order' }"><ArrowDown /></el-icon>
             </div>
           </div>
@@ -83,8 +86,8 @@
         </div>
 
         <!-- AI 主动问候 -->
-        <div 
-          v-if="proactiveGreeting" 
+        <div
+          v-if="proactiveGreeting"
           class="compact-notice ai-notice interactive-card"
           :class="{ 'is-expanded': expandedNotice === 'ai' }"
           @click="expandedNotice = expandedNotice === 'ai' ? null : 'ai'"
@@ -95,6 +98,7 @@
               <span class="c-notice-title">智能护士留言</span>
             </div>
             <div class="c-notice-right">
+              <span class="dismiss-btn" @click.stop="dismissActionCenter('greeting')">忽略</span>
               <el-icon class="expand-icon" :class="{ 'is-rotated': expandedNotice === 'ai' }"><ArrowDown /></el-icon>
             </div>
           </div>
@@ -111,7 +115,7 @@
           :key="'alert-' + item.id"
           class="notice-card interactive-card"
           :class="item.level === 'critical' ? 'notice-red' : item.level === 'warning' ? 'notice-orange' : 'notice-yellow'"
-          @click="item.action_route ? router.push(item.action_route) : null"
+          @click="onAlertNoticeClick(item)"
         >
           <div class="notice-icon-wrap">
             <el-icon><Warning /></el-icon>
@@ -126,7 +130,7 @@
           v-for="item in proactiveNotifications.slice(0, 3)"
           :key="'proactive-' + item.id"
           class="notice-card interactive-card"
-          @click="item.action_route ? router.push(item.action_route) : null"
+          @click="onProactiveNoticeClick(item)"
         >
           <div class="notice-icon-wrap">
             <el-icon><ChatRound /></el-icon>
@@ -329,6 +333,82 @@ const pendingOrders = ref<any[]>([])
 const proactiveNotifications = ref<any[]>([])
 const alertNotifications = ref<any[]>([])
 
+// ==================== 通知生命周期管理 ====================
+// Dismissed 缓存：记录用户主动忽略的通知，避免重复显示
+// key: 通知标识, value: 忽略时间戳(ms)
+const DISMISS_STORAGE_KEY = 'pregnant_dismissed_notices'
+const DISMISS_TTL_ACTION_CENTER = 4 * 60 * 60 * 1000  // 行动中心：4小时后重新提醒
+const DISMISS_TTL_PROACTIVE = 24 * 60 * 60 * 1000      // 主动提醒：24小时后重新提醒
+
+function loadDismissedNotices(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY)
+    if (!raw) return {}
+    const map = JSON.parse(raw)
+    // 清理过期条目（存储的值是过期时间戳）
+    const now = Date.now()
+    for (const [k, v] of Object.entries(map)) {
+      if ((v as number) < now) delete map[k]
+    }
+    return map
+  } catch { return {} }
+}
+
+function saveDismissNotice(key: string, ttl: number) {
+  const map = loadDismissedNotices()
+  map[key] = Date.now() + ttl  // 存储过期时间而非当前时间
+  localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(map))
+}
+
+function isDismissed(key: string): boolean {
+  const map = loadDismissedNotices()
+  const expires = map[key]
+  return !!expires && Date.now() < expires
+}
+
+// ---- 行动中心忽略 ----
+function dismissActionCenter(type: 'followup' | 'order' | 'greeting') {
+  const pid = localStorage.getItem('currentPregnantId') || ''
+  if (type === 'followup') {
+    saveDismissNotice(`ac_followup_${pid}`, DISMISS_TTL_ACTION_CENTER)
+    pendingFollowUps.value = []
+  } else if (type === 'order') {
+    saveDismissNotice(`ac_order_${pid}`, DISMISS_TTL_ACTION_CENTER)
+    pendingOrders.value = []
+  } else if (type === 'greeting') {
+    saveDismissNotice(`ac_greeting_${pid}`, DISMISS_TTL_ACTION_CENTER)
+    proactiveGreeting.value = null
+  }
+}
+
+// ---- 预警通知：标记已读 + 导航 ----
+async function onAlertNoticeClick(item: any) {
+  const pid = localStorage.getItem('currentPregnantId') || ''
+  // 先从列表中移除，提供即时反馈
+  alertNotifications.value = alertNotifications.value.filter((n: any) => n.id !== item.id)
+  // 调用后端标记已读（fire-and-forget，不阻塞导航）
+  if (pid) {
+    alertNotificationApi.markRead(item.id, pid).catch(() => {})
+  }
+  // 导航
+  if (item.action_route) {
+    router.push(item.action_route)
+  }
+}
+
+// ---- 主动提醒：记录忽略 + 导航 ----
+function onProactiveNoticeClick(item: any) {
+  // 用 type + action_route 作为去重 key（id 是随机 UUID，不可靠）
+  const dismissKey = `pro_${item.type}_${item.action_route || ''}`
+  saveDismissNotice(dismissKey, DISMISS_TTL_PROACTIVE)
+  proactiveNotifications.value = proactiveNotifications.value.filter(
+    (n: any) => `pro_${n.type}_${n.action_route || ''}` !== dismissKey
+  )
+  if (item.action_route) {
+    router.push(item.action_route)
+  }
+}
+
 const hasNotices = computed(() => pendingFollowUps.value.length > 0 || pendingOrders.value.length > 0 || proactiveGreeting.value)
 
 const pregnantName = computed(() => homeData.value?.pregnant?.nickname || homeData.value?.pregnant?.display_name || '准妈妈')
@@ -365,10 +445,19 @@ const tools = [
   { label: '问小安', icon: 'ChatDotSquare', color: 'text-indigo', desc: 'AI 孕期百科问答', action: () => router.push('/pregnant/chat') },
 ]
 
-// ---- 今日待办：打卡项 + 快捷录入入口，与快捷操作互补 ----
-const todayTasks = ref([
-  { title: '健康数据录入', icon: 'Edit', color: 'bg-rose', done: false, hint: '体重/血压/胎动一键记录', route: '/pregnant/tools/health-record' },
-  { title: '数胎动', icon: 'Opportunity', color: 'bg-indigo', done: false, hint: '点击打卡或计数', route: '/pregnant/tools/fetal-movement' },
+// ---- 今日待办：动态完成状态，数据已记录则自动标记 ----
+interface DailyTask {
+  title: string
+  icon: string
+  color: string
+  done: boolean
+  hint: string
+  route: string
+}
+const todayTasks = ref<DailyTask[]>([
+  { title: '记录体重', icon: 'ScaleToOriginal', color: 'bg-rose', done: false, hint: '今日未记录', route: '/pregnant/tools/health-record' },
+  { title: '记录血压', icon: 'Odometer', color: 'bg-sky', done: false, hint: '今日未记录', route: '/pregnant/tools/health-record' },
+  { title: '数胎动', icon: 'Opportunity', color: 'bg-indigo', done: false, hint: '今日未记录', route: '/pregnant/tools/fetal-movement' },
   { title: '补充叶酸', icon: 'Check', color: 'bg-orange', done: false, hint: '点击标记已完成', route: '' },
 ])
 
@@ -389,6 +478,11 @@ async function fetchFollowUps() {
   try {
     const pid = localStorage.getItem('currentPregnantId') || ''
     if (pid) {
+      // 检查是否被用户忽略
+      if (isDismissed(`ac_followup_${pid}`)) {
+        pendingFollowUps.value = []
+        return
+      }
       const [draftRes, inProgressRes] = await Promise.all([
         followUpApi.list({ status: 'draft', pregnant_id: pid }),
         followUpApi.list({ status: 'in_progress', pregnant_id: pid })
@@ -411,6 +505,11 @@ async function fetchProactiveGreeting() {
   try {
     const pid = localStorage.getItem('currentPregnantId') || ''
     if (pid) {
+      // 检查是否被用户忽略
+      if (isDismissed(`ac_greeting_${pid}`)) {
+        proactiveGreeting.value = null
+        return
+      }
       const res = await chatApi.getProactive(pid)
       proactiveGreeting.value = res.data
     }
@@ -431,6 +530,11 @@ const loadPregnantOrders = async () => {
   try {
     const pid = localStorage.getItem('currentPregnantId') || ''
     if (pid) {
+      // 检查是否被用户忽略
+      if (isDismissed(`ac_order_${pid}`)) {
+        pendingOrders.value = []
+        return
+      }
       const res = await orderApi.getPregnantOrders(pid)
       pendingOrders.value = (res.data || []).filter((o: any) => o.status === 'signed' && !o.acknowledged_at)
     }
@@ -444,8 +548,15 @@ async function fetchNotifications() {
     alertNotificationApi.getNotifications(pid, true).catch(() => ({ data: [] })),
     proactiveApi.getNotifications(pid).catch(() => ({ data: [] })),
   ])
-  alertNotifications.value = alertRes.data || []
-  proactiveNotifications.value = proactiveRes.data || []
+  // 预警通知：仅保留 alert 类型（随访/医嘱由行动中心展示）
+  alertNotifications.value = (alertRes.data || []).filter((n: any) => n.type === 'alert')
+  // 主动提醒：仅保留重要事项（血压异常、产检、随访、医嘱），过滤已忽略的
+  proactiveNotifications.value = (proactiveRes.data || []).filter((n: any) => {
+    // 随访/医嘱由行动中心展示，不在通知列表重复
+    if (n.type === 'followup_pending' || n.type === 'order_pending') return false
+    const dismissKey = `pro_${n.type}_${n.action_route || ''}`
+    return !isDismissed(dismissKey)
+  })
 }
 
 
@@ -475,6 +586,28 @@ function translateUnit(unit: string): string {
     'times/12h': '次/12小时'
   }
   return units[unit] || unit
+}
+
+async function fetchDailyTaskStatus() {
+  try {
+    const pid = localStorage.getItem('currentPregnantId') || ''
+    if (!pid) return
+    const res = await pregnantApi.getDailyTaskStatus(pid)
+    const status = res.data
+    // 动态更新今日待办的完成状态和提示
+    for (const task of todayTasks.value) {
+      if (task.title === '记录体重') {
+        task.done = status.weight
+        task.hint = status.weight ? '✅ 今日已记录' : '今日未记录'
+      } else if (task.title === '记录血压') {
+        task.done = status.blood_pressure
+        task.hint = status.blood_pressure ? '✅ 今日已记录' : '今日未记录'
+      } else if (task.title === '数胎动') {
+        task.done = status.fetal_movement
+        task.hint = status.fetal_movement ? '✅ 今日已记录' : '今日未记录'
+      }
+    }
+  } catch (e) { console.warn('[Home] fetchDailyTaskStatus failed:', e) }
 }
 
 async function fetchData() {
@@ -512,12 +645,14 @@ onMounted(() => {
   fetchHealthTrends()
   loadPregnantOrders()
   fetchNotifications()
+  fetchDailyTaskStatus()
 })
 
 onActivated(() => {
   fetchFollowUps()
   loadPregnantOrders()
   fetchNotifications()
+  fetchDailyTaskStatus()
 })
 </script>
 
@@ -697,8 +832,29 @@ onActivated(() => {
 .ai-notice .c-notice-icon { color: var(--c-indigo); }
 
 .c-notice-title { font-size: 14px; font-weight: 600; color: var(--c-slate-800); }
-.c-notice-right { font-size: 12px; color: var(--c-slate-500); gap: 4px; }
+.c-notice-right { font-size: 12px; color: var(--c-slate-500); gap: 8px; }
 .followup-notice .c-notice-right { color: var(--c-rose); font-weight: 600; }
+
+.dismiss-btn {
+  font-size: 11px;
+  color: var(--c-slate-400);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.dismiss-btn:active {
+  background: rgba(148, 163, 184, 0.2);
+  transform: scale(0.95);
+}
+.go-link {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
 
 .pulse-dot {
   position: absolute; top: -2px; right: -2px; width: 8px; height: 8px;

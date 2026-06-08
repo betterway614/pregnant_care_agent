@@ -656,10 +656,17 @@ async def _auto_tag_content(content: str, doc_name: str) -> dict[str, str]:
     """
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(
-        api_key=settings.llm_api_key or "sk-placeholder",
-        base_url=settings.llm_base_url,
-    )
+    # 根据 llm_mode 选择正确的端点（与 llm_client.py 逻辑一致）
+    if settings.llm_mode == "local":
+        base_url = settings.local_base_url or settings.ollama_host
+        api_key = "not-needed"
+        model = settings.local_model
+    else:
+        base_url = settings.llm_base_url
+        api_key = settings.llm_api_key or "sk-placeholder"
+        model = settings.llm_model
+
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     prompt = f"""你是一个医学文档分类专家。请分析以下孕期管理平台的文档内容，生成元数据标签。
 
@@ -680,7 +687,7 @@ async def _auto_tag_content(content: str, doc_name: str) -> dict[str, str]:
 
     try:
         response = await client.chat.completions.create(
-            model=settings.llm_model,
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=500,
