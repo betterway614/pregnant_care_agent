@@ -36,6 +36,10 @@ export default defineConfig({
     port: 3000,
     https: httpsConfig,
     proxy: {
+      '/health': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/api': {
         target: apiTarget,
         changeOrigin: true,
