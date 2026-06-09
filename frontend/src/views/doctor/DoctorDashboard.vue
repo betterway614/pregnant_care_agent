@@ -64,7 +64,7 @@
       <el-col :span="14">
         <div class="content-card">
           <div class="content-card__header">
-            <span class="content-card__title">高危预警概览</span>
+            <span class="content-card__title">待处理预警</span>
             <el-tag v-if="alertStats.highCount" type="danger" size="small">
               待处理 {{ alertStats.highCount }} 条
             </el-tag>
@@ -284,10 +284,10 @@ const statCards = computed(() => [
   },
 ])
 
-/** 预警概览统计 */
+/** 预警概览统计（使用后端 stats 而非截断的列表） */
 const alertStats = computed(() => ({
   total: recentAlerts.value.length,
-  highCount: recentAlerts.value.filter((a) => a.level === 'RED' || a.level === 'ORANGE').length,
+  highCount: stats.value.pending_alerts,
 }))
 
 /** 风险级别映射 */

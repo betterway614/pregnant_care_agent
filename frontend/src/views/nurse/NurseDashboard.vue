@@ -303,7 +303,7 @@ const statCards = computed(() => [
     color: 'var(--info)',
     bgColor: '#E3F2FD',
     subLabel: '计划中',
-    route: '/nurse/followup',
+    route: '/nurse/followup?today_only=true',
   },
   {
     icon: 'DocumentChecked',
@@ -312,7 +312,7 @@ const statCards = computed(() => [
     color: 'var(--accent)',
     bgColor: '#E0F2F1',
     subLabel: '待确认归档',
-    route: '/nurse/followup',
+    route: '/nurse/followup?status=completed',
   },
 ])
 

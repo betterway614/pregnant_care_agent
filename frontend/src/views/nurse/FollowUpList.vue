@@ -24,7 +24,7 @@
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
         <el-option label="草稿" value="draft" />
-        <el-option label="进行中" value="draft,in_progress" />
+        <el-option label="进行中" value="in_progress" />
         <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
         <el-option label="已归档" value="archived" />
@@ -491,6 +491,7 @@ const loading = ref(false)
 const error = ref('')
 const records = ref<FollowUpRecord[]>([])
 const filterStatus = ref('')
+const todayOnly = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 
@@ -646,8 +647,9 @@ async function fetchRecords() {
   loading.value = true
   error.value = ''
   try {
-    const params: Record<string, string> = {}
+    const params: Record<string, any> = {}
     if (filterStatus.value) params.status = filterStatus.value
+    if (todayOnly.value) params.today_only = true
     const res = await followUpApi.list(params)
     records.value = res.data || []
   } catch (err: any) {
@@ -873,6 +875,16 @@ async function doBatchTrigger() {
 }
 
 onMounted(() => {
+  // 从路由查询参数读取默认筛选条件（从工作台统计卡片跳转时传入）
+  const query = router.currentRoute.value.query
+  const queryStatus = query.status as string
+  const queryTodayOnly = query.today_only as string
+  if (queryStatus) {
+    filterStatus.value = queryStatus
+  }
+  if (queryTodayOnly === 'true') {
+    todayOnly.value = true
+  }
   fetchRecords()
   fetchRecommendations()
   startPolling()

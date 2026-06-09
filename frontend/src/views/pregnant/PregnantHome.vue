@@ -114,7 +114,7 @@
           v-for="item in alertNotifications.slice(0, 3)"
           :key="'alert-' + item.id"
           class="notice-card interactive-card"
-          :class="item.level === 'critical' ? 'notice-red' : item.level === 'warning' ? 'notice-orange' : 'notice-yellow'"
+          :class="item.level === 'RED' ? 'notice-red' : item.level === 'ORANGE' ? 'notice-orange' : 'notice-yellow'"
           @click="onAlertNoticeClick(item)"
         >
           <div class="notice-icon-wrap">

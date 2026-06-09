@@ -56,7 +56,7 @@
         <div class="content-card" style="height: 100%; display: flex; flex-direction: column">
           <div class="content-card__header">
             <span class="content-card__title">高危预警列表</span>
-            <el-tag size="small">{{ alertList.length }}条</el-tag>
+            <el-tag size="small">{{ groupedAlerts.length }}组 / {{ alertList.length }}条</el-tag>
           </div>
           <div class="content-card__body" style="flex: 1; overflow-y: auto; padding: 0" v-loading="loading">
             <div

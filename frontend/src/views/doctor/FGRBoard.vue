@@ -466,14 +466,21 @@ const riskColors: Record<string, string> = {
   low: '#2E7D32',
 }
 
+/** 仅有 FGR 预警记录的孕妇（排除无 FGR 评估的孕妇） */
+const fgrPatients = computed(() =>
+  pregnant.value.filter((p) =>
+    alertList.value.some((a) => a.pregnant_id === p.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr'))
+  )
+)
+
 const distributionCards = computed(() => {
-  const total = pregnant.value.length
-  const highCount = pregnant.value.filter((p) => getLatestFgrLevel(p) === 'high').length
-  const mediumCount = pregnant.value.filter((p) => getLatestFgrLevel(p) === 'medium').length
-  const lowCount = pregnant.value.filter((p) => getLatestFgrLevel(p) === 'low').length
+  const total = fgrPatients.value.length
+  const highCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'high').length
+  const mediumCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'medium').length
+  const lowCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'low').length
 
   return [
-    { icon: 'User', value: total, label: '总FGR孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: '监测中' },
+    { icon: 'User', value: total, label: 'FGR评估孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: '有FGR评估记录' },
     { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${total ? ((highCount / total) * 100).toFixed(0) : 0}%` },
     { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${total ? ((mediumCount / total) * 100).toFixed(0) : 0}%` },
     { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${total ? ((lowCount / total) * 100).toFixed(0) : 0}%` },
@@ -526,7 +533,7 @@ function getGestStage(days?: number): string {
 }
 
 const filteredPregnant = computed(() => {
-  let list = pregnant.value
+  let list = fgrPatients.value
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter((p) => p.display_name?.toLowerCase().includes(q))
@@ -615,7 +622,7 @@ async function loadData() {
   try {
     const [pregnantRes, alertsRes] = await Promise.all([
       dashboardApi.pregnant(),
-      alertApi.list({ status: 'pending,confirmed' }),
+      alertApi.list({ status: 'pending,escalated,confirmed' }),
     ])
     pregnant.value = pregnantRes.data || []
     alertList.value = alertsRes.data || []

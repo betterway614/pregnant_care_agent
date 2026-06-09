@@ -16,8 +16,10 @@
       <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 150px" @change="loadOrders">
         <el-option label="全部" value="" />
         <el-option label="草稿" value="draft" />
+        <el-option label="待签署" value="pending_sign" />
         <el-option label="已签署" value="signed" />
         <el-option label="已执行" value="executed" />
+        <el-option label="已取消" value="cancelled" />
       </el-select>
       <el-input
         v-model="searchQuery"
