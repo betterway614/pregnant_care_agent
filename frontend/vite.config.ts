@@ -15,6 +15,13 @@ const httpsConfig = fs.existsSync(keyPath)
     }
   : undefined
 
+// ── 后端代理目标：支持环境变量覆盖，适配 SSH 远程开发 / 局域网访问 ──
+// 用法：
+//   VITE_API_TARGET=http://10.67.8.145:9999 npm run dev
+//   VITE_API_TARGET=http://192.168.1.100:8000 npm run dev
+// 不设置时默认 http://localhost:9999
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:9999'
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -30,11 +37,11 @@ export default defineConfig({
     https: httpsConfig,
     proxy: {
       '/api': {
-        target: 'http://localhost:9999',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'http://localhost:9999',
+        target: apiTarget,
         ws: true,
         changeOrigin: true,
       },

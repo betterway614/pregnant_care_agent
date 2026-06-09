@@ -290,11 +290,18 @@ app = FastAPI(
 from .core.timeout_middleware import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout=300)
 
-# CORS 配置（生产环境应通过 settings.cors_origins 配置域名白名单）
-_cors_origins = getattr(settings, "cors_origins", None) or [
-    "http://localhost:5173", "http://localhost:3000",
-    "http://127.0.0.1:5173", "http://127.0.0.1:3000",
-]
+# CORS 配置
+# 开发环境（debug=True）：允许所有来源，支持 SSH 远程开发 / 局域网访问 / IP 变化
+# 生产环境：通过 settings.cors_origins 或环境变量 CORS_ORIGINS 配置域名白名单
+if settings.debug:
+    _cors_origins = ["*"]
+    logger.info("CORS: 开发模式，允许所有来源")
+else:
+    _cors_origins = getattr(settings, "cors_origins", None) or [
+        "http://localhost:5173", "http://localhost:3000",
+        "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+    ]
+    logger.info(f"CORS: 生产模式，白名单: {_cors_origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
