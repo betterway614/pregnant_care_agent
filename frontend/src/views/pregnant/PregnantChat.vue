@@ -738,6 +738,7 @@ async function handleFeedback(msg: ChatMessage, rating: 'thumbs_up' | 'thumbs_do
         pregnant_id: pregnantId,
         message_id: msg.id,
         rating: newRating,
+        feedback_role: 'pregnant',
         session_id: chatStore.sessionId || undefined,
       })
     } catch {}

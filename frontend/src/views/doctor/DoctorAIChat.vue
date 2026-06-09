@@ -77,6 +77,25 @@
         >
           <el-icon :size="13"><Headset /></el-icon>
         </button>
+        <!-- 反馈按钮（助手消息） -->
+        <div v-if="msg.role === 'assistant' && !msg.loading && msg.content" class="feedback-btns">
+          <button
+            class="feedback-btn"
+            :class="{ 'feedback-btn--active': msg.feedback === 'thumbs_up' }"
+            @click="handleFeedback(msg, 'thumbs_up')"
+            title="有帮助"
+          >
+            <el-icon :size="13"><Check /></el-icon>
+          </button>
+          <button
+            class="feedback-btn"
+            :class="{ 'feedback-btn--active': msg.feedback === 'thumbs_down' }"
+            @click="handleFeedback(msg, 'thumbs_down')"
+            title="需改进"
+          >
+            <el-icon :size="13"><Close /></el-icon>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -153,8 +172,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset, Mute, Document } from '@element-plus/icons-vue'
-import { doctorAiApi, chatApi } from '@/api/endpoints'
+import { Promotion, Loading, Check, Close, Microphone, VideoPlay, VideoPause, Headset, Mute, Document } from '@element-plus/icons-vue'
+import { doctorAiApi, chatApi, feedbackApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
@@ -177,6 +196,7 @@ interface ChatMsg {
   transcribedText?: string
   transcribing?: boolean
   transcriptionVisible?: boolean
+  feedback?: 'thumbs_up' | 'thumbs_down' | null
 }
 
 const messages = ref<ChatMsg[]>([])
@@ -247,6 +267,21 @@ function autoSpeakAssistant(msg: ChatMsg) {
         clearInterval(check)
       }
     }, 500)
+  }
+}
+
+// ---- 用户反馈 ----
+async function handleFeedback(msg: ChatMsg, rating: 'thumbs_up' | 'thumbs_down') {
+  const newRating = msg.feedback === rating ? null : rating
+  msg.feedback = newRating
+  if (newRating) {
+    try {
+      await feedbackApi.submit({
+        message_id: msg.id,
+        rating: newRating,
+        feedback_role: 'doctor',
+      })
+    } catch {}
   }
 }
 
@@ -910,6 +945,39 @@ onMounted(() => {
 @keyframes ttsPulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.08); }
+}
+
+/* ---- 反馈按钮 ---- */
+.feedback-btns {
+  display: flex;
+  gap: 4px;
+  align-self: flex-end;
+}
+
+.feedback-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid #d1fae5;
+  background: white;
+  color: #6ee7b7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.feedback-btn:hover {
+  color: #10b981;
+  border-color: #a7f3d0;
+}
+
+.feedback-btn--active {
+  color: #10b981;
+  border-color: #34d399;
+  background: #ecfdf5;
 }
 
 /* ---- 音频消息气泡 ---- */

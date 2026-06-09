@@ -217,11 +217,13 @@ class MedicalOrder(Base):
 
 
 class Feedback(Base):
-    """AI 回复反馈"""
+    """AI 回复反馈（支持孕妇/护士/医生三端）"""
     __tablename__ = "feedback"
 
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    pregnant_id = Column(String(64), nullable=True, comment="关联孕妇ID（护士/医生反馈时可选）")
+    feedback_role = Column(String(16), nullable=False, default="pregnant", index=True, comment="反馈来源角色: pregnant|nurse|doctor")
+    user_id = Column(String(64), nullable=True, index=True, comment="反馈用户ID（护士/医生的用户ID）")
     message_id = Column(String(64), nullable=False, comment="前端消息ID")
     rating = Column(String(16), nullable=False, comment="thumbs_up/thumbs_down")
     comment = Column(Text, nullable=True, comment="可选评论")

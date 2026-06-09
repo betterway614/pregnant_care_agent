@@ -213,18 +213,31 @@ def _ensure_audit_log_table():
 
 
 def _ensure_feedback_audit_link():
-    """为已有 feedback 表添加 audit_log_id 列（幂等）"""
+    """为已有 feedback 表添加新列（幂等）：audit_log_id, feedback_role, user_id"""
     import sqlalchemy as sa
     try:
         inspector = sa.inspect(engine)
         if "feedback" in inspector.get_table_names():
             fb_cols = {c["name"] for c in inspector.get_columns("feedback")}
-            if "audit_log_id" not in fb_cols:
-                with engine.begin() as conn:
+            with engine.begin() as conn:
+                if "audit_log_id" not in fb_cols:
                     conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN audit_log_id INTEGER"))
-                logger.info("feedback 表添加 audit_log_id 列")
-            else:
-                logger.info("feedback.audit_log_id 已存在，跳过")
+                    logger.info("feedback 表添加 audit_log_id 列")
+                if "feedback_role" not in fb_cols:
+                    conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN feedback_role VARCHAR(16) NOT NULL DEFAULT 'pregnant'"))
+                    logger.info("feedback 表添加 feedback_role 列")
+                if "user_id" not in fb_cols:
+                    conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN user_id VARCHAR(64)"))
+                    logger.info("feedback 表添加 user_id 列")
+            # 放宽 pregnant_id 约束（护士/医生反馈可能不关联孕妇）
+            # SQLite 不支持 ALTER COLUMN，仅对 PostgreSQL 生效
+            if settings.db_type == "postgres":
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(sa.text("ALTER TABLE feedback ALTER COLUMN pregnant_id DROP NOT NULL"))
+                    logger.info("feedback.pregnant_id 放宽为可空")
+                except Exception:
+                    pass  # 已经是可空的
     except Exception as e:
         logger.warning("feedback 迁移跳过: {}", e)
 

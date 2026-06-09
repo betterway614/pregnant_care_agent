@@ -337,6 +337,34 @@ def get_feedback_audit_summary(
     )
     feedback_linked = len(logs_with_feedback)
 
+    # 按角色聚合（从 Feedback 表直接查询）
+    role_rows = (
+        db.query(
+            Feedback.feedback_role,
+            func.count(Feedback.id).label("total"),
+            func.sum(func.cast(Feedback.rating == "thumbs_up", db.bind.dialect.name == "postgresql" and func.cast or func.count)).label("up_count"),
+        )
+        .filter(Feedback.created_at >= dt_from, Feedback.created_at < dt_to)
+        .group_by(Feedback.feedback_role)
+        .all()
+    )
+    # 兼容 SQLite 的角色聚合
+    all_feedbacks = (
+        db.query(Feedback)
+        .filter(Feedback.created_at >= dt_from, Feedback.created_at < dt_to)
+        .all()
+    )
+    role_stats: dict[str, dict] = {}
+    for fb in all_feedbacks:
+        r = fb.feedback_role or "pregnant"
+        if r not in role_stats:
+            role_stats[r] = {"total": 0, "thumbs_up": 0, "thumbs_down": 0}
+        role_stats[r]["total"] += 1
+        if fb.rating == "thumbs_up":
+            role_stats[r]["thumbs_up"] += 1
+        else:
+            role_stats[r]["thumbs_down"] += 1
+
     return {
         "feedback_coverage": {
             "total_audit_logs": total_logs or 0,
@@ -354,6 +382,16 @@ def get_feedback_audit_summary(
                 "avg_tokens": round(s["total_tokens"] / s["total_feedback"]) if s["total_feedback"] > 0 else 0,
             }
             for v, s in sorted(variant_stats.items(), key=lambda x: x[1]["total_feedback"], reverse=True)
+        ],
+        "by_role": [
+            {
+                "feedback_role": r,
+                "total": s["total"],
+                "thumbs_up": s["thumbs_up"],
+                "thumbs_down": s["thumbs_down"],
+                "satisfaction_rate": round(s["thumbs_up"] / s["total"] * 100, 1) if s["total"] > 0 else 0,
+            }
+            for r, s in sorted(role_stats.items(), key=lambda x: x[1]["total"], reverse=True)
         ],
     }
 

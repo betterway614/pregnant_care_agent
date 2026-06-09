@@ -58,19 +58,25 @@ audit_log_id = Column(Integer, Index)  # → agent_audit_logs.id
 - 写入 `AgentAuditLog`（汇总）+ `ToolCallDetail`（明细）两张表
 - 返回审计日志 ID，供反馈关联使用
 
-### 3. 反馈关联
+### 3. 反馈关联（三端支持）
 
-提交反馈时支持 `audit_log_id` 参数：
+提交反馈时支持 `audit_log_id` + `feedback_role` 参数：
 ```
 POST /api/v1/feedback
 {
-  "pregnant_id": "P001",
   "message_id": "msg-123",
   "rating": "thumbs_down",
-  "audit_log_id": 42  // ← 新增：关联到具体 Agent 调用
+  "feedback_role": "nurse",       // pregnant | nurse | doctor
+  "pregnant_id": "P001",          // 孕妇端必填；护士/医生端可选
+  "audit_log_id": 42              // 关联到具体 Agent 调用
 }
 ```
 系统自动反写 `AgentAuditLog.feedback_rating`，实现双向关联。
+
+前端三端均已集成反馈按钮：
+- 孕妇端 `PregnantChat.vue`：👍👎 按钮，`feedback_role: 'pregnant'`
+- 护士端 `NurseAIChat.vue`：👍👎 按钮，`feedback_role: 'nurse'`
+- 医生端 `DoctorAIChat.vue`：👍👎 按钮，`feedback_role: 'doctor'`
 
 ### 4. 新增管理端 API
 

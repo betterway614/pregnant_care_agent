@@ -32,11 +32,19 @@ export const chatApi = {
     client.delete(`/chat/conversation/${pregnantId}`, { params: { session_id: sessionId } }),
 }
 
-// 用户反馈
+// 用户反馈（支持孕妇/护士/医生三端）
 export const feedbackApi = {
-  submit: (data: { pregnant_id: string; message_id: string; rating: string; comment?: string; session_id?: string }) =>
-    client.post('/feedback', data),
-  getStats: (pregnantId?: string) => client.get('/feedback/stats', { params: { pregnant_id: pregnantId } }),
+  submit: (data: {
+    message_id: string
+    rating: string
+    pregnant_id?: string
+    feedback_role?: 'pregnant' | 'nurse' | 'doctor'
+    comment?: string
+    session_id?: string
+    audit_log_id?: number
+  }) => client.post('/feedback', data),
+  getStats: (pregnantId?: string, feedbackRole?: string) =>
+    client.get('/feedback/stats', { params: { pregnant_id: pregnantId, feedback_role: feedbackRole } }),
 }
 
 // 排期
