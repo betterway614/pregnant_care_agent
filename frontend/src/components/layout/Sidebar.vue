@@ -91,7 +91,7 @@ function switchRole() {
     nurse: '/nurse/dashboard',
     doctor: '/doctor/dashboard',
     pregnant: '/pregnant/chat',
-    admin: '/nurse/dashboard',
+    admin: '/admin/dashboard',
   }
   router.push(paths[selectedRole.value])
 }

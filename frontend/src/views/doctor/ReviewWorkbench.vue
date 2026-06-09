@@ -55,8 +55,16 @@
       <el-col :span="7" style="height: 100%">
         <div class="content-card" style="height: 100%; display: flex; flex-direction: column">
           <div class="content-card__header">
-            <span class="content-card__title">高危预警列表</span>
-            <el-tag size="small">{{ groupedAlerts.length }}组 / {{ alertList.length }}条</el-tag>
+            <span class="content-card__title">预警列表</span>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-select v-model="filterLevel" size="small" style="width: 90px" @change="loadAlerts" placeholder="全部级别">
+                <el-option label="全部" value="" />
+                <el-option label="红色" value="RED" />
+                <el-option label="橙色" value="ORANGE" />
+                <el-option label="黄色" value="YELLOW" />
+              </el-select>
+              <el-tag size="small">{{ groupedAlerts.length }}组 / {{ alertList.length }}条</el-tag>
+            </div>
           </div>
           <div class="content-card__body" style="flex: 1; overflow-y: auto; padding: 0" v-loading="loading">
             <div
@@ -648,6 +656,7 @@ const appStore = useAppStore()
 // 数据状态
 const loading = ref(false)
 const showHistorical = ref(false)
+const filterLevel = ref('')
 const detailLoading = ref(false)
 const pregnantInfoLoading = ref(false)
 const submitting = ref(false)
@@ -891,7 +900,8 @@ async function selectAlert(alert: Alert) {
 async function loadAlerts() {
   loading.value = true
   try {
-    const params: any = { level: 'RED' }
+    const params: any = {}
+    if (filterLevel.value) params.level = filterLevel.value
     if (!showHistorical.value) {
       params.status = 'pending,escalated'
     }

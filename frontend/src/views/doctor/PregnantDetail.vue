@@ -2,8 +2,8 @@
   <div class="page-container">
     <!-- 页面头部 -->
     <div class="page-header">
-      <el-button text @click="$router.back()">
-        <el-icon><ArrowLeft /></el-icon> 返回
+      <el-button text @click="$router.push('/doctor/patients')">
+        <el-icon><ArrowLeft /></el-icon> 返回孕妇列表
       </el-button>
       <h1 class="page-title">{{ pregnantInfo?.display_name || '孕妇详情' }}</h1>
       <span v-if="pregnantInfo?.gestational_age_days" class="header-subtitle">
@@ -14,6 +14,19 @@
           {{ tag }}
         </el-tag>
       </div>
+    </div>
+
+    <!-- 快捷操作栏 -->
+    <div class="action-bar" v-if="pregnantInfo">
+      <el-button type="primary" @click="triggerFollowUp">
+        <el-icon><Document /></el-icon> 触发随访
+      </el-button>
+      <el-button type="warning" @click="viewAlerts">
+        <el-icon><WarningFilled /></el-icon> 查看预警
+      </el-button>
+      <el-button type="success" @click="generateOrder">
+        <el-icon><EditPen /></el-icon> 生成医嘱
+      </el-button>
     </div>
 
     <!-- 主内容区 -->
@@ -113,8 +126,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, WarningFilled } from '@element-plus/icons-vue'
-import { pregnantApi } from '@/api/endpoints'
+import { ArrowLeft, WarningFilled, Document, EditPen } from '@element-plus/icons-vue'
+import { pregnantApi, followUpApi } from '@/api/endpoints'
+import { ElMessage } from 'element-plus'
 import FollowUpTimeline from '@/components/followup/FollowUpTimeline.vue'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import type { TrendSeries, FollowUpHistoryRecord, Pregnant, LabTrendItem } from '@/types'
@@ -123,6 +137,22 @@ import { LAB_METRIC_OPTIONS, LAB_METRIC_META } from '@/utils/labelMaps'
 const route = useRoute()
 const router = useRouter()
 const pregnantId = computed(() => route.params.pregnantId as string)
+
+/** 快捷操作 */
+async function triggerFollowUp() {
+  try {
+    await followUpApi.trigger(pregnantId.value)
+    ElMessage.success('随访已触发')
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '触发失败')
+  }
+}
+function viewAlerts() {
+  router.push({ path: '/doctor/review', query: { pregnant_id: pregnantId.value } })
+}
+function generateOrder() {
+  router.push({ path: '/doctor/orders', query: { pregnant_id: pregnantId.value, action: 'generate' } })
+}
 
 const pregnantInfo = ref<Pregnant | null>(null)
 const followUpRecords = ref<FollowUpHistoryRecord[]>([])
@@ -389,5 +419,12 @@ onMounted(() => {
   color: var(--text-muted);
   margin-left: auto;
   font-weight: 500;
+}
+
+.action-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 </style>

@@ -35,6 +35,9 @@
         <el-option label="已升级" value="ESCALATED" />
         <el-option label="已自动关闭" value="AUTO_DISMISSED" />
       </el-select>
+      <el-select v-model="filterPregnantId" placeholder="按孕妇筛选" clearable filterable style="width: 180px" @change="handleFilterChange">
+        <el-option v-for="p in pregnantList" :key="p.pregnant_id" :label="p.display_name" :value="p.pregnant_id" />
+      </el-select>
       <span class="text-light filter-summary" v-if="alerts.length">
         共 {{ alerts.length }} 条预警
       </span>
@@ -205,7 +208,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Refresh, Bell, MagicStick } from '@element-plus/icons-vue'
-import { alertApi } from '@/api/endpoints'
+import { alertApi, dashboardApi } from '@/api/endpoints'
 import { getNurseWebSocketClient } from '@/utils/websocket'
 import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -224,6 +227,8 @@ const submitting = ref(false)
 const alerts = ref<Alert[]>([])
 const filterLevel = ref('')
 const filterStatus = ref('')
+const filterPregnantId = ref('')
+const pregnantList = ref<any[]>([])
 
 /** 详情抽屉 */
 const detailVisible = ref(false)
@@ -313,6 +318,7 @@ async function fetchAlerts() {
     const params: Record<string, string> = {}
     if (filterLevel.value) params.level = filterLevel.value
     if (filterStatus.value) params.status = filterStatus.value
+    if (filterPregnantId.value) params.pregnant_id = filterPregnantId.value
     const res = await alertApi.list(params)
     alerts.value = res.data || []
   } catch (err: any) {
@@ -375,6 +381,10 @@ async function handleReview(row: any, action: string) {
 
 onMounted(() => {
   fetchAlerts()
+  // 加载孕妇列表用于筛选
+  dashboardApi.pregnant({ page_size: 100 }).then(res => {
+    pregnantList.value = res.data?.data || []
+  }).catch(() => {})
   wsClient = getNurseWebSocketClient(nurseId.value)
   wsClient.onAlert(() => {
     fetchAlerts()

@@ -29,6 +29,9 @@
         <el-option label="已确认" value="confirmed" />
         <el-option label="已归档" value="archived" />
       </el-select>
+      <el-select v-model="filterPregnantId" placeholder="按孕妇筛选" clearable filterable style="width: 180px" @change="handleFilterChange">
+        <el-option v-for="p in pregnant" :key="p.pregnant_id" :label="p.display_name" :value="p.pregnant_id" />
+      </el-select>
       <el-button :icon="Refresh" @click="fetchRecords" :loading="loading" circle />
     </div>
 
@@ -491,6 +494,7 @@ const loading = ref(false)
 const error = ref('')
 const records = ref<FollowUpRecord[]>([])
 const filterStatus = ref('')
+const filterPregnantId = ref('')
 const todayOnly = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -649,6 +653,7 @@ async function fetchRecords() {
   try {
     const params: Record<string, any> = {}
     if (filterStatus.value) params.status = filterStatus.value
+    if (filterPregnantId.value) params.pregnant_id = filterPregnantId.value
     if (todayOnly.value) params.today_only = true
     const res = await followUpApi.list(params)
     records.value = res.data || []
@@ -886,6 +891,7 @@ onMounted(() => {
     todayOnly.value = true
   }
   fetchRecords()
+  fetchPatients()
   fetchRecommendations()
   startPolling()
 })
