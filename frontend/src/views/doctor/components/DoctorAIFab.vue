@@ -242,7 +242,7 @@ function togglePanel() {
 async function loadPatientList() {
   try {
     const res = await dashboardApi.pregnant()
-    pregnantList.value = res.data || []
+    pregnantList.value = res.data?.data || []
   } catch { /* ignore */ }
 }
 

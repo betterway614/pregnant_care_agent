@@ -66,6 +66,7 @@ const menuItems = computed(() => {
   if (role === 'nurse') {
     return [
       { path: '/nurse/dashboard', title: '工作台', icon: 'DataBoard' },
+      { path: '/nurse/patients', title: '孕妇管理', icon: 'User' },
       { path: '/nurse/followup', title: '随访管理', icon: 'Document' },
       { path: '/nurse/schedule', title: '排期管理', icon: 'Calendar' },
       { path: '/nurse/alerts', title: '预警管理', icon: 'WarningFilled' },
@@ -74,6 +75,7 @@ const menuItems = computed(() => {
   if (role === 'doctor') {
     return [
       { path: '/doctor/dashboard', title: '工作台', icon: 'DataBoard' },
+      { path: '/doctor/patients', title: '孕妇管理', icon: 'User' },
       { path: '/doctor/fgr-board', title: 'FGR看板', icon: 'Monitor' },
       { path: '/doctor/review', title: '审核工作台', icon: 'Edit' },
       { path: '/doctor/orders', title: '医嘱管理', icon: 'DocumentCopy' },

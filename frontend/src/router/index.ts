@@ -31,6 +31,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, role: 'nurse' },
     children: [
       { path: 'dashboard', name: 'NurseDashboard', component: () => import('@/views/nurse/NurseDashboard.vue'), meta: { title: '工作台' } },
+      { path: 'patients', name: 'NursePatientList', component: () => import('@/views/shared/PatientList.vue'), meta: { title: '孕妇管理' } },
       { path: 'followup', name: 'FollowUpList', component: () => import('@/views/nurse/FollowUpList.vue'), meta: { title: '随访管理' } },
       { path: 'schedule', name: 'ScheduleManage', component: () => import('@/views/nurse/ScheduleManage.vue'), meta: { title: '排期管理' } },
       { path: 'alerts', name: 'AlertList', component: () => import('@/views/nurse/AlertList.vue'), meta: { title: '预警管理' } },
@@ -45,6 +46,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, role: 'doctor' },
     children: [
       { path: 'dashboard', name: 'DoctorDashboard', component: () => import('@/views/doctor/DoctorDashboard.vue'), meta: { title: '工作台' } },
+      { path: 'patients', name: 'DoctorPatientList', component: () => import('@/views/shared/PatientList.vue'), meta: { title: '孕妇管理' } },
       { path: 'fgr-board', name: 'FGRBoard', component: () => import('@/views/doctor/FGRBoard.vue'), meta: { title: 'FGR看板' } },
       { path: 'review/:alertId?', name: 'ReviewWorkbench', component: () => import('@/views/doctor/ReviewWorkbench.vue'), meta: { title: '审核工作台' } },
       { path: 'orders', name: 'OrderManage', component: () => import('@/views/doctor/OrderManage.vue'), meta: { title: '医嘱管理' } },

@@ -116,7 +116,7 @@ async function loadPatientList() {
   if (props.patients?.length) return
   try {
     const res = await dashboardApi.pregnant()
-    localPatients.value = res.data || []
+    localPatients.value = res.data?.data || []
   } catch { /* ignore */ }
 }
 

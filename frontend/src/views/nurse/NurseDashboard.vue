@@ -285,7 +285,7 @@ const statCards = computed(() => [
     color: 'var(--primary)',
     bgColor: 'var(--primary-bg)',
     subLabel: '当前管理',
-    route: null,
+    route: '/nurse/patients',
   },
   {
     icon: 'WarningFilled',

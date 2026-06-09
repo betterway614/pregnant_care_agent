@@ -624,7 +624,7 @@ async function loadData() {
       dashboardApi.pregnant(),
       alertApi.list({ status: 'pending,escalated,confirmed' }),
     ])
-    pregnant.value = pregnantRes.data || []
+    pregnant.value = pregnantRes.data?.data || []
     alertList.value = alertsRes.data || []
     await loadPatientImages()
   } catch (err) {

@@ -667,7 +667,7 @@ async function fetchPatients() {
   pregnantLoading.value = true
   try {
     const res = await dashboardApi.pregnant()
-    pregnant.value = res.data || []
+    pregnant.value = res.data?.data || []
   } catch (err) {
     console.error('加载孕妇列表失败:', err)
   } finally {

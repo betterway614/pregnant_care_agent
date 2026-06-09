@@ -136,7 +136,8 @@ export const orderApi = {
 // 统计
 export const dashboardApi = {
   stats: () => client.get<DashboardStats>('/dashboard/stats'),
-  pregnant: () => client.get<Pregnant[]>('/dashboard/pregnant'),
+  pregnant: (params?: { search?: string; risk_tag?: string; has_alert?: boolean; page?: number; page_size?: number }) =>
+    client.get<{ total: number; page: number; page_size: number; data: Pregnant[] }>('/dashboard/pregnant', { params }),
   pregnantDetail: (pregnantId: string) => client.get(`/dashboard/pregnant/${pregnantId}`),
 }
 

@@ -1,8 +1,9 @@
 """数据统计 API"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import timedelta
+from typing import Optional
 from ..database import get_db
 from ..models import Pregnant, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..core.auth import get_current_user, TokenPayload
@@ -81,11 +82,73 @@ def get_dashboard_stats(db: Session = Depends(get_db), user: TokenPayload = Depe
 
 
 @router.get("/pregnant")
-def get_pregnant_list(db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
-    """获取孕妇列表"""
-    pregnant = db.query(Pregnant).order_by(Pregnant.created_at.desc()).limit(50).all()
-    return [
-        {
+def get_pregnant_list(
+    db: Session = Depends(get_db),
+    user: TokenPayload = Depends(get_current_user),
+    search: Optional[str] = Query(None, description="按姓名/昵称搜索"),
+    has_alert: Optional[bool] = Query(None, description="仅有活跃预警的孕妇"),
+    risk_tag: Optional[str] = Query(None, description="按风险标签筛选"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+):
+    """获取孕妇列表（支持搜索、筛选、分页，含聚合信息）
+
+    返回孕妇基本信息 + 活跃预警数 + 最近随访日期，用于孕妇管理页面。
+    """
+    query = db.query(Pregnant)
+
+    # 搜索：姓名或昵称模糊匹配
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            Pregnant.display_name.ilike(pattern) | Pregnant.nickname.ilike(pattern)
+        )
+
+    # 筛选：按风险标签
+    if risk_tag:
+        # SQLite/PostgreSQL 通用：用 LIKE 匹配 JSON 数组中的值
+        query = query.filter(Pregnant.risk_tags.like(f'%"{risk_tag}"%'))
+
+    # 总数（分页用）
+    total = query.count()
+
+    # 分页
+    offset = (page - 1) * page_size
+    patients = query.order_by(Pregnant.created_at.desc()).offset(offset).limit(page_size).all()
+
+    if not patients:
+        return {"total": total, "page": page, "page_size": page_size, "data": []}
+
+    pregnant_ids = [p.pregnant_id for p in patients]
+
+    # 批量查询每位孕妇的活跃预警数（PENDING + ESCALATED）
+    alert_counts = dict(
+        db.query(Alert.pregnant_id, func.count(Alert.id))
+        .filter(Alert.pregnant_id.in_(pregnant_ids), Alert.status.in_(["PENDING", "ESCALATED"]))
+        .group_by(Alert.pregnant_id)
+        .all()
+    )
+
+    # 批量查询每位孕妇的最近随访日期
+    latest_followups = dict(
+        db.query(
+            FollowUpRecord.pregnant_id,
+            func.max(FollowUpRecord.follow_up_date),
+        )
+        .filter(FollowUpRecord.pregnant_id.in_(pregnant_ids))
+        .group_by(FollowUpRecord.pregnant_id)
+        .all()
+    )
+
+    # 若 has_alert=True，只返回有活跃预警的孕妇（内存过滤，数据量小）
+    result = []
+    for p in patients:
+        ac = alert_counts.get(p.pregnant_id, 0)
+        if has_alert and ac == 0:
+            total -= 1
+            continue
+        lfu = latest_followups.get(p.pregnant_id)
+        result.append({
             "pregnant_id": p.pregnant_id,
             "display_name": p.display_name,
             "nickname": p.nickname,
@@ -95,9 +158,11 @@ def get_pregnant_list(db: Session = Depends(get_db), user: TokenPayload = Depend
             "edd": p.edd.isoformat() if p.edd else None,
             "risk_tags": p.risk_tags or [],
             "created_at": p.created_at.isoformat() if p.created_at else None,
-        }
-        for p in pregnant
-    ]
+            "active_alert_count": ac,
+            "latest_followup_date": lfu.isoformat() if lfu else None,
+        })
+
+    return {"total": total, "page": page, "page_size": page_size, "data": result}
 
 
 @router.get("/pregnant/{pregnant_id}")

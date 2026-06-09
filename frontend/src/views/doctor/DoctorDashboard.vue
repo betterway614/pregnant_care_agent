@@ -457,7 +457,7 @@ async function showQuickOrderDialog() {
   quickOrderDialogVisible.value = true
   try {
     const res = await dashboardApi.pregnant()
-    pregnantList.value = res.data || []
+    pregnantList.value = res.data?.data || []
   } catch (err) {
     console.error('加载孕妇列表失败:', err)
   }
