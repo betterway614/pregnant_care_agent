@@ -13,7 +13,7 @@ from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
 from .routers import websocket, tts, admin, knowledge
-from .models import AgentAuditLog
+from .models import AgentAuditLog, ToolCallDetail, Feedback
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -176,18 +176,57 @@ def _ensure_pregnant_columns():
 
 
 def _ensure_audit_log_table():
-
-    """为已有数据库添加 agent_audit_logs 表（幂等）"""
+    """为已有数据库添加 agent_audit_logs 表 + tool_call_details 表（幂等）"""
     import sqlalchemy as sa
     try:
         inspector = sa.inspect(engine)
-        if "agent_audit_logs" not in inspector.get_table_names():
-            Base.metadata.create_all(bind=engine, tables=[AgentAuditLog.__table__])
-            logger.info("agent_audit_logs 表创建完成")
+        existing = inspector.get_table_names()
+        tables_to_create = []
+        if "agent_audit_logs" not in existing:
+            tables_to_create.append(AgentAuditLog.__table__)
+        if "tool_call_details" not in existing:
+            tables_to_create.append(ToolCallDetail.__table__)
+        if tables_to_create:
+            Base.metadata.create_all(bind=engine, tables=tables_to_create)
+            logger.info("审计表创建完成: {}", [t.name for t in tables_to_create])
         else:
-            logger.info("agent_audit_logs 表已存在，跳过创建")
+            logger.info("审计表已存在，跳过创建")
+
+        # 为已有 agent_audit_logs 表添加新列（tool_call_count, tool_error_count, feedback_*）
+        if "agent_audit_logs" in existing:
+            audit_cols = {c["name"] for c in inspector.get_columns("agent_audit_logs")}
+            with engine.begin() as conn:
+                if "tool_call_count" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN tool_call_count INTEGER DEFAULT 0"))
+                    logger.info("agent_audit_logs 添加 tool_call_count 列")
+                if "tool_error_count" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN tool_error_count INTEGER DEFAULT 0"))
+                    logger.info("agent_audit_logs 添加 tool_error_count 列")
+                if "feedback_rating" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN feedback_rating VARCHAR(16)"))
+                    logger.info("agent_audit_logs 添加 feedback_rating 列")
+                if "feedback_comment" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN feedback_comment TEXT"))
+                    logger.info("agent_audit_logs 添加 feedback_comment 列")
     except Exception as e:
-        logger.warning("agent_audit_logs 迁移跳过: {}", e)
+        logger.warning("审计表迁移跳过: {}", e)
+
+
+def _ensure_feedback_audit_link():
+    """为已有 feedback 表添加 audit_log_id 列（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        if "feedback" in inspector.get_table_names():
+            fb_cols = {c["name"] for c in inspector.get_columns("feedback")}
+            if "audit_log_id" not in fb_cols:
+                with engine.begin() as conn:
+                    conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN audit_log_id INTEGER"))
+                logger.info("feedback 表添加 audit_log_id 列")
+            else:
+                logger.info("feedback.audit_log_id 已存在，跳过")
+    except Exception as e:
+        logger.warning("feedback 迁移跳过: {}", e)
 
 
 @asynccontextmanager
@@ -221,6 +260,7 @@ async def lifespan(app: FastAPI):
     # 对已有 SQLite 数据库添加 Alert 新列
     _ensure_alert_columns()
     _ensure_audit_log_table()
+    _ensure_feedback_audit_link()
 
     # FGR 模式：按 .env 的 FGR_BACKEND 加载真实预测模型
     if settings.fgr_mode:

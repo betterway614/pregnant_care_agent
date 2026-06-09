@@ -410,19 +410,25 @@ def test_ensure_audit_log_table_creates_table():
 
 
 def test_ensure_audit_log_table_skips_existing():
-    """验证迁移函数在表已存在时跳过"""
+    """验证迁移函数在所有审计表已存在时跳过 create_all"""
     from app.main import _ensure_audit_log_table
     from unittest.mock import MagicMock, patch
 
     mock_inspector = MagicMock()
-    mock_inspector.get_table_names.return_value = ["agent_audit_logs", "other_table"]
+    # 包含 agent_audit_logs 和 tool_call_details 两个表
+    mock_inspector.get_table_names.return_value = ["agent_audit_logs", "tool_call_details", "other_table"]
+    mock_inspector.get_columns.return_value = [
+        {"name": "id"}, {"name": "tool_call_count"}, {"name": "tool_error_count"},
+        {"name": "feedback_rating"}, {"name": "feedback_comment"},
+    ]
 
     with patch("sqlalchemy.inspect", return_value=mock_inspector):
         with patch("app.main.Base") as mock_base:
-            with patch("app.main.logger") as mock_logger:
-                _ensure_audit_log_table()
-                # 不应调用 create_all
-                mock_base.metadata.create_all.assert_not_called()
+            with patch("app.main.engine") as mock_engine:
+                with patch("app.main.logger") as mock_logger:
+                    _ensure_audit_log_table()
+                    # 不应调用 create_all（所有表都已存在）
+                    mock_base.metadata.create_all.assert_not_called()
 
 
 # ==================== list_audit_sessions 测试 ====================

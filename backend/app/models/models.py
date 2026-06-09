@@ -226,6 +226,7 @@ class Feedback(Base):
     rating = Column(String(16), nullable=False, comment="thumbs_up/thumbs_down")
     comment = Column(Text, nullable=True, comment="可选评论")
     session_id = Column(String(64), nullable=True)
+    audit_log_id = Column(Integer, nullable=True, index=True, comment="关联的审计日志ID（agent_audit_logs.id）")
     created_at = Column(DateTime, default=beijing_now)
 
 
@@ -323,7 +324,11 @@ class AgentAuditLog(Base):
     input_tokens = Column(Integer, default=0, comment="输入token数")
     output_tokens = Column(Integer, default=0, comment="输出token数")
     total_tokens = Column(Integer, default=0, comment="总token数")
-    tool_calls_json = Column(JSON, nullable=True, comment="工具调用链")
+    tool_calls_json = Column(JSON, nullable=True, comment="工具调用链（兼容旧格式）")
+    tool_call_count = Column(Integer, default=0, comment="工具调用总次数")
+    tool_error_count = Column(Integer, default=0, comment="工具调用失败次数")
+    feedback_rating = Column(String(16), nullable=True, comment="用户反馈: thumbs_up/thumbs_down（冗余字段，便于聚合查询）")
+    feedback_comment = Column(Text, nullable=True, comment="用户反馈评论（冗余字段）")
     model_id = Column(String(64), nullable=False, comment="模型ID")
     provider = Column(String(32), nullable=False, comment="模型提供商")
     total_latency_ms = Column(Integer, default=0, comment="总耗时ms")
@@ -331,3 +336,23 @@ class AgentAuditLog(Base):
     guardrail_triggered = Column(Boolean, default=False, comment="安全护栏触发")
     response_preview = Column(String(200), nullable=True, comment="回复预览(前200字)")
     created_at = Column(DateTime, default=beijing_now, index=True, comment="创建时间")
+
+
+class ToolCallDetail(Base):
+    """工具调用详情 — 每次 tool call 一条记录（AgentAuditLog 的子表）"""
+    __tablename__ = "tool_call_details"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    audit_log_id = Column(Integer, nullable=False, index=True, comment="关联的审计日志ID（agent_audit_logs.id）")
+    tool_name = Column(String(64), nullable=False, index=True, comment="工具名称")
+    tool_args_json = Column(JSON, nullable=True, comment="工具入参（脱敏后）")
+    success = Column(Boolean, default=True, comment="调用是否成功")
+    error_message = Column(Text, nullable=True, comment="失败时的错误信息")
+    latency_ms = Column(Integer, nullable=True, comment="单次工具调用耗时ms")
+    result_preview = Column(String(200), nullable=True, comment="工具返回值预览（前200字）")
+    call_order = Column(Integer, default=0, comment="在同一轮Agent run中的调用顺序（从1开始）")
+    created_at = Column(DateTime, default=beijing_now, comment="创建时间")
+
+    __table_args__ = (
+        Index('idx_tool_call_audit', 'audit_log_id', 'call_order'),
+    )

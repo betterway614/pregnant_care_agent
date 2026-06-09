@@ -3,7 +3,7 @@ from .models import (
     FollowUpRecord, FgrAssessment, Alert, MedicalOrder,
     FetalMovementSession, Feedback, MentalHealthScreening,
     ConversationMessage, DailyHealthSummary,
-    NurseDoctorIssue, AgentAuditLog,
+    NurseDoctorIssue, AgentAuditLog, ToolCallDetail,
 )
 
 __all__ = [
@@ -11,5 +11,5 @@ __all__ = [
     "FollowUpRecord", "FgrAssessment", "Alert", "MedicalOrder",
     "FetalMovementSession", "Feedback", "MentalHealthScreening",
     "ConversationMessage", "DailyHealthSummary",
-    "NurseDoctorIssue", "AgentAuditLog",
+    "NurseDoctorIssue", "AgentAuditLog", "ToolCallDetail",
 ]

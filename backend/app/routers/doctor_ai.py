@@ -36,23 +36,66 @@ def _save_doctor_audit_log(
     intent_classification: str | None,
     run_response,
     total_latency_ms: int,
-) -> None:
-    """写入医生端审计日志（同步，可靠优先）"""
+) -> int | None:
+    """写入医生端审计日志 + 工具调用详情（同步，可靠优先）
+
+    Returns:
+        审计日志 ID，失败返回 None
+    """
+    from ..models import ToolCallDetail
+
     try:
         if run_response is None:
             run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
         metrics = getattr(run_response, "metrics", None)
         content = getattr(run_response, "content", None) or ""
 
-        tool_calls_detail = []
+        tool_calls_legacy = []
+        tool_call_details = []
+        call_order = 0
         if hasattr(run_response, "messages") and run_response.messages:
             for msg in run_response.messages:
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     for tc in msg.tool_calls:
-                        tool_calls_detail.append({
-                            "name": getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", ""),
-                            "success": True,
-                        })
+                        call_order += 1
+                        tool_name = getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", "")
+                        tool_args = None
+                        raw_args = getattr(tc, "arguments", None) or getattr(tc, "function", {}).get("arguments", None)
+                        if raw_args:
+                            if isinstance(raw_args, str):
+                                try:
+                                    import json as _json
+                                    tool_args = _json.loads(raw_args)
+                                except Exception:
+                                    tool_args = {"_raw": raw_args[:500]}
+                            elif isinstance(raw_args, dict):
+                                tool_args = raw_args
+                            if tool_args and isinstance(tool_args, dict):
+                                tool_args = {
+                                    k: (str(v)[:200] if isinstance(v, str) and len(v) > 200 else v)
+                                    for k, v in tool_args.items()
+                                }
+
+                        result_preview = None
+                        error_message = None
+                        success = True
+                        tc_result = getattr(tc, "result", None) or getattr(tc, "output", None)
+                        if tc_result is not None:
+                            result_str = str(tc_result)
+                            result_preview = result_str[:200] if result_str else None
+                            if isinstance(tc_result, dict) and "error" in tc_result:
+                                success = False
+                                error_message = str(tc_result["error"])[:500]
+
+                        tool_calls_legacy.append({"name": tool_name, "success": success})
+                        tool_call_details.append(ToolCallDetail(
+                            tool_name=tool_name,
+                            tool_args_json=tool_args,
+                            success=success,
+                            error_message=error_message,
+                            result_preview=result_preview,
+                            call_order=call_order,
+                        ))
 
         model_id = ""
         if metrics and hasattr(metrics, "details") and metrics.details:
@@ -61,6 +104,8 @@ def _save_doctor_audit_log(
                     model_id = getattr(m, "id", "") or model_id
         if not model_id and hasattr(run_response, "model"):
             model_id = run_response.model or ""
+
+        tool_error_count = sum(1 for d in tool_call_details if not d.success)
 
         db = SessionLocal()
         try:
@@ -74,21 +119,32 @@ def _save_doctor_audit_log(
                 input_tokens=metrics.input_tokens if metrics else 0,
                 output_tokens=metrics.output_tokens if metrics else 0,
                 total_tokens=metrics.total_tokens if metrics else 0,
-                tool_calls_json=tool_calls_detail if tool_calls_detail else None,
+                tool_calls_json=tool_calls_legacy if tool_calls_legacy else None,
+                tool_call_count=len(tool_calls_legacy),
+                tool_error_count=tool_error_count,
                 model_id=model_id or "unknown",
                 provider="openai",
                 total_latency_ms=total_latency_ms,
                 response_preview=content[:200] if content else None,
             )
             db.add(log_entry)
+            db.flush()
+
+            for detail in tool_call_details:
+                detail.audit_log_id = log_entry.id
+                db.add(detail)
+
             db.commit()
+            return log_entry.id
         except Exception:
             db.rollback()
+            return None
         finally:
             db.close()
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("审计日志写入失败: %s", e)
+        return None
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 

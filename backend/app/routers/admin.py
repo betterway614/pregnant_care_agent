@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Literal
 from ..database import get_db
-from ..models import AgentAuditLog
+from ..models import AgentAuditLog, ToolCallDetail, Feedback
 from ..config import settings
 from ..core.auth import get_current_user, TokenPayload
 import logging
@@ -107,44 +107,6 @@ def get_token_by_agent(
     }
 
 
-@router.get("/audit/sessions/{session_id}")
-def get_session_audit(session_id: str, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
-    """单次会话完整审计链"""
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="需要管理员权限")
-
-    logs = (
-        db.query(AgentAuditLog)
-        .filter(AgentAuditLog.session_id == session_id)
-        .order_by(AgentAuditLog.created_at)
-        .all()
-    )
-
-    return {
-        "session_id": session_id,
-        "run_count": len(logs),
-        "runs": [
-            {
-                "id": log.id,
-                "agent_role": log.agent_role,
-                "agent_variant": log.agent_variant,
-                "intent_classification": log.intent_classification,
-                "routed_agent": log.routed_agent,
-                "input_tokens": log.input_tokens,
-                "output_tokens": log.output_tokens,
-                "total_tokens": log.total_tokens,
-                "tool_calls": log.tool_calls_json,
-                "model_id": log.model_id,
-                "total_latency_ms": log.total_latency_ms,
-                "guardrail_triggered": log.guardrail_triggered,
-                "response_preview": log.response_preview,
-                "created_at": log.created_at.isoformat() if log.created_at else None,
-            }
-            for log in logs
-        ],
-    }
-
-
 @router.get("/audit/sessions")
 def list_audit_sessions(
     page: int = Query(1, ge=1, description="页码"),
@@ -201,11 +163,308 @@ def list_audit_sessions(
                 "output_tokens": log.output_tokens,
                 "total_tokens": log.total_tokens,
                 "total_latency_ms": log.total_latency_ms,
+                "tool_call_count": log.tool_call_count or 0,
+                "tool_error_count": log.tool_error_count or 0,
                 "guardrail_triggered": log.guardrail_triggered,
+                "feedback_rating": log.feedback_rating,
                 "response_preview": log.response_preview,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }
             for log in rows
+        ],
+    }
+
+
+@router.get("/audit/tool-calls/stats")
+def get_tool_call_stats(
+    date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    date_to: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """工具调用统计：按工具名称聚合调用次数、成功率、平均耗时"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+    dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+    rows = (
+        db.query(
+            ToolCallDetail.tool_name,
+            func.count(ToolCallDetail.id).label("call_count"),
+            func.sum(func.cast(ToolCallDetail.success, db.bind.dialect.name == "postgresql" and func.cast or func.count)).label("success_count"),
+            func.avg(ToolCallDetail.latency_ms).label("avg_latency_ms"),
+        )
+        .filter(ToolCallDetail.created_at >= dt_from, ToolCallDetail.created_at < dt_to)
+        .group_by(ToolCallDetail.tool_name)
+        .order_by(func.count(ToolCallDetail.id).desc())
+        .all()
+    )
+
+    # 兼容 SQLite/PostgreSQL 的成功计数
+    all_rows = (
+        db.query(ToolCallDetail)
+        .filter(ToolCallDetail.created_at >= dt_from, ToolCallDetail.created_at < dt_to)
+        .all()
+    )
+    tool_stats: dict[str, dict] = {}
+    for r in all_rows:
+        name = r.tool_name
+        if name not in tool_stats:
+            tool_stats[name] = {"call_count": 0, "success_count": 0, "total_latency": 0, "latency_count": 0}
+        tool_stats[name]["call_count"] += 1
+        if r.success:
+            tool_stats[name]["success_count"] += 1
+        if r.latency_ms is not None:
+            tool_stats[name]["total_latency"] += r.latency_ms
+            tool_stats[name]["latency_count"] += 1
+
+    return {
+        "data": [
+            {
+                "tool_name": name,
+                "call_count": s["call_count"],
+                "success_count": s["success_count"],
+                "error_count": s["call_count"] - s["success_count"],
+                "success_rate": round(s["success_count"] / s["call_count"] * 100, 1) if s["call_count"] > 0 else 0,
+                "avg_latency_ms": round(s["total_latency"] / s["latency_count"], 1) if s["latency_count"] > 0 else None,
+            }
+            for name, s in sorted(tool_stats.items(), key=lambda x: x[1]["call_count"], reverse=True)
+        ]
+    }
+
+
+@router.get("/audit/tool-calls/errors")
+def get_tool_call_errors(
+    date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    date_to: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    tool_name: str | None = Query(None, description="工具名称筛选"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """工具调用错误详情列表"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+    dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+    query = db.query(ToolCallDetail).filter(
+        ToolCallDetail.created_at >= dt_from,
+        ToolCallDetail.created_at < dt_to,
+        ToolCallDetail.success == False,
+    )
+    if tool_name:
+        query = query.filter(ToolCallDetail.tool_name == tool_name)
+
+    total = query.count()
+    rows = (
+        query.order_by(ToolCallDetail.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "data": [
+            {
+                "id": r.id,
+                "audit_log_id": r.audit_log_id,
+                "tool_name": r.tool_name,
+                "error_message": r.error_message,
+                "tool_args": r.tool_args_json,
+                "call_order": r.call_order,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/audit/feedback/summary")
+def get_feedback_audit_summary(
+    date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    date_to: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """反馈 ↔ 审计关联统计：按 agent_variant 聚合满意度、工具调用次数、平均 token"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+    dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+    # 有反馈的审计日志
+    logs_with_feedback = (
+        db.query(AgentAuditLog)
+        .filter(
+            AgentAuditLog.created_at >= dt_from,
+            AgentAuditLog.created_at < dt_to,
+            AgentAuditLog.feedback_rating.isnot(None),
+        )
+        .all()
+    )
+
+    # 按 variant 聚合
+    variant_stats: dict[str, dict] = {}
+    for log in logs_with_feedback:
+        v = log.agent_variant
+        if v not in variant_stats:
+            variant_stats[v] = {
+                "total_feedback": 0, "thumbs_up": 0, "thumbs_down": 0,
+                "total_tool_calls": 0, "total_tokens": 0,
+            }
+        variant_stats[v]["total_feedback"] += 1
+        if log.feedback_rating == "thumbs_up":
+            variant_stats[v]["thumbs_up"] += 1
+        else:
+            variant_stats[v]["thumbs_down"] += 1
+        variant_stats[v]["total_tool_calls"] += log.tool_call_count or 0
+        variant_stats[v]["total_tokens"] += log.total_tokens or 0
+
+    # 无反馈的审计日志统计
+    total_logs = (
+        db.query(func.count(AgentAuditLog.id))
+        .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
+        .scalar()
+    )
+    feedback_linked = len(logs_with_feedback)
+
+    return {
+        "feedback_coverage": {
+            "total_audit_logs": total_logs or 0,
+            "feedback_linked": feedback_linked,
+            "coverage_rate": round(feedback_linked / total_logs * 100, 1) if total_logs else 0,
+        },
+        "by_variant": [
+            {
+                "agent_variant": v,
+                "total_feedback": s["total_feedback"],
+                "thumbs_up": s["thumbs_up"],
+                "thumbs_down": s["thumbs_down"],
+                "satisfaction_rate": round(s["thumbs_up"] / s["total_feedback"] * 100, 1) if s["total_feedback"] > 0 else 0,
+                "avg_tool_calls": round(s["total_tool_calls"] / s["total_feedback"], 1) if s["total_feedback"] > 0 else 0,
+                "avg_tokens": round(s["total_tokens"] / s["total_feedback"]) if s["total_feedback"] > 0 else 0,
+            }
+            for v, s in sorted(variant_stats.items(), key=lambda x: x[1]["total_feedback"], reverse=True)
+        ],
+    }
+
+
+@router.get("/audit/tool-calls/by-session/{session_id}")
+def get_tool_calls_by_session(
+    session_id: str,
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单次会话的完整工具调用链"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    # 先获取该 session 的所有 audit_log IDs
+    audit_logs = (
+        db.query(AgentAuditLog)
+        .filter(AgentAuditLog.session_id == session_id)
+        .order_by(AgentAuditLog.created_at)
+        .all()
+    )
+    if not audit_logs:
+        return {"session_id": session_id, "runs": []}
+
+    audit_ids = [log.id for log in audit_logs]
+
+    # 查询所有关联的工具调用详情
+    tool_calls = (
+        db.query(ToolCallDetail)
+        .filter(ToolCallDetail.audit_log_id.in_(audit_ids))
+        .order_by(ToolCallDetail.audit_log_id, ToolCallDetail.call_order)
+        .all()
+    )
+
+    # 按 audit_log_id 分组
+    tool_map: dict[int, list] = {}
+    for tc in tool_calls:
+        tool_map.setdefault(tc.audit_log_id, []).append(tc)
+
+    return {
+        "session_id": session_id,
+        "runs": [
+            {
+                "audit_log_id": log.id,
+                "agent_role": log.agent_role,
+                "agent_variant": log.agent_variant,
+                "intent": log.intent_classification,
+                "tool_call_count": log.tool_call_count or 0,
+                "tool_error_count": log.tool_error_count or 0,
+                "total_tokens": log.total_tokens,
+                "total_latency_ms": log.total_latency_ms,
+                "feedback_rating": log.feedback_rating,
+                "tool_calls": [
+                    {
+                        "tool_name": tc.tool_name,
+                        "success": tc.success,
+                        "error_message": tc.error_message,
+                        "tool_args": tc.tool_args_json,
+                        "result_preview": tc.result_preview,
+                        "call_order": tc.call_order,
+                        "latency_ms": tc.latency_ms,
+                    }
+                    for tc in tool_map.get(log.id, [])
+                ],
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in audit_logs
+        ],
+    }
+
+
+@router.get("/audit/sessions/{session_id}")
+def get_session_audit(session_id: str, user: TokenPayload = Depends(get_current_user), db: Session = Depends(get_db)):
+    """单次会话完整审计链（增强版：含工具调用次数和反馈）"""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    logs = (
+        db.query(AgentAuditLog)
+        .filter(AgentAuditLog.session_id == session_id)
+        .order_by(AgentAuditLog.created_at)
+        .all()
+    )
+
+    return {
+        "session_id": session_id,
+        "run_count": len(logs),
+        "total_tool_calls": sum(log.tool_call_count or 0 for log in logs),
+        "total_tool_errors": sum(log.tool_error_count or 0 for log in logs),
+        "runs": [
+            {
+                "id": log.id,
+                "agent_role": log.agent_role,
+                "agent_variant": log.agent_variant,
+                "intent_classification": log.intent_classification,
+                "routed_agent": log.routed_agent,
+                "input_tokens": log.input_tokens,
+                "output_tokens": log.output_tokens,
+                "total_tokens": log.total_tokens,
+                "tool_calls": log.tool_calls_json,
+                "tool_call_count": log.tool_call_count or 0,
+                "tool_error_count": log.tool_error_count or 0,
+                "feedback_rating": log.feedback_rating,
+                "feedback_comment": log.feedback_comment,
+                "model_id": log.model_id,
+                "total_latency_ms": log.total_latency_ms,
+                "guardrail_triggered": log.guardrail_triggered,
+                "response_preview": log.response_preview,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
         ],
     }
 
@@ -217,7 +476,7 @@ def get_audit_dashboard(
     user: TokenPayload = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """仪表盘概览：汇总卡片 + 日趋势 + 变体分布 + 最近记录"""
+    """仪表盘概览（增强版）：汇总卡片 + 日趋势 + 变体分布 + 工具统计 + 反馈关联"""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
@@ -230,6 +489,9 @@ def get_audit_dashboard(
             func.sum(AgentAuditLog.total_tokens).label("total_tokens"),
             func.avg(AgentAuditLog.total_latency_ms).label("avg_latency_ms"),
             func.count(func.distinct(AgentAuditLog.session_id)).label("active_sessions"),
+            func.sum(AgentAuditLog.tool_call_count).label("total_tool_calls"),
+            func.sum(AgentAuditLog.tool_error_count).label("total_tool_errors"),
+            func.count(AgentAuditLog.feedback_rating).label("feedback_count"),
         )
         .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
         .first()
@@ -240,6 +502,7 @@ def get_audit_dashboard(
             func.date(AgentAuditLog.created_at).label("date"),
             func.sum(AgentAuditLog.total_tokens).label("total_tokens"),
             func.count(AgentAuditLog.id).label("call_count"),
+            func.sum(AgentAuditLog.tool_call_count).label("tool_calls"),
         )
         .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
         .group_by(func.date(AgentAuditLog.created_at))
@@ -252,6 +515,8 @@ def get_audit_dashboard(
             AgentAuditLog.agent_variant,
             func.count(AgentAuditLog.id).label("count"),
             func.sum(AgentAuditLog.total_tokens).label("total_tokens"),
+            func.sum(AgentAuditLog.tool_call_count).label("tool_calls"),
+            func.sum(AgentAuditLog.tool_error_count).label("tool_errors"),
         )
         .filter(AgentAuditLog.created_at >= dt_from, AgentAuditLog.created_at < dt_to)
         .group_by(AgentAuditLog.agent_variant)
@@ -272,12 +537,19 @@ def get_audit_dashboard(
             "total_tokens": summary_row.total_tokens or 0,
             "avg_latency_ms": round(summary_row.avg_latency_ms or 0, 1),
             "active_sessions": summary_row.active_sessions or 0,
+            "total_tool_calls": summary_row.total_tool_calls or 0,
+            "total_tool_errors": summary_row.total_tool_errors or 0,
+            "tool_error_rate": round(
+                (summary_row.total_tool_errors or 0) / (summary_row.total_tool_calls or 1) * 100, 1
+            ),
+            "feedback_count": summary_row.feedback_count or 0,
         },
         "daily_trend": [
             {
                 "date": str(row.date),
                 "total_tokens": row.total_tokens or 0,
                 "call_count": row.call_count,
+                "tool_calls": row.tool_calls or 0,
             }
             for row in daily_trend
         ],
@@ -286,6 +558,8 @@ def get_audit_dashboard(
                 "agent_variant": row.agent_variant,
                 "count": row.count,
                 "total_tokens": row.total_tokens or 0,
+                "tool_calls": row.tool_calls or 0,
+                "tool_errors": row.tool_errors or 0,
             }
             for row in variant_dist
         ],
@@ -298,7 +572,10 @@ def get_audit_dashboard(
                 "intent_classification": log.intent_classification,
                 "total_tokens": log.total_tokens,
                 "total_latency_ms": log.total_latency_ms,
+                "tool_call_count": log.tool_call_count or 0,
+                "tool_error_count": log.tool_error_count or 0,
                 "guardrail_triggered": log.guardrail_triggered,
+                "feedback_rating": log.feedback_rating,
                 "response_preview": (log.response_preview or "")[:100],
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }
