@@ -44,13 +44,13 @@ class TestRAGConfig:
 
     def test_embedding_model_default(self):
         from app.config import Settings
-        s = Settings()
+        s = Settings(_env_file=None)
         assert s.embedding_model == "text-embedding-v3"
         assert s.embedding_dimensions == 1024
 
     def test_embedding_api_url_default_dashscope(self):
         from app.config import Settings
-        s = Settings()
+        s = Settings(_env_file=None)
         assert "dashscope" in s.embedding_api_url
 
     def test_agno_database_url_postgres(self):
@@ -94,13 +94,15 @@ class TestAgnoKnowledge:
     def test_knowledge_vector_db_is_pgvector(self):
         """验证向量数据库类型为 PgVector"""
         from agno.vectordb.pgvector import PgVector
-        from app.core.agno_knowledge import knowledge
-        assert isinstance(knowledge.vector_db, PgVector)
+        from app.core.agno_knowledge import create_knowledge
+        k = create_knowledge()
+        assert isinstance(k.vector_db, PgVector)
 
     def test_knowledge_max_results(self):
         """验证 max_results 配置正确传递"""
-        from app.core.agno_knowledge import knowledge
-        assert knowledge.max_results == 5
+        from app.core.agno_knowledge import create_knowledge
+        k = create_knowledge()
+        assert k.max_results == 5
 
 
 # ==================== Chat Router 集成测试 ====================

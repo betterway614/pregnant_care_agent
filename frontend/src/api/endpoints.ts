@@ -51,7 +51,7 @@ export const scheduleApi = {
 export const followUpApi = {
   trigger: (pregnantId: string, templateId?: string) =>
     client.post('/followup/trigger', { pregnant_id: pregnantId, template_id: templateId }),
-  list: (params?: { status?: string; pregnant_id?: string }) =>
+  list: (params?: { status?: string; pregnant_id?: string; today_only?: boolean }) =>
     client.get<FollowUpRecord[]>('/followup/records', { params }),
   confirm: (recordId: string, status: string = 'confirmed', extra?: { reviewer_id?: string; review_comment?: string; ai_snapshot?: Record<string, any> }) =>
     client.put(`/followup/records/${recordId}/confirm`, { status, ...(extra || {}) }),

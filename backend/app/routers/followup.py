@@ -12,6 +12,7 @@ from typing import Optional, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
@@ -73,14 +74,24 @@ def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db)):
 @router.get("/records", response_model=list[FollowUpRecordResponse])
 def get_records(status: Optional[str] = None,
                 pregnant_id: Optional[str] = None,
+                today_only: bool = False,
                 db: Session = Depends(get_db)):
-    """获取随访记录列表"""
+    """获取随访记录列表
+
+    Args:
+        status: 逗号分隔的状态筛选
+        pregnant_id: 按孕妇ID筛选
+        today_only: 仅返回 follow_up_date 为今天的记录（用于工作台"今日随访"卡片对齐）
+    """
     query = db.query(FollowUpRecord)
     if status:
         statuses = [s.strip() for s in status.split(",")]
         query = query.filter(FollowUpRecord.status.in_(statuses))
     if pregnant_id:
         query = query.filter(FollowUpRecord.pregnant_id == pregnant_id)
+    if today_only:
+        today = beijing_now().date()
+        query = query.filter(func.date(FollowUpRecord.follow_up_date) == today)
     records = query.order_by(FollowUpRecord.follow_up_date.desc()).limit(100).all()
 
     # 关联孕妇姓名

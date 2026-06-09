@@ -205,6 +205,8 @@ const stats = ref<DashboardStats>({
   pending_reviews: 0,
   high_risk_count: 0,
   weekly_new_pregnant: 0,
+  pending_orders: 0,
+  fgr_high_risk_count: 0,
 })
 const recentAlerts = ref<Alert[]>([])
 const recentFollowUps = ref<FollowUpRecord[]>([])
@@ -259,6 +261,19 @@ function handleNewAlert(alert: Alert) {
     type: alert.level === 'RED' ? 'error' : alert.level === 'ORANGE' ? 'warning' : 'info',
     duration: 8000,
   })
+}
+
+/** 处理预警状态变更（确认/驳回/升级等） */
+function handleAlertStatusChange(alert: Alert) {
+  // 预警被处理后，待处理计数递减
+  if (stats.value.pending_alerts > 0) {
+    stats.value = {
+      ...stats.value,
+      pending_alerts: stats.value.pending_alerts - 1,
+    }
+  }
+  // 从列表中移除已处理的预警
+  recentAlerts.value = recentAlerts.value.filter(a => a.id !== alert.id)
 }
 
 /** 统计卡片配置 */
@@ -325,8 +340,8 @@ async function fetchData() {
   try {
     const [statsRes, alertsRes, followupsRes] = await Promise.all([
       dashboardApi.stats(),
-      alertApi.list({ status: 'pending' }),
-      followUpApi.list(),
+      alertApi.list({ status: 'pending,escalated' }),
+      followUpApi.list({ today_only: true }),
     ])
     stats.value = statsRes.data
     recentAlerts.value = (alertsRes.data || []).slice(0, 5)
@@ -352,12 +367,14 @@ onMounted(() => {
   // WebSocket 实时接收预警
   wsClient.connect()
   wsClient.onAlert(handleNewAlert)
+  wsClient.onAlertStatusChange(handleAlertStatusChange)
   // 非预警数据定时刷新
   refreshTimer = setInterval(fetchData, REFRESH_INTERVAL)
 })
 
 onUnmounted(() => {
   wsClient.offAlert(handleNewAlert)
+  wsClient.offAlertStatusChange(handleAlertStatusChange)
   wsClient.disconnect()
   if (refreshTimer) {
     clearInterval(refreshTimer)

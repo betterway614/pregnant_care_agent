@@ -43,7 +43,7 @@ async def test_send_alert_to_doctor_success(ws_manager):
     websocket = AsyncMock()
     await ws_manager.connect(websocket, "doctor-1")
 
-    alert_data = {"id": "alert-1", "message": "测试预警"}
+    alert_data = {"id": "alert-1", "message": "测试预警", "action": "created"}
     result = await ws_manager.send_alert_to_doctor("doctor-1", alert_data)
 
     assert result is True

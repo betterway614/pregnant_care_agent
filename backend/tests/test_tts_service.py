@@ -74,12 +74,12 @@ class TestTTSModeResolver:
             mode = get_tts_mode("pregnant")
             assert mode == "local"
 
-    def test_default_mode_is_browser(self):
-        """默认模式为 browser"""
+    def test_default_mode_is_local(self):
+        """默认模式为 local"""
         from app.config import Settings
 
         s = Settings(_env_file=None)
-        assert s.tts_mode == "browser"
+        assert s.tts_mode == "local"
 
 
 class TestTTSRouterConfig:

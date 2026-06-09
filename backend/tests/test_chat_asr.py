@@ -109,7 +109,7 @@ class TestBuildMultimodalInputWithASR:
         assert result == "你好"
 
     def test_image_message_ignores_transcribed_text(self):
-        """图片消息忽略 transcribed_text，始终返回多模态数组"""
+        """图片消息忽略 transcribed_text，返回文本字符串（图片通过 _build_images 单独传递）"""
         from app.core.agno_chat_handler import _build_multimodal_input
         from app.schemas import ChatSendRequest
 
@@ -121,9 +121,8 @@ class TestBuildMultimodalInputWithASR:
             audio_format="jpeg",
         )
         result = _build_multimodal_input(req, transcribed_text="图片描述文字")
-        assert isinstance(result, list)
-        assert result[0]["type"] == "text"
-        assert result[1]["type"] == "image_url"
+        assert isinstance(result, str)
+        assert "图片" in result
 
 
 # ======================================================================

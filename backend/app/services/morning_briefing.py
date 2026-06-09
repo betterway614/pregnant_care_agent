@@ -69,10 +69,11 @@ class MorningBriefingService:
         total_patients = len(all_patients)
 
         # ------------------------------------------------------------------
-        # 2. 批量拉取所有 PENDING 预警，按 pregnant_id 分组
+        # 2. 批量拉取所有 PENDING + ESCALATED 预警，按 pregnant_id 分组
+        #    （与 dashboard stats 的 pending_alerts 口径一致）
         # ------------------------------------------------------------------
         pending_alerts: list[Alert] = (
-            db.query(Alert).filter(Alert.status == "PENDING").all()
+            db.query(Alert).filter(Alert.status.in_(["PENDING", "ESCALATED"])).all()
         )
         alerts_by_patient: dict[str, list[Alert]] = {}
         for alert in pending_alerts:

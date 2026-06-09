@@ -43,8 +43,9 @@ class WebSocketManager:
 
         websocket = self.active_connections[doctor_id]
         try:
+            msg_type = self._resolve_message_type(alert_data)
             await websocket.send_json({
-                "type": "NEW_ALERT",
+                "type": msg_type,
                 "data": alert_data
             })
             logger.info(f"已发送预警给医生 {doctor_id}")
@@ -124,7 +125,12 @@ class WebSocketManager:
     # ==================== 路由推送 ====================
 
     async def route_alert(self, alert_data: dict):
-        """按级别和来源角色路由推送"""
+        """按级别和来源角色路由推送
+
+        action 为 'created' 时发送 NEW_ALERT 类型，
+        其他 action（confirm/dismiss/escalate/downgrade 等）发送 ALERT_STATUS_CHANGE 类型，
+        前端据此决定是递增还是刷新计数。
+        """
         level = alert_data.get("level", "YELLOW")
         source_role = alert_data.get("source_role", "system")
         action = alert_data.get("action", "")
@@ -143,15 +149,23 @@ class WebSocketManager:
         elif level in ("ORANGE", "YELLOW"):
             await self._broadcast_to_nurses_only(alert_data)
 
+    @staticmethod
+    def _resolve_message_type(alert_data: dict) -> str:
+        """根据 action 决定消息类型：新建用 NEW_ALERT，状态变更用 ALERT_STATUS_CHANGE"""
+        action = alert_data.get("action", "")
+        if action == "created":
+            return "NEW_ALERT"
+        return "ALERT_STATUS_CHANGE"
+
     async def _broadcast_all(self, alert_data: dict):
         """广播给所有在线的医生和护士"""
+        msg_type = self._resolve_message_type(alert_data)
+        payload = {"type": msg_type, "data": alert_data}
+
         disconnected_doctors = []
         for doctor_id, websocket in self.active_connections.items():
             try:
-                await websocket.send_json({
-                    "type": "NEW_ALERT",
-                    "data": alert_data
-                })
+                await websocket.send_json(payload)
             except Exception:
                 disconnected_doctors.append(doctor_id)
 
@@ -161,10 +175,7 @@ class WebSocketManager:
         disconnected_nurses = []
         for nurse_id, websocket in self.nurse_connections.items():
             try:
-                await websocket.send_json({
-                    "type": "NEW_ALERT",
-                    "data": alert_data
-                })
+                await websocket.send_json(payload)
             except Exception:
                 disconnected_nurses.append(nurse_id)
 
@@ -173,13 +184,13 @@ class WebSocketManager:
 
     async def _broadcast_to_nurses_only(self, alert_data: dict):
         """仅广播给所有在线的护士"""
+        msg_type = self._resolve_message_type(alert_data)
+        payload = {"type": msg_type, "data": alert_data}
+
         disconnected_nurses = []
         for nurse_id, websocket in self.nurse_connections.items():
             try:
-                await websocket.send_json({
-                    "type": "NEW_ALERT",
-                    "data": alert_data
-                })
+                await websocket.send_json(payload)
             except Exception:
                 disconnected_nurses.append(nurse_id)
 

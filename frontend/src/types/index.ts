@@ -203,6 +203,8 @@ export interface DashboardStats {
   pending_reviews: number
   high_risk_count: number
   weekly_new_pregnant: number
+  pending_orders: number
+  fgr_high_risk_count: number
 }
 
 // 对话

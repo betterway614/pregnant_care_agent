@@ -10,6 +10,7 @@ export const useAppStore = defineStore('app', () => {
   const stats = ref<DashboardStats>({
     total_pregnant: 0, pending_alerts: 0, today_followups: 0,
     pending_reviews: 0, high_risk_count: 0, weekly_new_pregnant: 0,
+    pending_orders: 0, fgr_high_risk_count: 0,
   })
   // ===== 认证相关状态 =====
   const currentPregnantId = ref(localStorage.getItem('currentPregnantId') || '')

@@ -104,7 +104,9 @@ def get_orders(status: Optional[str] = None,
     """获取医嘱列表"""
     query = db.query(MedicalOrder)
     if status:
-        query = query.filter(MedicalOrder.status == status)
+        # 支持逗号分隔的多状态查询（如 "draft,pending_sign"），大小写不敏感
+        status_list = [s.strip().lower() for s in status.split(",")]
+        query = query.filter(MedicalOrder.status.in_(status_list))
     if pregnant_id:
         query = query.filter(MedicalOrder.pregnant_id == pregnant_id)
     orders = query.order_by(MedicalOrder.created_at.desc()).limit(50).all()

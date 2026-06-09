@@ -4,6 +4,7 @@
  */
 
 type AlertCallback = (alert: any) => void;
+type AlertStatusChangeCallback = (alert: any) => void;
 type StateChangeCallback = (state: string) => void;
 
 export type WSRole = 'doctor' | 'nurse';
@@ -16,6 +17,7 @@ class WebSocketClient {
   private maxReconnectAttempts = 5;
   private reconnectInterval = 3000;
   private alertCallbacks: AlertCallback[] = [];
+  private alertStatusChangeCallbacks: AlertStatusChangeCallback[] = [];
   private stateChangeCallbacks: StateChangeCallback[] = [];
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private intentionalClose = false;
@@ -65,6 +67,8 @@ class WebSocketClient {
           const data = JSON.parse(event.data);
           if (data.type === 'NEW_ALERT') {
             this.alertCallbacks.forEach(callback => callback(data.data));
+          } else if (data.type === 'ALERT_STATUS_CHANGE') {
+            this.alertStatusChangeCallbacks.forEach(callback => callback(data.data));
           }
         } catch (error) {
           console.error('解析 WebSocket 消息失败:', error);
@@ -135,6 +139,14 @@ class WebSocketClient {
 
   offAlert(callback: AlertCallback): void {
     this.alertCallbacks = this.alertCallbacks.filter(cb => cb !== callback);
+  }
+
+  onAlertStatusChange(callback: AlertStatusChangeCallback): void {
+    this.alertStatusChangeCallbacks.push(callback);
+  }
+
+  offAlertStatusChange(callback: AlertStatusChangeCallback): void {
+    this.alertStatusChangeCallbacks = this.alertStatusChangeCallbacks.filter(cb => cb !== callback);
   }
 
   onStateChange(callback: StateChangeCallback): void {

@@ -232,6 +232,8 @@ const stats = ref<DashboardStats>({
   pending_reviews: 0,
   high_risk_count: 0,
   weekly_new_pregnant: 0,
+  pending_orders: 0,
+  fgr_high_risk_count: 0,
 })
 const recentAlerts = ref<Alert[]>([])
 const pendingOrders = ref<MedicalOrder[]>([])
@@ -264,7 +266,7 @@ const statCards = computed(() => [
   },
   {
     icon: 'Edit',
-    value: stats.value.pending_reviews,
+    value: stats.value.pending_orders,
     label: '待签署医嘱',
     color: '#1976D2',
     bgColor: '#E3F2FD',
@@ -273,7 +275,7 @@ const statCards = computed(() => [
   },
   {
     icon: 'DataAnalysis',
-    value: fgrHighRiskCount.value,
+    value: stats.value.fgr_high_risk_count,
     label: 'FGR高风险数',
     color: '#7B1FA2',
     bgColor: '#F3E5F5',
@@ -281,13 +283,6 @@ const statCards = computed(() => [
     route: '/doctor/fgr-board',
   },
 ])
-
-/** FGR高风险计数（从预警中统计） */
-const fgrHighRiskCount = computed(() =>
-  recentAlerts.value.filter(
-    (a) => a.level === 'RED' && a.trigger_source?.toLowerCase().includes('fgr')
-  ).length
-)
 
 /** 预警概览统计 */
 const alertStats = computed(() => ({
@@ -373,11 +368,8 @@ function handleNewAlert(alert: Alert) {
   // 添加到列表顶部
   recentAlerts.value.unshift(alert)
 
-  // 更新统计
+  // 更新统计（high_risk_count 基于 FGR 评估去重，不在 WebSocket 中递增，由定时刷新更新）
   stats.value.pending_alerts++
-  if (alert.level === 'RED' || alert.level === 'ORANGE') {
-    stats.value.high_risk_count++
-  }
 
   // 显示通知
   ElNotification({
@@ -389,6 +381,18 @@ function handleNewAlert(alert: Alert) {
 }
 
 /**
+ * 处理预警状态变更回调（确认/驳回/降级等）
+ */
+function handleAlertStatusChange(alert: Alert) {
+  // 预警被处理后，待处理计数递减
+  if (stats.value.pending_alerts > 0) {
+    stats.value.pending_alerts--
+  }
+  // 从列表中移除已处理的预警
+  recentAlerts.value = recentAlerts.value.filter(a => a.id !== alert.id)
+}
+
+/**
  * 初始化 WebSocket
  */
 function initWebSocket() {
@@ -397,6 +401,7 @@ function initWebSocket() {
 
   // 注册预警回调
   wsClient.value.onAlert(handleNewAlert)
+  wsClient.value.onAlertStatusChange(handleAlertStatusChange)
 
   // 注册连接状态回调
   wsClient.value.onStateChange(handleStateChange)
@@ -492,6 +497,7 @@ onUnmounted(() => {
   // 清理 WebSocket 连接和回调
   if (wsClient.value) {
     wsClient.value.offAlert(handleNewAlert)
+    wsClient.value.offAlertStatusChange(handleAlertStatusChange)
     wsClient.value.offStateChange(handleStateChange)
     wsClient.value.disconnect()
   }
