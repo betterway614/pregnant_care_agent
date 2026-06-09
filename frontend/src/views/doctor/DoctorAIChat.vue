@@ -67,33 +67,31 @@
             <div v-else v-html="renderMarkdown(msg.content)" />
           </div>
         </div>
-        <!-- TTS 播报按钮（助手消息） -->
-        <button
-          v-if="msg.role === 'assistant' && !msg.loading && msg.content"
-          class="tts-btn"
-          :class="{ 'tts-btn--speaking': ttsSpeakingId === msg.id }"
-          @click="toggleTTS(msg)"
-          title="语音播报"
-        >
-          <el-icon :size="13"><Headset /></el-icon>
-        </button>
-        <!-- 反馈按钮（助手消息） -->
-        <div v-if="msg.role === 'assistant' && !msg.loading && msg.content" class="feedback-btns">
+        <!-- 消息操作按钮组（助手消息） -->
+        <div v-if="msg.role === 'assistant' && !msg.loading && msg.content" class="msg-actions">
           <button
-            class="feedback-btn"
-            :class="{ 'feedback-btn--active': msg.feedback === 'thumbs_up' }"
+            class="msg-action-btn"
+            :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_up' }"
             @click="handleFeedback(msg, 'thumbs_up')"
             title="有帮助"
           >
-            <el-icon :size="13"><Check /></el-icon>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </button>
           <button
-            class="feedback-btn"
-            :class="{ 'feedback-btn--active': msg.feedback === 'thumbs_down' }"
+            class="msg-action-btn"
+            :class="{ 'msg-action-btn--active': msg.feedback === 'thumbs_down' }"
             @click="handleFeedback(msg, 'thumbs_down')"
             title="需改进"
           >
-            <el-icon :size="13"><Close /></el-icon>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button
+            class="msg-action-btn"
+            :class="{ 'msg-action-btn--active': ttsSpeakingId === msg.id }"
+            @click="toggleTTS(msg)"
+            title="语音播报"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
           </button>
         </div>
       </div>
@@ -172,7 +170,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, Loading, Check, Close, Microphone, VideoPlay, VideoPause, Headset, Mute, Document } from '@element-plus/icons-vue'
+import { Promotion, Loading, Microphone, VideoPlay, VideoPause, Mute, Document } from '@element-plus/icons-vue'
 import { doctorAiApi, chatApi, feedbackApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
@@ -913,70 +911,40 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ---- TTS 播报按钮 ---- */
-.tts-btn {
+/* ---- 消息操作按钮组 ---- */
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  align-self: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.doctor-chat__msg:hover .msg-actions { opacity: 1; }
+@media (hover: none) { .msg-actions { opacity: 0.7; } }
+
+.msg-action-btn {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px solid #d1fae5;
-  background: white;
-  color: #6ee7b7;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  align-self: flex-end;
+  transition: background 0.2s, color 0.2s;
 }
 
-.tts-btn:hover {
-  color: #10b981;
-  border-color: #a7f3d0;
-}
-
-.tts-btn--speaking {
-  color: #10b981;
-  border-color: #34d399;
-  background: #ecfdf5;
-  animation: ttsPulse 1s ease-in-out infinite;
-}
-
-@keyframes ttsPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-}
-
-/* ---- 反馈按钮 ---- */
-.feedback-btns {
-  display: flex;
-  gap: 4px;
-  align-self: flex-end;
-}
-
-.feedback-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  border: 1px solid #d1fae5;
+.msg-action-btn:hover {
   background: white;
-  color: #6ee7b7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
+  color: #1e293b;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
-.feedback-btn:hover {
+.msg-action-btn--active {
   color: #10b981;
-  border-color: #a7f3d0;
-}
-
-.feedback-btn--active {
-  color: #10b981;
-  border-color: #34d399;
   background: #ecfdf5;
 }
 
