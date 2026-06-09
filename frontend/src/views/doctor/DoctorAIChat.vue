@@ -1,5 +1,18 @@
 <template>
   <div class="doctor-chat">
+    <!-- 顶部工具栏 -->
+    <div class="doctor-chat__toolbar">
+      <span class="toolbar-title">Dr.智 AI 助手</span>
+      <div class="toolbar-actions">
+        <button class="toolbar-action-btn" :class="{ 'toolbar-action-btn--active': autoPlayTTS }" @click="toggleAutoPlayTTS" :title="autoPlayTTS ? '关闭自动播报' : '开启自动播报'">
+          <el-icon :size="14"><Headset /></el-icon>
+        </button>
+        <button class="toolbar-action-btn" :class="{ 'toolbar-action-btn--active': isMuted }" @click="toggleMute" :title="isMuted ? '取消静音' : '静音'">
+          <el-icon :size="14"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
+        </button>
+      </div>
+    </div>
+
     <!-- 消息区域 -->
     <div class="doctor-chat__messages" ref="messagesRef">
       <div
@@ -25,14 +38,25 @@
             <span class="loading-dot" /><span class="loading-dot" /><span class="loading-dot" />
           </div>
           <!-- 消息内容 -->
-          <div v-else-if="msg.messageType === 'audio'" class="doctor-chat__audio">
-            <button class="audio-play-btn" @click="playAudio(msg)">
-              <el-icon :size="16"><VideoPlay v-if="!msg.isPlaying" /><VideoPause v-else /></el-icon>
-            </button>
-            <div class="audio-waveform">
-              <span v-for="i in 12" :key="i" class="audio-bar" :style="{ animationDelay: `${i * 0.05}s` }" />
+          <div v-else-if="msg.messageType === 'audio'" class="doctor-chat__audio-wrapper">
+            <div class="doctor-chat__audio">
+              <button class="audio-play-btn" @click="playAudio(msg)">
+                <el-icon :size="16"><VideoPlay v-if="!msg.isPlaying" /><VideoPause v-else /></el-icon>
+              </button>
+              <div class="audio-waveform">
+                <span v-for="i in 12" :key="i" class="audio-bar" :style="{ animationDelay: `${i * 0.05}s` }" />
+              </div>
+              <span class="audio-duration">{{ formatAudioDuration(msg.audioDuration || 0) }}</span>
+              <button class="audio-transcribe-btn" @click="handleAudioTranscribe(msg)" :title="msg.transcriptionVisible ? '隐藏文字' : '转文字'">
+                <el-icon :size="13"><Document /></el-icon>
+              </button>
             </div>
-            <span class="audio-duration">{{ formatAudioDuration(msg.audioDuration || 0) }}</span>
+            <div v-if="msg.transcriptionVisible && msg.transcribedText" class="audio-transcription">
+              {{ msg.transcribedText }}
+            </div>
+            <div v-else-if="msg.transcribing" class="audio-transcription audio-transcription--loading">
+              正在识别语音...
+            </div>
           </div>
           <div v-else class="doctor-chat__text">
             <StructuredAnalysisCard
@@ -129,8 +153,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset } from '@element-plus/icons-vue'
-import { doctorAiApi } from '@/api/endpoints'
+import { Promotion, Loading, Check, Microphone, VideoPlay, VideoPause, Headset, Mute, Document } from '@element-plus/icons-vue'
+import { doctorAiApi, chatApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
@@ -150,6 +174,9 @@ interface ChatMsg {
   audioUrl?: string
   audioDuration?: number
   isPlaying?: boolean
+  transcribedText?: string
+  transcribing?: boolean
+  transcriptionVisible?: boolean
 }
 
 const messages = ref<ChatMsg[]>([])
@@ -174,6 +201,8 @@ const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioR
 // ---- TTS 播报 ----
 const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'doctor' })
 const ttsSpeakingId = ref<string | null>(null)
+const autoPlayTTS = ref(false)
+const isMuted = ref(false)
 let currentAudioEl: HTMLAudioElement | null = null
 let ttsCheckInterval: ReturnType<typeof setInterval> | null = null
 
@@ -192,6 +221,66 @@ function toggleTTS(msg: ChatMsg) {
         if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
       }
     }, 500)
+  }
+}
+
+function toggleAutoPlayTTS() {
+  autoPlayTTS.value = !autoPlayTTS.value
+  if (!autoPlayTTS.value) {
+    stopTTS()
+    ttsSpeakingId.value = null
+  }
+}
+
+function toggleMute() {
+  isMuted.value = !isMuted.value
+}
+
+/** 自动播报助手消息 */
+function autoSpeakAssistant(msg: ChatMsg) {
+  if (autoPlayTTS.value && msg.content && !isMuted.value) {
+    ttsSpeakingId.value = msg.id
+    speak(cleanForTTS(msg.content))
+    const check = setInterval(() => {
+      if (!isSpeaking.value) {
+        ttsSpeakingId.value = null
+        clearInterval(check)
+      }
+    }, 500)
+  }
+}
+
+// ---- ASR 转录 ----
+async function handleAudioTranscribe(msg: ChatMsg) {
+  if (msg.transcribedText) {
+    msg.transcriptionVisible = !msg.transcriptionVisible
+    return
+  }
+  if (!msg.audioUrl) return
+
+  msg.transcribing = true
+  try {
+    const resp = await fetch(msg.audioUrl)
+    const blob = await resp.blob()
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.split(',')[1]
+      const format = msg.audioUrl?.includes('ogg') ? 'ogg' : msg.audioUrl?.includes('webm') ? 'webm' : 'wav'
+      try {
+        const res = await chatApi.asr({ audio_data: base64, audio_format: format })
+        msg.transcribedText = res.data.text || '（语音识别为空）'
+        msg.transcriptionVisible = true
+      } catch {
+        msg.transcribedText = '（语音识别失败）'
+        msg.transcriptionVisible = true
+      } finally {
+        msg.transcribing = false
+      }
+    }
+    reader.readAsDataURL(blob)
+  } catch {
+    msg.transcribing = false
   }
 }
 
@@ -280,7 +369,13 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           completedToolSteps.value = metadata?.tool_steps || []
           currentToolStep.value = null
           isStreaming.value = false
+          // 保存 ASR 转录文本到用户语音消息
+          if (metadata?.transcribed_text) {
+            const userAudioMsg = messages.value.find(m => m.role === 'user' && m.messageType === 'audio' && !m.transcribedText)
+            if (userAudioMsg) userAudioMsg.transcribedText = metadata.transcribed_text
+          }
           scrollToBottom()
+          autoSpeakAssistant(assistantMsg)
         },
         onError() {
           assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
@@ -361,6 +456,7 @@ async function handleSend() {
           currentToolStep.value = null
           isStreaming.value = false
           scrollToBottom()
+          autoSpeakAssistant(assistantMsg)
         },
         onError() {
           assistantMsg.content = '抱歉，Dr.智暂时无法回复。请稍后再试。'
@@ -870,5 +966,115 @@ onMounted(() => {
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+/* ---- 顶部工具栏 ---- */
+.doctor-chat__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(209, 250, 229, 0.6);
+  z-index: 10;
+}
+
+.toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbar-action-btn:hover {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+}
+
+.toolbar-action-btn--active {
+  color: #10b981;
+  background: #ecfdf5;
+}
+
+/* ---- 音频消息包装器 ---- */
+.doctor-chat__audio-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- 音频转录按钮 ---- */
+.audio-transcribe-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.audio-transcribe-btn:hover {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.audio-transcribe-btn:active {
+  transform: scale(0.9);
+}
+
+/* ---- 音频转录文本 ---- */
+.audio-transcription {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(100, 116, 139, 0.06);
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.1);
+}
+
+.audio-transcription--loading {
+  color: #94a3b8;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audio-transcription--loading::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid #d1fae5;
+  border-top-color: #10b981;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 </style>
