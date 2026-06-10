@@ -15,35 +15,47 @@ from .common import _resolve_pid
 def agno_evaluate_vital_rules(
     pregnant_id: str = "",
     run_context: RunContext | None = None,
-    sbp: float = 0,
-    dbp: float = 0,
-    weight: float = 0,
-    fetal_movement: float = 0,
-    fetal_movement_avg: float = 0,
-    weight_gain_weekly: float = 0,
-    emotion_score_avg_7d: float = 0,
-    blood_sugar_fasting: float = 0,
-    blood_sugar_postprandial: float = 0,
-    sleep_hours: float = 8,
+    sbp: float | None = None,
+    dbp: float | None = None,
+    weight: float | None = None,
+    fetal_movement: float | None = None,
+    fetal_movement_avg: float | None = None,
+    weight_gain_weekly: float | None = None,
+    emotion_score_avg_7d: float | None = None,
+    blood_sugar_fasting: float | None = None,
+    blood_sugar_postprandial: float | None = None,
+    sleep_hours: float | None = None,
     gest_week: float = 0,
 ) -> dict:
     """评估生命体征规则，返回触发的告警列表。用于检测异常指标。
+    未传入的指标不会参与评估（避免缺失数据被误判为异常值）。
     pregnant_id 可选，留空时自动使用当前登录用户。"""
     pid = _resolve_pid(pregnant_id, run_context)
     from ..rule_engine import rule_engine
 
-    ctx = {
-        "sbp": sbp, "dbp": dbp,
-        "weight": weight,
-        "fetal_movement": fetal_movement,
-        "fetal_movement_avg": fetal_movement_avg,
-        "weight_gain_weekly": weight_gain_weekly,
-        "emotion_score_avg_7d": emotion_score_avg_7d,
-        "blood_sugar_fasting": blood_sugar_fasting,
-        "blood_sugar_postprandial": blood_sugar_postprandial,
-        "sleep_hours": sleep_hours,
-        "gest_week": gest_week,
-    }
+    # 仅传入有值的指标，缺失指标不参与规则评估
+    # 例如：fetal_movement=0 会触发 RED "胎动极少"，但 None 不会
+    ctx = {"gest_week": gest_week}
+    if sbp is not None:
+        ctx["sbp"] = sbp
+    if dbp is not None:
+        ctx["dbp"] = dbp
+    if weight is not None:
+        ctx["weight"] = weight
+    if fetal_movement is not None:
+        ctx["fetal_movement"] = fetal_movement
+    if fetal_movement_avg is not None:
+        ctx["fetal_movement_avg"] = fetal_movement_avg
+    if weight_gain_weekly is not None:
+        ctx["weight_gain_weekly"] = weight_gain_weekly
+    if emotion_score_avg_7d is not None:
+        ctx["emotion_score_avg_7d"] = emotion_score_avg_7d
+    if blood_sugar_fasting is not None:
+        ctx["blood_sugar_fasting"] = blood_sugar_fasting
+    if blood_sugar_postprandial is not None:
+        ctx["blood_sugar_postprandial"] = blood_sugar_postprandial
+    if sleep_hours is not None:
+        ctx["sleep_hours"] = sleep_hours
     alerts = rule_engine.evaluate_all(ctx)
     return {
         "pregnant_id": pid,

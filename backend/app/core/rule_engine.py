@@ -98,21 +98,36 @@ class Rule:
         self.action = action
 
     def evaluate(self, context: dict) -> bool:
-        """评估规则是否命中（安全版本，不使用eval）"""
+        """评估规则是否命中（安全版本，不使用eval）
+
+        缺失数据使用 None 而非 0，避免"未测量"被误判为"测量值为0"。
+        _safe_eval_condition 在 left_value is None 时返回 False，跳过该规则。
+        """
         try:
+            # 胎动相关：缺失时为 None，不触发假阳性预警
+            fetal_mv = context.get("fetal_movement")
+            fetal_mv_avg = context.get("fetal_movement_avg")
+            # fetal_drop_threshold 仅在有胎动数据时计算
+            if fetal_mv_avg is not None and fetal_mv_avg > 0:
+                fetal_drop_threshold = fetal_mv_avg * 0.5
+            elif fetal_mv is not None and fetal_mv > 0:
+                fetal_drop_threshold = fetal_mv * 0.5
+            else:
+                fetal_drop_threshold = None
+
             variables = {
                 "sbp": context.get("sbp"),  # None if not measured
                 "dbp": context.get("dbp"),  # None if not measured
-                "weight": context.get("weight", 0) or 0,
-                "fetal_movement": context.get("fetal_movement", 0) or 0,
-                "fetal_movement_avg": context.get("fetal_movement_avg", context.get("fetal_movement", 0)) or context.get("fetal_movement", 0),
-                "fetal_drop_threshold": (context.get("fetal_movement_avg", context.get("fetal_movement", 0)) or context.get("fetal_movement", 0)) * 0.5,
+                "weight": context.get("weight"),  # None if not measured (was 0, caused false alerts)
+                "fetal_movement": fetal_mv,  # None if not measured (was 0, triggered RED "胎动极少")
+                "fetal_movement_avg": fetal_mv_avg,  # None if not available
+                "fetal_drop_threshold": fetal_drop_threshold,  # None if no fetal data
                 "weight_gain_weekly": context.get("weight_gain_weekly"),  # None if not computed
                 "emotion_score": context.get("emotion_score_avg_7d"),  # None if not available
-                "emotion_score_avg_7d": context.get("emotion_score_avg_7d", 0) or 0,
-                "blood_sugar_fasting": context.get("blood_sugar_fasting", 0) or 0,
-                "blood_sugar_postprandial": context.get("blood_sugar_postprandial", 0) or 0,
-                "sleep_hours": context.get("sleep_hours", 8) or 8,
+                "emotion_score_avg_7d": context.get("emotion_score_avg_7d"),  # None if not measured (was 0, triggered RED "需心理干预")
+                "blood_sugar_fasting": context.get("blood_sugar_fasting"),  # None if not measured
+                "blood_sugar_postprandial": context.get("blood_sugar_postprandial"),  # None if not measured
+                "sleep_hours": context.get("sleep_hours"),  # None if not measured (was 8, masked real issues)
                 "gest_week": context.get("gest_week", 0) or 0,
             }
             return _safe_eval_condition(self.expression, variables)

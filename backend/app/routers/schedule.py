@@ -7,12 +7,14 @@ from ..database import get_db
 from ..models import Pregnant, ScheduleNode
 from ..schemas import ScheduleNodeCreate, ScheduleNodeResponse, ScheduleNodeUpdate
 from ..services import schedule_engine
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/schedule", tags=["排期管理"])
 
 
 @router.get("/{pregnant_id}", response_model=list[ScheduleNodeResponse])
-def get_schedule(pregnant_id: str, db: Session = Depends(get_db)):
+def get_schedule(pregnant_id: str, db: Session = Depends(get_db),
+                 current_user: TokenPayload = Depends(get_current_user)):
     """获取孕妇排期"""
     nodes = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id
@@ -21,7 +23,8 @@ def get_schedule(pregnant_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/generate/{pregnant_id}")
-def generate_schedule(pregnant_id: str, db: Session = Depends(get_db)):
+def generate_schedule(pregnant_id: str, db: Session = Depends(get_db),
+                      current_user: TokenPayload = Depends(get_current_user)):
     """自动生成全孕周排期"""
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
@@ -59,7 +62,8 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{pregnant_id}/publish")
-def publish_schedule(pregnant_id: str, db: Session = Depends(get_db)):
+def publish_schedule(pregnant_id: str, db: Session = Depends(get_db),
+                     current_user: TokenPayload = Depends(get_current_user)):
     """发布排期 — 将该孕妇所有排期节点标记为已发布"""
     nodes = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id,
@@ -72,7 +76,8 @@ def publish_schedule(pregnant_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/node/{node_id}", response_model=ScheduleNodeResponse)
-def update_node(node_id: str, update: ScheduleNodeUpdate, db: Session = Depends(get_db)):
+def update_node(node_id: str, update: ScheduleNodeUpdate, db: Session = Depends(get_db),
+                current_user: TokenPayload = Depends(get_current_user)):
     """更新排期节点"""
     from uuid import UUID
     node = db.query(ScheduleNode).filter(ScheduleNode.id == UUID(node_id)).first()

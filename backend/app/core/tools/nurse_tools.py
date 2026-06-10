@@ -74,13 +74,15 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
                 code = d.metric_code
                 if code not in latest_vitals:
                     latest_vitals[code] = d.value
+            # 缺失数据使用 None 而非 0，避免"未测量"被误判为"测量值为0"
+            # 例如：fetal_movement=0 会触发 RED "胎动极少"，但实际上只是未测量
             rule_ctx = {
-                "sbp": latest_vitals.get("systolic", 0),
-                "dbp": latest_vitals.get("diastolic", 0),
-                "weight": latest_vitals.get("weight", 0),
-                "fetal_movement": latest_vitals.get("fetal_movement", 0),
-                "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting", 0) or latest_vitals.get("blood_sugar", 0),
-                "heart_rate": latest_vitals.get("heart_rate", 0),
+                "sbp": latest_vitals.get("systolic"),  # None if not measured (was 0, caused false "血压偏低")
+                "dbp": latest_vitals.get("diastolic"),  # None if not measured
+                "weight": latest_vitals.get("weight"),  # None if not measured
+                "fetal_movement": latest_vitals.get("fetal_movement"),  # None if not measured (was 0, triggered RED)
+                "blood_sugar_fasting": latest_vitals.get("blood_sugar_fasting") or latest_vitals.get("blood_sugar"),  # None if not measured
+                "heart_rate": latest_vitals.get("heart_rate"),  # None if not measured
                 "gest_week": gest_days // 7 if gest_days else 0,
             }
             try:

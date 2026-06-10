@@ -75,6 +75,7 @@ class TestFollowUpStateMachine:
     def test_confirm_rejects_draft_status(self):
         """draft 状态不允许确认"""
         from app.routers.followup import confirm_record
+        from app.core.auth import TokenPayload
         from fastapi import HTTPException
 
         mock_record = MagicMock()
@@ -90,14 +91,17 @@ class TestFollowUpStateMachine:
         confirm_req.review_comment = None
         confirm_req.ai_snapshot = None
 
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+
         with pytest.raises(HTTPException) as exc_info:
-            confirm_record(str(mock_record.id), confirm_req, db=mock_db)
+            confirm_record(str(mock_record.id), confirm_req, db=mock_db, current_user=mock_user)
         assert exc_info.value.status_code == 400
-        assert "completed" in str(exc_info.value.detail)
+        assert "状态转换不允许" in str(exc_info.value.detail)
 
     def test_confirm_rejects_in_progress_status(self):
         """in_progress 状态不允许确认"""
         from app.routers.followup import confirm_record
+        from app.core.auth import TokenPayload
         from fastapi import HTTPException
 
         mock_record = MagicMock()
@@ -113,13 +117,16 @@ class TestFollowUpStateMachine:
         confirm_req.review_comment = None
         confirm_req.ai_snapshot = None
 
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+
         with pytest.raises(HTTPException) as exc_info:
-            confirm_record(str(mock_record.id), confirm_req, db=mock_db)
+            confirm_record(str(mock_record.id), confirm_req, db=mock_db, current_user=mock_user)
         assert exc_info.value.status_code == 400
 
     def test_confirm_accepts_completed_status(self):
         """completed 状态允许确认"""
         from app.routers.followup import confirm_record
+        from app.core.auth import TokenPayload
         from app.models import FollowUpRecord
 
         mock_record = MagicMock()
@@ -160,12 +167,15 @@ class TestFollowUpStateMachine:
         confirm_req.review_comment = "审核通过"
         confirm_req.ai_snapshot = {}
 
-        result = confirm_record(str(mock_record.id), confirm_req, db=mock_db)
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+
+        result = confirm_record(str(mock_record.id), confirm_req, db=mock_db, current_user=mock_user)
         assert mock_record.status == "confirmed"
 
     def test_sign_rejects_non_confirmed_status(self):
         """非 confirmed 状态不允许签名"""
         from app.routers.followup import sign_record
+        from app.core.auth import TokenPayload
         from fastapi import HTTPException
 
         mock_record = MagicMock()
@@ -179,14 +189,17 @@ class TestFollowUpStateMachine:
         sign_req.signature_image = "base64..."
         sign_req.signer_name = "张护士"
 
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+
         with pytest.raises(HTTPException) as exc_info:
-            sign_record(str(mock_record.id), sign_req, db=mock_db)
+            sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
         assert exc_info.value.status_code == 400
         assert "confirmed" in str(exc_info.value.detail)
 
     def test_sign_accepts_confirmed_status(self):
         """confirmed 状态允许签名"""
         from app.routers.followup import sign_record
+        from app.core.auth import TokenPayload
 
         mock_record = MagicMock()
         mock_record.id = uuid4()
@@ -200,7 +213,9 @@ class TestFollowUpStateMachine:
         sign_req.signature_image = "base64..."
         sign_req.signer_name = "张护士"
 
-        result = sign_record(str(mock_record.id), sign_req, db=mock_db)
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+
+        result = sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
         assert mock_record.signature_data["signer"] == "张护士"
         mock_db.commit.assert_called_once()
 

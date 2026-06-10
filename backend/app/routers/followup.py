@@ -29,13 +29,15 @@ from ..schemas import (
     FOLLOWUP_STATUS_COMPLETED,
 )
 from ..services import followup_service
+from ..core.auth import get_current_user, TokenPayload
+from ..core.state_machine import followup_fsm, FollowUpStatus, InvalidTransition
 from loguru import logger
 
 router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
 
 
 @router.post("/trigger")
-def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db)):
+def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db), current_user: TokenPayload = Depends(get_current_user)):
     """触发自动随访"""
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == trigger.pregnant_id).first()
     if not pregnant:
@@ -75,7 +77,8 @@ def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db)):
 def get_records(status: Optional[str] = None,
                 pregnant_id: Optional[str] = None,
                 today_only: bool = False,
-                db: Session = Depends(get_db)):
+                db: Session = Depends(get_db),
+                current_user: TokenPayload = Depends(get_current_user)):
     """获取随访记录列表
 
     Args:
@@ -107,22 +110,27 @@ def get_records(status: Optional[str] = None,
 
 @router.put("/records/{record_id}/confirm", response_model=FollowUpRecordResponse)
 def confirm_record(record_id: str, confirm: FollowUpConfirm,
-                   db: Session = Depends(get_db)):
+                   db: Session = Depends(get_db),
+                   current_user: TokenPayload = Depends(get_current_user)):
     """确认审核随访记录
 
     写入审核追溯信息 + 生成归档文档快照。
+    使用状态机校验转换合法性，从JWT提取审核者身份。
     """
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
 
-    # 状态机校验：仅 completed 状态允许确认
-    if record.status != "completed":
-        raise HTTPException(400, f"当前状态 '{record.status}' 不允许确认，仅 'completed' 状态可确认审核")
+    # 使用状态机校验：仅 completed -> confirmed 转换合法
+    try:
+        current_status = FollowUpStatus(record.status)
+        new_status = followup_fsm.transition(current_status, "confirm")
+    except InvalidTransition as e:
+        raise HTTPException(400, f"状态转换不允许: {e}")
 
-    # 审核追溯
-    record.status = confirm.status
-    record.reviewed_by = confirm.reviewer_id
+    # 审核追溯 — 从JWT token提取审核者身份（不信任客户端传值）
+    record.status = new_status.value
+    record.reviewed_by = current_user.sub
     record.reviewed_at = beijing_now()
     if confirm.review_comment:
         record.review_comment = confirm.review_comment
@@ -163,7 +171,6 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
         record.record_snapshot = snapshot
         record.record_text = text
     except Exception as e:
-        from loguru import logger
         logger.warning("归档文档生成失败: {}", e)
 
     db.commit()
@@ -176,7 +183,8 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
 
 
 @router.get("/records/{record_id}/ai-review")
-async def ai_review_followup(record_id: str, db: Session = Depends(get_db)):
+async def ai_review_followup(record_id: str, db: Session = Depends(get_db),
+                             current_user: TokenPayload = Depends(get_current_user)):
     """护士审核随访时的 AI 辅助分析
 
     收集该次随访数据 + 历史记录 + 健康数据，调用 LLM 生成审核建议。
@@ -322,25 +330,36 @@ async def ai_review_followup(record_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/records/{record_id}")
-async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: Session = Depends(get_db)):
-    """更新随访记录（仅允许更新安全字段）"""
+async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: Session = Depends(get_db),
+                        current_user: TokenPayload = Depends(get_current_user)):
+    """更新随访记录（仅允许更新安全字段）
+
+    仅 draft/in_progress 状态允许修改，已归档记录不可篡改。
+    """
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
+
+    # 状态校验：仅 draft/in_progress 状态允许修改
+    if record.status not in ("draft", "in_progress"):
+        raise HTTPException(400, f"当前状态 '{record.status}' 不允许修改，仅 'draft' 或 'in_progress' 状态可修改")
+
     if data.summary is not None:
         record.summary = data.summary
     if data.classification is not None:
         record.classification = data.classification
     if data.health_education is not None:
         record.health_education = data.health_education
+    # nurse_notes 字段在 FollowUpRecord 模型中不存在，使用 review_comment 替代
     if data.nurse_notes is not None:
-        record.nurse_notes = data.nurse_notes
+        record.review_comment = data.nurse_notes
     db.commit()
     return {"message": "更新成功"}
 
 
 @router.get("/records/{record_id}/document")
-def get_record_document(record_id: str, db: Session = Depends(get_db)):
+def get_record_document(record_id: str, db: Session = Depends(get_db),
+                        current_user: TokenPayload = Depends(get_current_user)):
     """获取随访记录的归档文档
 
     返回：record_snapshot（结构化快照）+ record_text（纯文本）+ signature_data（签名）
@@ -361,7 +380,8 @@ def get_record_document(record_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/records/{record_id}/sign")
-def sign_record(record_id: str, req: FollowUpSignatureRequest, db: Session = Depends(get_db)):
+def sign_record(record_id: str, req: FollowUpSignatureRequest, db: Session = Depends(get_db),
+                current_user: TokenPayload = Depends(get_current_user)):
     """提交手写签名
 
     将签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
@@ -402,7 +422,8 @@ class FollowUpAnswer(BaseModel):
 
 
 @router.get("/pending/{pregnant_id}", response_model=FollowUpPendingResponse)
-def get_pending_followup(pregnant_id: str, db: Session = Depends(get_db)):
+def get_pending_followup(pregnant_id: str, db: Session = Depends(get_db),
+                         current_user: TokenPayload = Depends(get_current_user)):
     """获取孕妇待处理的随访（draft 或 in_progress 状态）
 
     根据孕妇风险标签和孕周自动选择模板，返回动态问题列表。
@@ -469,12 +490,14 @@ def get_pending_followup(pregnant_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/respond")
-async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)):
+async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db),
+                              current_user: TokenPayload = Depends(get_current_user)):
     """孕妇提交随访回答（支持部分提交）
 
     状态机：draft → in_progress → completed
     量化数据同时写入 HealthDataPoint。
     全部完成后调用 LLM 生成温馨汇总。
+    已完成/已确认/已归档的记录不允许再提交。
     """
     from datetime import datetime
 
@@ -483,6 +506,10 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
     ).first()
     if not record:
         raise HTTPException(404, "随访记录不存在")
+
+    # 状态校验：已完成/已确认/已归档的记录不允许再提交
+    if record.status in ("completed", "confirmed", "archived"):
+        raise HTTPException(400, f"当前状态 '{record.status}' 不允许提交回答")
 
     # 合并已有数据
     reported_data = dict(record.self_reported_data) if record.self_reported_data else {}
@@ -667,7 +694,8 @@ class FollowUpAnalyzeRequest(BaseModel):
 
 
 @router.post("/respond/analyze/stream")
-async def respond_analyze_stream(req: FollowUpAnalyzeRequest, db: Session = Depends(get_db)):
+async def respond_analyze_stream(req: FollowUpAnalyzeRequest, db: Session = Depends(get_db),
+                                 current_user: TokenPayload = Depends(get_current_user)):
     """SSE 流式端点：对已完成的随访记录进行 AI 分析
 
     事件类型：

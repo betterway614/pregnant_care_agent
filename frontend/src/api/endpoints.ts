@@ -107,8 +107,11 @@ export const fgrApi = {
   // 获取患者绑定的超声图信息
   patientImages: (pregnantId: string) =>
     client.get<PatientImageInfo>(`/fgr/patient-images/${pregnantId}`),
-  // 获取超声原图 (返回 blob URL)
-  imageUrl: (pregnantId: string) => `/api/v1/fgr/image/${pregnantId}`,
+  // 获取超声原图 (返回带 token 的 URL，用于 <img> 标签)
+  imageUrl: (pregnantId: string) => {
+    const token = localStorage.getItem('token') || ''
+    return `/api/v1/fgr/image/${pregnantId}?token=${encodeURIComponent(token)}`
+  },
   // 趋势
   trend: (pregnantId: string) =>
     client.get<FgrTrendPoint[]>(`/fgr/trend/${pregnantId}`),

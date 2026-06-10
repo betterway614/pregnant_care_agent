@@ -4,7 +4,9 @@ import random
 import time
 import uuid as uuid_lib
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -17,6 +19,7 @@ from ..config import settings
 from ..services.segmentation_service import SegmentationError, get_segmentation_service
 from ..services.alert_service import alert_service
 from ..utils.timezone import beijing_now
+from ..core.auth import get_current_user, TokenPayload
 import numpy as np
 
 router = APIRouter(prefix="/api/v1/fgr", tags=["FGR评估"])
@@ -221,7 +224,7 @@ def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> None:
 
 
 @router.get("/patient-images/{pregnant_id}", response_model=PatientImageResponse)
-def get_patient_images(pregnant_id: str):
+def get_patient_images(pregnant_id: str, current_user: TokenPayload = Depends(get_current_user)):
     """获取患者绑定的超声图像信息（前端展示用）"""
     images = _get_patient_images(pregnant_id)
     if not images:
@@ -246,8 +249,27 @@ def get_patient_images(pregnant_id: str):
 
 
 @router.get("/image/{pregnant_id}")
-def get_fgr_image(pregnant_id: str):
-    """返回患者的超声原图（FileResponse）"""
+def get_fgr_image(
+    pregnant_id: str,
+    token: Optional[str] = None,  # 支持 query 参数 token（<img> 标签无法携带 header）
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+):
+    """返回患者的超声原图（FileResponse）
+
+    支持两种认证方式：
+    1. Authorization header（标准方式）
+    2. ?token=xxx query 参数（用于 <img> 标签等无法携带 header 的场景）
+    """
+    from ..core.auth import decode_token
+    # 优先使用 header 中的 token，其次使用 query 参数
+    user = None
+    if credentials and credentials.credentials:
+        user = decode_token(credentials.credentials)
+    elif token:
+        user = decode_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="认证凭据无效或已过期")
+
     images = _get_patient_images(pregnant_id)
     if not images:
         raise HTTPException(404, "该患者暂无绑定超声图像")
@@ -256,7 +278,8 @@ def get_fgr_image(pregnant_id: str):
 
 
 @router.post("/assess/{pregnant_id}", response_model=FgrAssessResponse)
-async def assess_fgr(pregnant_id: str, req: FgrAssessRequest, db: Session = Depends(get_db)):
+async def assess_fgr(pregnant_id: str, req: FgrAssessRequest, db: Session = Depends(get_db),
+                     current_user: TokenPayload = Depends(get_current_user)):
     """FGR风险评估：前端无需上传图片，系统从 HIS 绑定数据中获取"""
     # 所有阻塞操作（DB + 模型推理）放到线程池，避免阻塞事件循环
     return await run_in_threadpool(_assess_fgr_sync, pregnant_id, req, db)
@@ -295,6 +318,7 @@ async def upload_and_assess(
     image_type: str = Form("AC"),
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """上传超声图像 + 自动分割 + FGR分析入库"""
     logger.info("[FGR-上传] 收到请求: pregnant_id={}", pregnant_id)
@@ -375,7 +399,8 @@ def _upload_assess_sync(
 
 
 @router.get("/trend/{pregnant_id}", response_model=list[FgrTrendPoint])
-def get_fgr_trend(pregnant_id: str, db: Session = Depends(get_db)):
+def get_fgr_trend(pregnant_id: str, db: Session = Depends(get_db),
+                  current_user: TokenPayload = Depends(get_current_user)):
     """获取FGR趋势数据"""
     assessments = db.query(FgrAssessment).filter(
         FgrAssessment.pregnant_id == pregnant_id

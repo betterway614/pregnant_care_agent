@@ -11,13 +11,21 @@ from ..models import MedicalOrder, Pregnant, Alert
 from ..schemas import OrderGenerateRequest, OrderResponse, OrderSignRequest, OrderUpdateRequest, OrderExplainResponse, OrderDocumentResponse
 from ..services import order_service
 from ..core import get_llm_client
+from ..core.auth import get_current_user, TokenPayload
 
 router = APIRouter(prefix="/api/v1/orders", tags=["医嘱管理"])
 llm = get_llm_client()
 
+# 允许签署医嘱的角色
+_SIGN_ALLOWED_ROLES = {"doctor", "admin"}
+
 
 @router.post("/generate")
-async def generate_order(req: OrderGenerateRequest, db: Session = Depends(get_db)):
+async def generate_order(
+    req: OrderGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """生成医嘱建议（LLM增强版）"""
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
     if not pregnant:
@@ -98,9 +106,12 @@ async def generate_order(req: OrderGenerateRequest, db: Session = Depends(get_db
 
 
 @router.get("", response_model=list[OrderResponse])
-def get_orders(status: Optional[str] = None,
-                pregnant_id: Optional[str] = None,
-                db: Session = Depends(get_db)):
+def get_orders(
+    status: Optional[str] = None,
+    pregnant_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """获取医嘱列表"""
     query = db.query(MedicalOrder)
     if status:
@@ -129,7 +140,11 @@ def get_orders(status: Optional[str] = None,
 
 
 @router.get("/pregnant/{pregnant_id}", response_model=list[OrderResponse])
-def get_pregnant_orders(pregnant_id: str, db: Session = Depends(get_db)):
+def get_pregnant_orders(
+    pregnant_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """获取孕妇的医嘱列表（用于孕妇端展示）"""
     orders = db.query(MedicalOrder).filter(
         MedicalOrder.pregnant_id == pregnant_id,
@@ -146,26 +161,45 @@ def get_pregnant_orders(pregnant_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{order_id}/sign", response_model=OrderResponse)
-def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_db)):
+def sign_order(
+    order_id: str,
+    req: OrderSignRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """签署发布医嘱（增强版：支持手写签名 + 验证医生已修改）
 
     签署前验证：
-    1. modified_by_doctor == True（医生必须已修改AI生成的医嘱）
-    2. 生成归档文档快照
+    1. 当前用户必须是医生或管理员角色
+    2. modified_by_doctor == True（医生必须已修改AI生成的医嘱）
+    3. 医嘱必须处于 draft 状态（防止重复签署）
+    4. 生成归档文档快照
     """
+    # 角色校验：仅医生/管理员可签署
+    if current_user.role not in _SIGN_ALLOWED_ROLES:
+        raise HTTPException(403, "仅医生或管理员可以签署医嘱")
+
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
+
+    # 状态校验：仅 draft 状态允许签署
+    if order.status != "draft":
+        raise HTTPException(400, f"当前状态 '{order.status}' 不允许签署，仅 'draft' 状态可签署")
 
     # 验证：AI生成的医嘱必须经医生修改后才能签署
     if order.source == "AI_RECOMMENDED" and not order.modified_by_doctor:
         raise HTTPException(400, "AI生成的医嘱必须经医生修改确认后方可签署，请先编辑医嘱内容")
 
+    # 从JWT token提取签署者身份（客户端字段降级为可选覆盖）
+    doctor_id = req.doctor_id or current_user.sub
+    signer_name = req.signer_name or current_user.sub
+
     # 保存手写签名
     if req.signature_image:
         order.signature_data = {
             "image": req.signature_image,
-            "signer": req.signer_name or req.doctor_id,
+            "signer": signer_name,
             "signed_at": beijing_now().isoformat(),
         }
 
@@ -181,13 +215,13 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
         order_content=order.content,
         order_type=order.order_type,
         source=order.source,
-        doctor_name=req.signer_name or req.doctor_id,
+        doctor_name=signer_name,
     )
     order.order_snapshot = snapshot
     order.order_text = text
 
     order.status = "signed"
-    order.created_by = req.doctor_id
+    order.created_by = doctor_id
     order.signed_at = beijing_now()
     db.commit()
     db.refresh(order)
@@ -199,7 +233,11 @@ def sign_order(order_id: str, req: OrderSignRequest, db: Session = Depends(get_d
 
 
 @router.put("/{order_id}/acknowledge")
-def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
+def acknowledge_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """孕妇确认阅读医嘱"""
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
@@ -212,11 +250,24 @@ def acknowledge_order(order_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{order_id}", response_model=OrderResponse)
-def update_order(order_id: str, data: OrderUpdateRequest, db: Session = Depends(get_db)):
-    """更新医嘱（内容修改时自动标记 modified_by_doctor）"""
+def update_order(
+    order_id: str,
+    data: OrderUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """更新医嘱（内容修改时自动标记 modified_by_doctor）
+
+    仅 draft 状态的医嘱允许修改。
+    """
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
+
+    # 状态校验：仅 draft 状态允许修改
+    if order.status != "draft":
+        raise HTTPException(400, f"当前状态 '{order.status}' 不允许修改，仅 'draft' 状态可修改")
+
     if data.content is not None:
         order.content = data.content
         order.modified_by_doctor = True  # 医生已修改AI生成的医嘱
@@ -235,13 +286,17 @@ def update_order(order_id: str, data: OrderUpdateRequest, db: Session = Depends(
 
 
 @router.get("/templates")
-def get_order_templates():
+def get_order_templates(current_user: TokenPayload = Depends(get_current_user)):
     """获取医嘱模板列表"""
     return {"templates": order_service.get_all_templates()}
 
 
 @router.post("/{order_id}/explain", response_model=OrderExplainResponse)
-async def explain_order(order_id: str, db: Session = Depends(get_db)):
+async def explain_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """用LLM将医嘱翻译成孕妇易懂的通俗语言"""
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
@@ -296,7 +351,11 @@ async def explain_order(order_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{order_id}/document", response_model=OrderDocumentResponse)
-def get_order_document(order_id: str, db: Session = Depends(get_db)):
+def get_order_document(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """获取医嘱归档文档（含签名）
 
     返回：order_snapshot（结构化快照）+ order_text（纯文本）+ signature_data（签名）

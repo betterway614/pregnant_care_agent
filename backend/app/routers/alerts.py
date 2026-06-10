@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Literal, Optional
 from uuid import UUID
 from datetime import datetime
@@ -12,6 +13,7 @@ from ..models import Alert, Pregnant
 from ..schemas import AlertResponse, AlertReviewRequest
 from ..core import rule_engine
 from ..core.websocket_manager import ws_manager
+from ..core.auth import get_current_user, TokenPayload
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,8 @@ class CreateAlertRequest(BaseModel):
 def get_alerts(status: Optional[str] = None,
                level: Optional[str] = None,
                pregnant_id: Optional[str] = None,
-               db: Session = Depends(get_db)):
+               db: Session = Depends(get_db),
+               current_user: TokenPayload = Depends(get_current_user)):
     """获取预警列表"""
     query = db.query(Alert)
     if status:
@@ -72,7 +75,8 @@ def get_alerts(status: Optional[str] = None,
 @router.post("", response_model=AlertResponse)
 async def create_alert(
     req: CreateAlertRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """
     创建预警记录并推送给医生端
@@ -134,7 +138,8 @@ async def create_alert(
 
 
 @router.post("/evaluate")
-def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = Depends(get_db)):
+def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = Depends(get_db),
+                    current_user: TokenPayload = Depends(get_current_user)):
     """手动评估某孕妇的规则"""
     hits = rule_engine.evaluate_all(req.data)
 
@@ -151,7 +156,8 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
 
 
 @router.post("/{alert_id}/analyze-workflow")
-async def analyze_alert_workflow(alert_id: str, db: Session = Depends(get_db)):
+async def analyze_alert_workflow(alert_id: str, db: Session = Depends(get_db),
+                                 current_user: TokenPayload = Depends(get_current_user)):
     """执行 Alert→护士→医生 预分析 Workflow，结果写入 alert.details"""
     from ..services.alert_analysis_service import alert_analysis_service
 
@@ -190,19 +196,21 @@ def _append_history(alert: Alert, action: str, source_role: str, level: str,
     details["history"] = history
     details["source_role"] = source_role
     alert.details = details
+    flag_modified(alert, "details")
 
 
 @router.put("/{alert_id}/review", response_model=AlertResponse)
 async def review_alert(alert_id: str, review: AlertReviewRequest,
-                  db: Session = Depends(get_db)):
+                  db: Session = Depends(get_db),
+                  current_user: TokenPayload = Depends(get_current_user)):
     """审核预警 — 支持医生和护士的全部操作"""
     alert = db.query(Alert).filter(Alert.id == UUID(alert_id)).first()
     if not alert:
         raise HTTPException(404, "预警不存在")
 
     original_level = alert.level
-    operator = None
-    source_role = "doctor"
+    operator = current_user.sub
+    source_role = current_user.role if current_user.role in ("doctor", "nurse") else "doctor"
 
     if review.action == "confirm":
         alert.status = "CONFIRMED"
@@ -240,6 +248,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
             alert.level = "ORANGE"
         elif alert.level == "ORANGE":
             alert.level = "RED"
+        # RED 级别不做操作，但仍记录
         _append_history(alert, "nurse_escalate", source_role, alert.level, operator, review.reason)
     elif review.action == "nurse_appeal":
         source_role = "nurse"
@@ -300,7 +309,8 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
 
 
 @router.post("/auto-dismiss")
-def auto_dismiss_alerts(db: Session = Depends(get_db)):
+def auto_dismiss_alerts(db: Session = Depends(get_db),
+                        current_user: TokenPayload = Depends(get_current_user)):
     """定时任务: 自动关闭超时 PENDING 预警"""
     from datetime import timedelta
 
@@ -336,7 +346,8 @@ def auto_dismiss_alerts(db: Session = Depends(get_db)):
 
 
 @router.post("/repair-mismatched")
-def repair_mismatched_alerts(db: Session = Depends(get_db)):
+def repair_mismatched_alerts(db: Session = Depends(get_db),
+                             current_user: TokenPayload = Depends(get_current_user)):
     """修复 rule_id 与 message 不匹配的预警记录（数据修复工具）"""
     from ..services.alert_service import alert_service
     repaired = alert_service.repair_mismatched_alerts(db)
@@ -344,7 +355,8 @@ def repair_mismatched_alerts(db: Session = Depends(get_db)):
 
 
 @router.post("/repair-details")
-def repair_alert_details(db: Session = Depends(get_db)):
+def repair_alert_details(db: Session = Depends(get_db),
+                         current_user: TokenPayload = Depends(get_current_user)):
     """修复 details 字段格式，统一所有预警的 details 结构（数据修复工具）"""
     from ..services.alert_service import alert_service
     repaired = alert_service.repair_details(db)
@@ -355,7 +367,8 @@ def repair_alert_details(db: Session = Depends(get_db)):
 
 
 @router.get("/pregnant/{pregnant_id}/notifications")
-def get_pregnant_notifications(pregnant_id: str, unread_only: bool = False, db: Session = Depends(get_db)):
+def get_pregnant_notifications(pregnant_id: str, unread_only: bool = False, db: Session = Depends(get_db),
+                               current_user: TokenPayload = Depends(get_current_user)):
     """获取孕妇的通知列表（预警、随访、医嘱）"""
     from ..services.pregnant_notification import PregnantNotificationService
 
@@ -365,7 +378,8 @@ def get_pregnant_notifications(pregnant_id: str, unread_only: bool = False, db: 
 
 
 @router.put("/pregnant/{pregnant_id}/notifications/read-all")
-def mark_all_notifications_read(pregnant_id: str, db: Session = Depends(get_db)):
+def mark_all_notifications_read(pregnant_id: str, db: Session = Depends(get_db),
+                                current_user: TokenPayload = Depends(get_current_user)):
     """标记该孕妇所有通知为已读"""
     from ..services.pregnant_notification import PregnantNotificationService
 
@@ -375,7 +389,8 @@ def mark_all_notifications_read(pregnant_id: str, db: Session = Depends(get_db))
 
 
 @router.put("/notifications/{alert_id}/read")
-def mark_notification_read(alert_id: str, pregnant_id: str, db: Session = Depends(get_db)):
+def mark_notification_read(alert_id: str, pregnant_id: str, db: Session = Depends(get_db),
+                           current_user: TokenPayload = Depends(get_current_user)):
     """标记单条通知为已读"""
     from ..services.pregnant_notification import PregnantNotificationService
 
