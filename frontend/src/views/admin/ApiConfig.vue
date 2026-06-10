@@ -42,11 +42,11 @@
           </el-button>
         </div>
       </template>
-      <el-row :gutter="16">
+      <el-row :gutter="12">
         <el-col :span="6" v-for="svc in localServices" :key="svc.key">
           <div class="service-status-card" :class="svc.status">
             <div class="service-status-card__header">
-              <el-icon :size="20" :color="svc.status === 'online' ? '#10b981' : svc.status === 'offline' ? '#ef4444' : '#94a3b8'">
+              <el-icon :size="18" :color="svc.status === 'online' ? '#10b981' : svc.status === 'offline' ? '#ef4444' : '#94a3b8'">
                 <component :is="svc.icon" />
               </el-icon>
               <span class="service-status-card__name">{{ svc.name }}</span>
@@ -625,14 +625,65 @@ onMounted(() => {
 .provider-card__desc { margin: 0; font-size: 12px; color: #64748b; line-height: 1.5; }
 
 /* 服务状态卡片 */
-.service-status-card { border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 16px; transition: all 0.2s; }
+/* ===== 服务状态卡牌 - 统一尺寸和排版 ===== */
+.service-status-card {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  height: 152px;          /* 固定高度，确保4张卡牌完全对齐 */
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
 .service-status-card.online { border-color: #67c23a; background: #f0f9eb; }
 .service-status-card.offline { border-color: #f56c6c; background: #fef0f0; }
-.service-status-card__header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.service-status-card__name { flex: 1; font-size: 14px; font-weight: 600; color: #0f172a; }
-.service-status-card__info .info-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
-.service-status-card__info .label { color: #94a3b8; }
-.service-status-card__info .value { color: #1e293b; font-family: monospace; }
+.service-status-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.service-status-card__name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.service-status-card__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+}
+.service-status-card__info .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.service-status-card__info .label {
+  color: #64748b;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.service-status-card__info .value {
+  color: #1e293b;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+}
 
 /* 表单 */
 .config-form { max-width: 700px; }
