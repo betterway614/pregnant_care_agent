@@ -34,11 +34,14 @@ import sys
 
 # 设置 LD_LIBRARY_PATH 和 ryzen_ai_venv 的 site-packages
 _RYZEN_VENV = "{ryzen_venv}"
+_BACKEND_DIR = "{backend_dir}"
 _DEPLOYMENT_LIB = os.path.join(_RYZEN_VENV, "deployment", "lib")
 _SITE_PACKAGES = os.path.join(_RYZEN_VENV, "lib", "python3.12", "site-packages")
 
 os.environ["LD_LIBRARY_PATH"] = (_DEPLOYMENT_LIB + ":" + os.environ.get("LD_LIBRARY_PATH", ""))
 
+# 添加 Python 路径：backend 目录 + ryzen_ai_venv 的 site-packages
+sys.path.insert(0, _BACKEND_DIR)
 sys.path.insert(0, _SITE_PACKAGES)
 sys.path.insert(0, os.path.join(_SITE_PACKAGES, ".."))
 
@@ -109,6 +112,7 @@ class NPUPredictorService:
 
         ryzen_venv = os.environ.get("RYZEN_AI_VENV") or "/media/amd-22oilkp/workspace/amdryzen_ai/ryzen_ai_venv"
         self._ryzen_venv = ryzen_venv
+        self._backend_dir = str(Path(__file__).parent.parent)  # fgr_compete 的父目录
         self._env = os.environ.copy()
         deployment_lib = os.path.join(ryzen_venv, "deployment", "lib")
         self._env["LD_LIBRARY_PATH"] = deployment_lib + ":" + self._env.get("LD_LIBRARY_PATH", "")
@@ -117,6 +121,7 @@ class NPUPredictorService:
         """启动子进程，运行 NPU 推理服务。"""
         entry = _SUBPROCESS_ENTRY.format(
             ryzen_venv=self._ryzen_venv.replace("\\", "\\\\"),
+            backend_dir=self._backend_dir.replace("\\", "\\\\"),
         )
         python_path = os.path.join(self._ryzen_venv, "bin", "python")
 
@@ -126,6 +131,7 @@ class NPUPredictorService:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=self._env,
+            cwd=self._backend_dir,  # 设置工作目录
             text=False,  # binary mode for image bytes
             bufsize=0,
         )
