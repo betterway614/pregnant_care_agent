@@ -606,7 +606,9 @@ async function fetchServices() {
 async function fetchAdjustments() {
   try {
     const res = await resourceApi.getAdjustments()
-    adjustments.value = res.data
+    // 后端返回 {adjustments: [...]} 对象，需要提取数组
+    const data = res.data
+    adjustments.value = Array.isArray(data) ? data : (data.adjustments || [])
   } catch (err: any) {
     console.error('ResourceMonitor fetchAdjustments error:', err)
   }
