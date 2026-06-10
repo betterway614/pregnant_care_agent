@@ -90,11 +90,11 @@
           @click="selectProvider(p.id)"
         >
           <div class="provider-card__header">
-            <el-icon :size="20" :color="selectedProvider === p.id ? '#3b82f6' : '#94a3b8'">
+            <el-icon :size="18" :color="selectedProvider === p.id ? '#3b82f6' : '#94a3b8'">
               <component :is="getProviderIcon(p.id)" />
             </el-icon>
             <span class="provider-card__name">{{ p.name }}</span>
-            <el-icon v-if="selectedProvider === p.id" :size="16" color="#3b82f6"><CircleCheck /></el-icon>
+            <el-icon v-if="selectedProvider === p.id" :size="14" color="#3b82f6"><CircleCheck /></el-icon>
           </div>
           <p class="provider-card__desc">{{ p.description }}</p>
         </div>
@@ -615,16 +615,32 @@ onMounted(() => {
 .section-desc { margin: 0; font-size: 13px; color: #94a3b8; }
 .sub-title { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #1e293b; }
 
+/* ===== 统一卡牌设计系统 ===== */
+/* 共享卡牌基础样式：边框、圆角、padding、过渡 */
+.admin-card-base {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-sizing: border-box;
+  transition: all 0.2s;
+}
+
 /* 供应商卡片 */
 .provider-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.provider-card { border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all 0.2s; background: #fff; }
+.provider-card {
+  @apply admin-card-base;
+  padding: 14px 16px;
+  cursor: pointer;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+}
 .provider-card:hover { border-color: #93c5fd; background: #f8fafc; }
 .provider-card.active { border-color: #3b82f6; background: #eff6ff; }
 .provider-card__header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.provider-card__name { flex: 1; font-size: 14px; font-weight: 600; color: #0f172a; }
+.provider-card__name { flex: 1; font-size: 13px; font-weight: 600; color: #0f172a; line-height: 1.3; }
 .provider-card__desc { margin: 0; font-size: 12px; color: #64748b; line-height: 1.5; }
 
-/* 服务状态卡片 */
 /* ===== 服务状态卡牌 - 统一尺寸和排版 ===== */
 .service-status-card {
   border: 1.5px solid #e2e8f0;
@@ -635,6 +651,7 @@ onMounted(() => {
   flex-direction: column;
   transition: all 0.2s;
   box-sizing: border-box;
+  background: #fff;
 }
 .service-status-card.online { border-color: #67c23a; background: #f0f9eb; }
 .service-status-card.offline { border-color: #f56c6c; background: #fef0f0; }
