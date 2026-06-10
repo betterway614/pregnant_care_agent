@@ -87,13 +87,15 @@ class ResourceRuleEngine:
     """资源规则引擎"""
 
     def __init__(self):
-        import os
-        # 支持环境变量覆盖加速器类型: RESOURCE_LLM_ACCEL, RESOURCE_BGE_M3_ACCEL, etc.
+        # 支持从 settings 覆盖加速器类型: resource_llm_accel, resource_bge_m3_accel, etc.
         def _get_accel(service_name: str, default: AcceleratorType) -> AcceleratorType:
-            env_key = f"RESOURCE_{service_name.upper()}_ACCEL"
-            val = os.getenv(env_key, "").lower()
-            if val in ("cpu", "gpu", "npu"):
-                return AcceleratorType(val)
+            try:
+                from ..config import settings
+                val = getattr(settings, f"resource_{service_name}_accel", "").lower()
+                if val in ("cpu", "gpu", "npu"):
+                    return AcceleratorType(val)
+            except Exception:
+                pass
             return default
 
         # 默认服务配置（支持环境变量覆盖）

@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     # nnU-Net 分割配置
     nnunet_model_dir: str = "fgr_compete/Dataset001_PlacentaNT"
     nnunet_dataset_id: int = 1
+
+    # 资源监控 - 服务加速器类型 (cpu/gpu/npu)，空字符串表示不覆盖
+    resource_llm_accel: Literal["", "cpu", "gpu", "npu"] = ""
+    resource_bge_m3_accel: Literal["", "cpu", "gpu", "npu"] = ""
+    resource_tts_accel: Literal["", "cpu", "gpu", "npu"] = ""
+    resource_asr_accel: Literal["", "cpu", "gpu", "npu"] = ""
     nnunet_folds: str = "all"
 
     # NLU配置
