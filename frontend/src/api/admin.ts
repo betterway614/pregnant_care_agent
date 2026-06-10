@@ -148,3 +148,146 @@ export const adminApi = {
   testApiConnection: (mode: 'local' | 'cloud', provider?: string) =>
     client.post<ApiTestResult>('/admin/api-config/test', { mode, provider }),
 }
+
+// ── 资源监控 API ──
+export const resourceApi = {
+  getStatus: () =>
+    client.get<{
+      state: {
+        vram_total_gb: number
+        vram_used_gb: number
+        vram_free_gb: number
+        vram_percent: number
+        gpu_percent: number
+        cpu_percent: number
+        ram_total_gb: number
+        ram_available_gb: number
+        ram_percent: number
+        npu_available: boolean
+        npu_columns: number
+        timestamp: number
+      }
+      load_level: 'low' | 'medium' | 'high' | 'critical'
+      policy: {
+        name: string
+        description: string
+        vram_threshold_high: number
+        vram_threshold_critical: number
+        gpu_threshold_high: number
+        enable_npu_offload: boolean
+        enable_cpu_offload: boolean
+        enable_batch_adjustment: boolean
+      }
+      history_count: number
+    }>('/admin/resource/status'),
+
+  getServices: () =>
+    client.get<Record<string, {
+      name: string
+      port: number
+      accelerator: string
+      batch_size: number
+      min_batch_size: number
+      max_batch_size: number
+      priority: number
+      can_offload_to_cpu: boolean
+      can_offload_to_npu: boolean
+      current_load: number
+    }>>('/admin/resource/services'),
+
+  updateService: (serviceName: string, data: {
+    enabled?: boolean
+    replicas?: number
+    memory_limit?: string
+    cpu_limit?: string
+    env_overrides?: Record<string, string>
+    description?: string
+  }) => client.put(`/admin/resource/services/${serviceName}`, data),
+
+  getPolicy: () =>
+    client.get<{
+      current_policy: string
+      policies: Record<string, {
+        name: string
+        description: string
+        vram_threshold_high: number
+        vram_threshold_critical: number
+        gpu_threshold_high: number
+        enable_npu_offload: boolean
+        enable_cpu_offload: boolean
+        enable_batch_adjustment: boolean
+      }>
+      services: Record<string, {
+        name: string
+        port: number
+        accelerator: string
+        batch_size: number
+        min_batch_size: number
+        max_batch_size: number
+        priority: number
+        can_offload_to_cpu: boolean
+        can_offload_to_npu: boolean
+        current_load: number
+      }>
+    }>('/admin/resource/policy'),
+
+  switchPolicy: (policy: string, reason?: string) =>
+    client.put('/admin/resource/policy', { policy, reason }),
+
+  getAdjustments: () =>
+    client.get<Array<{
+      service: string
+      name: string
+      current: {
+        name: string
+        port: number
+        accelerator: string
+        batch_size: number
+        min_batch_size: number
+        max_batch_size: number
+        priority: number
+        can_offload_to_cpu: boolean
+        can_offload_to_npu: boolean
+        current_load: number
+      }
+      optimal: {
+        name: string
+        port: number
+        accelerator: string
+        batch_size: number
+        min_batch_size: number
+        max_batch_size: number
+        priority: number
+        can_offload_to_cpu: boolean
+        can_offload_to_npu: boolean
+        current_load: number
+      }
+      changes: string[]
+      needs_update: boolean
+    }>>('/admin/resource/adjustments'),
+
+  getHistory: (params?: { date_from?: string; date_to?: string; metric?: string }) =>
+    client.get<Array<{
+      vram_total_gb: number
+      vram_used_gb: number
+      vram_free_gb: number
+      vram_percent: number
+      gpu_percent: number
+      cpu_percent: number
+      ram_total_gb: number
+      ram_available_gb: number
+      ram_percent: number
+      npu_available: boolean
+      npu_columns: number
+      timestamp: number
+    }>>('/admin/resource/history', { params }),
+
+  startMonitoring: (intervalSeconds?: number) =>
+    client.post('/admin/resource/monitoring/start', { interval_seconds: intervalSeconds }),
+
+  stopMonitoring: () =>
+    client.post('/admin/resource/monitoring/stop'),
+
+  getLlmAnalysis: () =>
+    client.get<any>('/admin/resource/llm-analysis'),
+}

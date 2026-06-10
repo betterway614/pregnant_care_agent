@@ -12,8 +12,9 @@ from .config import settings
 from .database import engine, Base
 from .routers import chat, schedule, followup, alerts, fgr, orders, dashboard
 from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movement, feedback, mental_health, health_trends
-from .routers import websocket, tts, admin, knowledge
+from .routers import websocket, tts, admin, knowledge, resource
 from .models import AgentAuditLog, ToolCallDetail, Feedback
+from .models.models import ResourceAlert, ResourceMetric, GeneratedReport
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -242,6 +243,28 @@ def _ensure_feedback_audit_link():
         logger.warning("feedback 迁移跳过: {}", e)
 
 
+def _ensure_resource_tables():
+    """为已有数据库添加资源管理相关表（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        existing = inspector.get_table_names()
+        tables_to_create = []
+        if "resource_alerts" not in existing:
+            tables_to_create.append(ResourceAlert.__table__)
+        if "resource_metrics" not in existing:
+            tables_to_create.append(ResourceMetric.__table__)
+        if "generated_reports" not in existing:
+            tables_to_create.append(GeneratedReport.__table__)
+        if tables_to_create:
+            Base.metadata.create_all(bind=engine, tables=tables_to_create)
+            logger.info("资源管理表创建完成: {}", [t.name for t in tables_to_create])
+        else:
+            logger.info("资源管理表已存在，跳过创建")
+    except Exception as e:
+        logger.warning("资源管理表迁移跳过: {}", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -274,6 +297,7 @@ async def lifespan(app: FastAPI):
     _ensure_alert_columns()
     _ensure_audit_log_table()
     _ensure_feedback_audit_link()
+    _ensure_resource_tables()
 
     # FGR 模式：按 .env 的 FGR_BACKEND 加载真实预测模型
     if settings.fgr_mode:
@@ -435,6 +459,7 @@ app.include_router(websocket.router)
 app.include_router(tts.router)
 app.include_router(admin.router)
 app.include_router(knowledge.router)
+app.include_router(resource.router)
 
 
 @app.get("/")

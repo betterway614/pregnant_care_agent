@@ -358,3 +358,83 @@ class ToolCallDetail(Base):
     __table_args__ = (
         Index('idx_tool_call_audit', 'audit_log_id', 'call_order'),
     )
+
+
+class ResourceAlert(Base):
+    """资源预警记录 - 记录系统资源异常和预警"""
+    __tablename__ = "resource_alerts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    alert_type = Column(String(32), nullable=False, index=True, comment="预警类型: vram_high/gpu_high/cpu_high/temp_high/power_high/npu_offline")
+    severity = Column(String(16), nullable=False, default="warning", comment="严重程度: info/warning/critical")
+    title = Column(String(128), nullable=False, comment="预警标题")
+    message = Column(Text, nullable=False, comment="预警详情")
+    # 资源快照
+    vram_percent = Column(Float, nullable=True, comment="VRAM 使用率")
+    gpu_percent = Column(Float, nullable=True, comment="GPU 使用率")
+    cpu_percent = Column(Float, nullable=True, comment="CPU 使用率")
+    gpu_power_w = Column(Float, nullable=True, comment="GPU 功率 (W)")
+    gpu_temp_c = Column(Float, nullable=True, comment="GPU 温度 (°C)")
+    cpu_temp_c = Column(Float, nullable=True, comment="CPU 温度 (°C)")
+    # 处理状态
+    status = Column(String(16), default="active", index=True, comment="状态: active/acknowledged/resolved")
+    acknowledged_by = Column(String(64), nullable=True, comment="确认人")
+    acknowledged_at = Column(DateTime, nullable=True, comment="确认时间")
+    resolved_at = Column(DateTime, nullable=True, comment="解决时间")
+    resolution = Column(Text, nullable=True, comment="解决方案")
+    # 策略信息
+    policy_name = Column(String(32), nullable=True, comment="当前策略")
+    auto_action = Column(String(64), nullable=True, comment="自动执行的动作")
+    created_at = Column(DateTime, default=beijing_now, index=True, comment="创建时间")
+
+    __table_args__ = (
+        Index('idx_resource_alert_type_status', 'alert_type', 'status'),
+        Index('idx_resource_alert_created', 'created_at'),
+    )
+
+
+class GeneratedReport(Base):
+    """生成的报告记录"""
+    __tablename__ = "generated_reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    report_type = Column(String(32), nullable=False, index=True, comment="报告类型: agent/device")
+    title = Column(String(128), nullable=False, comment="报告标题")
+    period_from = Column(DateTime, nullable=False, comment="报告起始时间")
+    period_to = Column(DateTime, nullable=False, comment="报告截止时间")
+    report_data = Column(JSON, nullable=False, comment="报告内容（JSON结构化数据）")
+    generated_by = Column(String(64), nullable=True, comment="生成人")
+    created_at = Column(DateTime, default=beijing_now, index=True, comment="生成时间")
+
+    __table_args__ = (
+        Index('idx_report_type_created', 'report_type', 'created_at'),
+    )
+
+
+class ResourceMetric(Base):
+    """资源指标历史 - 定期采样的系统资源数据"""
+    __tablename__ = "resource_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 资源指标
+    vram_percent = Column(Float, nullable=False, comment="VRAM 使用率")
+    gpu_percent = Column(Float, nullable=False, comment="GPU 使用率")
+    cpu_percent = Column(Float, nullable=False, comment="CPU 使用率")
+    ram_percent = Column(Float, nullable=False, comment="RAM 使用率")
+    # 功率和温度
+    gpu_power_w = Column(Float, nullable=True, comment="GPU 功率 (W)")
+    gpu_power_cap_w = Column(Float, nullable=True, comment="GPU 功率上限 (W)")
+    cpu_power_w = Column(Float, nullable=True, comment="CPU 功率 (W)")
+    package_power_w = Column(Float, nullable=True, comment="整机功率 (W)")
+    gpu_temp_c = Column(Float, nullable=True, comment="GPU 温度 (°C)")
+    cpu_temp_c = Column(Float, nullable=True, comment="CPU 温度 (°C)")
+    # 负载级别
+    load_level = Column(String(16), nullable=False, comment="负载级别: low/medium/high/critical")
+    # 策略信息
+    policy_name = Column(String(32), nullable=True, comment="当前策略")
+    # 时间戳
+    created_at = Column(DateTime, default=beijing_now, index=True, comment="采样时间")
+
+    __table_args__ = (
+        Index('idx_resource_metric_created', 'created_at'),
+    )

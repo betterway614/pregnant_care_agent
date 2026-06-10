@@ -90,6 +90,19 @@ class HealthResponse(BaseModel):
     model_name: str
 
 
+class ConfigUpdateRequest(BaseModel):
+    batch_size: Optional[int] = Field(None, ge=1, le=512)
+    max_length: Optional[int] = Field(None, ge=128, le=16384)
+    device: Optional[str] = None  # "cuda", "cpu", "npu"
+
+
+class ConfigResponse(BaseModel):
+    status: str
+    batch_size: int
+    max_length: int
+    device: str
+
+
 # ── 端点 ──
 
 @app.get("/health")
@@ -107,6 +120,50 @@ async def list_models():
         "object": "list",
         "data": [{"id": MODEL_NAME, "object": "model", "owned_by": "local"}],
     }
+
+
+@app.get("/config")
+async def get_config():
+    """获取当前配置 (用于动态资源管理)"""
+    return ConfigResponse(
+        status="ok",
+        batch_size=BATCH_SIZE,
+        max_length=MAX_LENGTH,
+        device=DEVICE,
+    )
+
+
+@app.post("/config")
+async def update_config(req: ConfigUpdateRequest):
+    """热更新配置 (无需重启服务)"""
+    global BATCH_SIZE, MAX_LENGTH, DEVICE
+
+    updated = []
+
+    if req.batch_size is not None:
+        old = BATCH_SIZE
+        BATCH_SIZE = req.batch_size
+        updated.append(f"batch_size: {old} -> {BATCH_SIZE}")
+        logger.info("配置更新: batch_size %d -> %d", old, BATCH_SIZE)
+
+    if req.max_length is not None:
+        old = MAX_LENGTH
+        MAX_LENGTH = req.max_length
+        updated.append(f"max_length: {old} -> {MAX_LENGTH}")
+        logger.info("配置更新: max_length %d -> %d", old, MAX_LENGTH)
+
+    if req.device is not None and req.device in ("cuda", "cpu", "npu"):
+        old = DEVICE
+        DEVICE = req.device
+        updated.append(f"device: {old} -> {DEVICE}")
+        logger.info("配置更新: device %s -> %s (下次加载生效)", old, DEVICE)
+
+    return ConfigResponse(
+        status="updated",
+        batch_size=BATCH_SIZE,
+        max_length=MAX_LENGTH,
+        device=DEVICE,
+    )
 
 
 @app.post("/v1/embeddings")

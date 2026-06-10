@@ -94,6 +94,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'route-monitor', name: 'AdminRouteMonitor', component: () => import('@/views/admin/RouteMonitor.vue'), meta: { title: '路由监控' } },
       { path: 'knowledge', name: 'AdminKnowledge', component: () => import('@/views/admin/KnowledgeBase.vue'), meta: { title: '知识库管理' } },
       { path: 'api-config', name: 'AdminApiConfig', component: () => import('@/views/admin/ApiConfig.vue'), meta: { title: 'API 配置' } },
+      { path: 'resource-monitor', name: 'AdminResourceMonitor', component: () => import('@/views/admin/ResourceMonitor.vue'), meta: { title: '资源监控' } },
+      { path: 'resource-config', name: 'AdminResourceConfig', component: () => import('@/views/admin/ResourceConfig.vue'), meta: { title: '资源配置' } },
+      { path: 'operation-report', name: 'AdminOperationReport', component: () => import('@/views/admin/OperationReport.vue'), meta: { title: '运营报告' } },
     ],
   },
 ]
