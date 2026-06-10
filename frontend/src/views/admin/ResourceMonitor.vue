@@ -2,7 +2,7 @@
   <div class="resource-monitor">
     <!-- 顶部统计卡片 (6 张) -->
     <el-row :gutter="16" class="stat-cards">
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #eff6ff;">
@@ -22,7 +22,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #fff7ed;">
@@ -42,7 +42,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #ecfdf5;">
@@ -62,7 +62,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #f5f3ff;">
@@ -80,7 +80,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #fef2f2;">
@@ -94,7 +94,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="4">
+      <el-col :xs="12" :sm="12" :md="6" :lg="4">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" :style="{ background: gpuTempBgColor }">
@@ -111,8 +111,8 @@
     </el-row>
 
     <!-- 负载级别 + 策略信息 -->
-    <el-row :gutter="16" style="margin-top: 16px;">
-      <el-col :span="8">
+    <el-row :gutter="16" class="policy-row">
+      <el-col :xs="24" :sm="24" :md="8">
         <el-card shadow="never">
           <template #header>
             <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -153,7 +153,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="16">
+      <el-col :xs="24" :sm="24" :md="16">
         <el-card shadow="never">
           <template #header>优化建议</template>
           <el-table :data="adjustments" stripe size="small" v-loading="loading" empty-text="当前配置已最优，无需调整">
@@ -230,24 +230,24 @@
     </el-card>
 
     <!-- 实时资源图表 -->
-    <el-row :gutter="16" style="margin-top: 16px;">
-      <el-col :span="12">
+    <el-row :gutter="16" class="chart-row">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card shadow="never">
           <template #header>
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <span>VRAM / GPU 实时监控</span>
-              <el-tag size="small" effect="plain">每 5 秒刷新</el-tag>
+              <el-tag size="small" effect="plain">每 30 秒刷新</el-tag>
             </div>
           </template>
           <VChart :option="vramGpuChartOption" autoresize style="height: 320px;" />
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card shadow="never">
           <template #header>
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <span>CPU / RAM 实时监控</span>
-              <el-tag size="small" effect="plain">每 5 秒刷新</el-tag>
+              <el-tag size="small" effect="plain">每 30 秒刷新</el-tag>
             </div>
           </template>
           <VChart :option="cpuRamChartOption" autoresize style="height: 320px;" />
@@ -665,4 +665,25 @@ onUnmounted(() => {
 .alert-summary-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: #f8fafc; }
 .alert-summary-item__msg { flex: 1; font-size: 13px; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .alert-summary-item__time { font-size: 12px; color: #94a3b8; flex-shrink: 0; }
+.chart-row { margin-top: 16px; }
+.policy-row { margin-top: 16px; }
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .stat-cards :deep(.el-card__body) { padding: 16px; }
+}
+
+@media (max-width: 768px) {
+  .stat-cards :deep(.el-card__body) { padding: 14px; }
+  .stat-card { gap: 10px; }
+  .stat-card__icon { width: 40px; height: 40px; }
+  .stat-card__value { font-size: 16px; }
+  .stat-card__label { font-size: 12px; }
+  .chart-row { margin-top: 12px; }
+}
+
+@media (max-width: 480px) {
+  .stat-card__icon { width: 36px; height: 36px; }
+  .stat-card__value { font-size: 14px; }
+}
 </style>
