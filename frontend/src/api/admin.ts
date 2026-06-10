@@ -145,7 +145,7 @@ export const adminApi = {
   updateApiConfig: (config: ApiConfigUpdate) =>
     client.put<{ message: string; config: ApiConfig }>('/admin/api-config', config),
 
-  testApiConnection: (mode: 'local' | 'cloud', provider?: string) =>
+  testApiConnection: (mode: 'local' | 'cloud' | 'asr' | 'tts' | 'embedding', provider?: string) =>
     client.post<ApiTestResult>('/admin/api-config/test', { mode, provider }),
 }
 

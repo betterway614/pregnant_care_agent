@@ -13,10 +13,10 @@
         placeholder="搜索孕妇姓名/昵称..."
         clearable
         :prefix-icon="Search"
-        style="width: 240px"
+        class="search-input"
         @input="debouncedSearch"
       />
-      <el-select v-model="filterRiskTag" placeholder="风险标签" clearable style="width: 140px" @change="loadPatients">
+      <el-select v-model="filterRiskTag" placeholder="风险标签" clearable class="filter-select" @change="loadPatients">
         <el-option label="全部" value="" />
         <el-option label="高龄" value="高龄" />
         <el-option label="高血压" value="高血压" />
@@ -187,6 +187,14 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.search-input {
+  width: 240px;
+}
+
+.filter-select {
+  width: 140px;
+}
+
 .page-subtitle {
   font-size: 14px;
   color: var(--text-muted);
@@ -216,5 +224,24 @@ onMounted(() => {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-input {
+    width: 100%;
+  }
+  .filter-select {
+    width: 100%;
+  }
+  .page-subtitle {
+    display: block;
+    margin-left: 0;
+    margin-top: 4px;
+  }
 }
 </style>

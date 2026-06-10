@@ -110,7 +110,7 @@
     <!-- 主要内容 -->
     <el-row :gutter="16">
       <!-- 最近预警 -->
-      <el-col :span="14">
+      <el-col :xs="24" :sm="24" :md="14">
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">最近预警</span>
@@ -146,7 +146,7 @@
       </el-col>
 
       <!-- 最近随访 -->
-      <el-col :span="10">
+      <el-col :xs="24" :sm="24" :md="10">
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">最近随访</span>
@@ -613,5 +613,25 @@ onUnmounted(() => {
 .briefing-slide-leave-from {
   opacity: 1;
   max-height: 500px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stat-grid-row {
+    margin-bottom: 16px;
+  }
+  .briefing-patient-item {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .bp-alert {
+    width: 100%;
+  }
+  .briefing-summary {
+    padding: 0 14px 10px;
+  }
+  .briefing-body {
+    padding: 0 14px 12px;
+  }
 }
 </style>

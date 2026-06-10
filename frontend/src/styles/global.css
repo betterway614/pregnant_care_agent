@@ -674,7 +674,31 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-muted);
 }
 
-/* 响应式 */
+/* 响应式 - Tablet */
+@media (max-width: 1024px) {
+  .page-container {
+    padding: 20px;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .page-title {
+    font-size: 22px;
+  }
+  .page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .content-card__header {
+    padding: 14px 18px;
+  }
+  .content-card__body {
+    padding: 18px;
+  }
+}
+
+/* 响应式 - Mobile */
 @media (max-width: 768px) {
   .page-container {
     padding: 16px;
@@ -684,20 +708,108 @@ h1, h2, h3, h4, h5, h6 {
     gap: 12px;
   }
   .page-title {
-    font-size: 20px;
+    font-size: 18px;
   }
   .page-header {
-    padding-bottom: 16px;
-    margin-bottom: 20px;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .page-header__actions {
+    width: 100%;
+    flex-wrap: wrap;
   }
   .search-bar {
     padding: 12px 14px;
+    flex-direction: column;
+  }
+  .search-bar > * {
+    width: 100%;
+  }
+  .content-card__header {
+    padding: 12px 14px;
+  }
+  .content-card__body {
+    padding: 14px;
+  }
+  .stat-card {
+    padding: 16px;
+  }
+  .stat-card__value {
+    font-size: 24px;
+  }
+  .stat-card__icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+  /* Tables: horizontal scroll */
+  .el-table {
+    overflow-x: auto;
+  }
+  /* Dialogs: full width on mobile */
+  .el-dialog {
+    width: 90vw !important;
+    margin: 16px auto;
+  }
+  .el-drawer {
+    width: 85vw !important;
   }
 }
 
 @media (max-width: 480px) {
+  .page-container {
+    padding: 12px;
+  }
   .stat-grid {
     grid-template-columns: 1fr;
+  }
+  .page-title {
+    font-size: 16px;
+  }
+  .stat-card {
+    padding: 14px;
+  }
+  .stat-card__value {
+    font-size: 20px;
+  }
+  .stat-card__label {
+    font-size: 12px;
+  }
+}
+
+/* 响应式表格 - 移动端卡片化 */
+@media (max-width: 768px) {
+  .responsive-table {
+    display: block;
+  }
+  .responsive-table .el-table__header-wrapper {
+    display: none;
+  }
+  .responsive-table .el-table__body-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .responsive-table .el-table__row {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    background: var(--glass-bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--glass-border);
+  }
+  .responsive-table .el-table__cell {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border: none;
+  }
+  .responsive-table .el-table__cell::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 12px;
   }
 }
 

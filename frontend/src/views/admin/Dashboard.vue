@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard">
     <el-row :gutter="16" class="stat-cards">
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #eff6ff;">
@@ -14,7 +14,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #fff7ed;">
@@ -27,7 +27,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #ecfdf5;">
@@ -40,7 +40,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="never" class="stat-card-wrapper">
           <div class="stat-card">
             <div class="stat-card__icon" style="background: #f5f3ff;">
@@ -55,14 +55,14 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" style="margin-top: 16px;">
-      <el-col :span="14">
+    <el-row :gutter="16" class="chart-row">
+      <el-col :xs="24" :sm="24" :md="14">
         <el-card shadow="never">
           <template #header>近 7 天 Token 消耗趋势</template>
           <VChart :option="trendChartOption" autoresize style="height: 320px;" />
         </el-card>
       </el-col>
-      <el-col :span="10">
+      <el-col :xs="24" :sm="24" :md="10">
         <el-card shadow="never">
           <template #header>Agent 变体调用分布</template>
           <VChart :option="pieChartOption" autoresize style="height: 320px;" />
@@ -70,7 +70,7 @@
       </el-col>
     </el-row>
 
-    <el-card shadow="never" style="margin-top: 16px;">
+    <el-card shadow="never" class="log-card">
       <template #header>最近调用记录</template>
       <el-table :data="recentLogs" stripe size="small" @row-click="goToSession">
         <el-table-column prop="created_at" label="时间" width="160" />
@@ -180,4 +180,16 @@ watch(() => [dateRange.from.value, dateRange.to.value], fetchData)
 .stat-card__label { font-size: 13px; color: #64748b; margin-bottom: 4px; }
 .stat-card__value { font-size: 24px; font-weight: 700; color: #0f172a; }
 :deep(.el-table__row) { cursor: pointer; transition: background 0.15s; }
+.chart-row { margin-top: 16px; }
+.log-card { margin-top: 16px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stat-cards :deep(.el-card__body) { padding: 14px; }
+  .stat-card__icon { width: 40px; height: 40px; }
+  .stat-card__value { font-size: 18px; }
+  .stat-card__label { font-size: 12px; }
+  .chart-row { margin-top: 12px; }
+  .log-card { margin-top: 12px; }
+}
 </style>

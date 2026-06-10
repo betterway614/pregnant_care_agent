@@ -61,7 +61,7 @@
     <!-- 主要内容区域 -->
     <el-row :gutter="16">
       <!-- 高危预警概览 -->
-      <el-col :span="14">
+      <el-col :xs="24" :sm="24" :md="14">
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">待处理预警</span>
@@ -100,7 +100,7 @@
       </el-col>
 
       <!-- 待处理医嘱 -->
-      <el-col :span="10">
+      <el-col :xs="24" :sm="24" :md="10">
         <div class="content-card">
           <div class="content-card__header">
             <span class="content-card__title">待处理医嘱</span>
@@ -588,5 +588,19 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page-header__actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .page-header__actions .el-button {
+    flex: 1;
+  }
+  .stat-grid-row {
+    margin-bottom: 16px;
+  }
 }
 </style>

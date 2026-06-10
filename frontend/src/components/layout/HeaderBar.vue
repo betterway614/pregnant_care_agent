@@ -1,7 +1,7 @@
 <template>
   <header class="header-bar">
     <div class="header-bar__left">
-      <el-button text @click="appStore.toggleSidebar">
+      <el-button text @click="appStore.toggleSidebar" class="header-bar__menu-btn">
         <el-icon :size="20"><Fold v-if="!appStore.sidebarCollapsed" /><Expand v-else /></el-icon>
       </el-button>
       <span class="header-bar__title">{{ currentTitle }}</span>
@@ -54,24 +54,34 @@ async function refreshStats() {
   position: sticky;
   top: 0;
   z-index: 99;
+  gap: 12px;
 }
 
 .header-bar__left {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+.header-bar__menu-btn {
+  display: none;
 }
 
 .header-bar__title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-bar__right {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .header-bar__user {
@@ -92,5 +102,29 @@ async function refreshStats() {
 
 .header-bar__notif :deep(.el-badge__content) {
   background: var(--danger);
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .header-bar__menu-btn {
+    display: flex;
+  }
+  .header-bar {
+    padding: 0 16px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .header-bar__title {
+    font-size: 14px;
+  }
+  .user-name {
+    display: none;
+  }
+  .header-bar {
+    padding: 0 12px;
+    height: 52px;
+  }
 }
 </style>

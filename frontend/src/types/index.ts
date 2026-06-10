@@ -632,6 +632,29 @@ export interface ApiConfig {
   llm_pregnant_model: string
   llm_nurse_model: string
   llm_doctor_model: string
+  // ASR 配置
+  asr_mode: 'cloud' | 'local'
+  asr_cloud_api_key: string
+  asr_cloud_base_url: string
+  asr_cloud_model: string
+  asr_local_backend: 'funasr' | 'whisper'
+  asr_local_base_url: string
+  asr_local_model: string
+  asr_local_hotword: string
+  // TTS 配置
+  tts_mode: 'browser' | 'cloud' | 'local'
+  tts_cloud_api_key: string
+  tts_cloud_base_url: string
+  tts_cloud_model: string
+  tts_cloud_voice: string
+  tts_local_backend: 'edge' | 'cosyvoice'
+  tts_local_cosyvoice_url: string
+  tts_local_cosyvoice_speaker: string
+  // Embedding 配置
+  embedding_api_url: string
+  embedding_api_key: string
+  embedding_model: string
+  embedding_dimensions: number
 }
 
 /** API 配置更新请求 */
@@ -651,6 +674,29 @@ export interface ApiConfigUpdate {
   llm_pregnant_model?: string
   llm_nurse_model?: string
   llm_doctor_model?: string
+  // ASR 配置
+  asr_mode?: 'cloud' | 'local'
+  asr_cloud_api_key?: string
+  asr_cloud_base_url?: string
+  asr_cloud_model?: string
+  asr_local_backend?: 'funasr' | 'whisper'
+  asr_local_base_url?: string
+  asr_local_model?: string
+  asr_local_hotword?: string
+  // TTS 配置
+  tts_mode?: 'browser' | 'cloud' | 'local'
+  tts_cloud_api_key?: string
+  tts_cloud_base_url?: string
+  tts_cloud_model?: string
+  tts_cloud_voice?: string
+  tts_local_backend?: 'edge' | 'cosyvoice'
+  tts_local_cosyvoice_url?: string
+  tts_local_cosyvoice_speaker?: string
+  // Embedding 配置
+  embedding_api_url?: string
+  embedding_api_key?: string
+  embedding_model?: string
+  embedding_dimensions?: number
 }
 
 /** API 连接测试结果 */

@@ -672,6 +672,7 @@ CLOUD_PROVIDERS = [
 
 
 class ApiConfigUpdate(BaseModel):
+    # LLM 配置
     llm_mode: Optional[Literal["cloud", "local", "mock", "mixed"]] = None
     local_base_url: Optional[str] = None
     ollama_host: Optional[str] = None
@@ -687,6 +688,29 @@ class ApiConfigUpdate(BaseModel):
     llm_pregnant_model: Optional[str] = None
     llm_nurse_model: Optional[str] = None
     llm_doctor_model: Optional[str] = None
+    # ASR 配置
+    asr_mode: Optional[Literal["cloud", "local"]] = None
+    asr_cloud_api_key: Optional[str] = None
+    asr_cloud_base_url: Optional[str] = None
+    asr_cloud_model: Optional[str] = None
+    asr_local_backend: Optional[Literal["funasr", "whisper"]] = None
+    asr_local_base_url: Optional[str] = None
+    asr_local_model: Optional[str] = None
+    asr_local_hotword: Optional[str] = None
+    # TTS 配置
+    tts_mode: Optional[Literal["browser", "cloud", "local"]] = None
+    tts_cloud_api_key: Optional[str] = None
+    tts_cloud_base_url: Optional[str] = None
+    tts_cloud_model: Optional[str] = None
+    tts_cloud_voice: Optional[str] = None
+    tts_local_backend: Optional[Literal["edge", "cosyvoice"]] = None
+    tts_local_cosyvoice_url: Optional[str] = None
+    tts_local_cosyvoice_speaker: Optional[str] = None
+    # Embedding 配置
+    embedding_api_url: Optional[str] = None
+    embedding_api_key: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embedding_dimensions: Optional[int] = None
 
 
 class ApiTestRequest(BaseModel):
@@ -740,6 +764,29 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
         "llm_pregnant_model": settings.llm_pregnant_model,
         "llm_nurse_model": settings.llm_nurse_model,
         "llm_doctor_model": settings.llm_doctor_model,
+        # ASR 配置
+        "asr_mode": settings.asr_mode,
+        "asr_cloud_api_key": settings.asr_cloud_api_key,
+        "asr_cloud_base_url": settings.asr_cloud_base_url,
+        "asr_cloud_model": settings.asr_cloud_model,
+        "asr_local_backend": settings.asr_local_backend,
+        "asr_local_base_url": settings.asr_local_base_url,
+        "asr_local_model": settings.asr_local_model,
+        "asr_local_hotword": settings.asr_local_hotword,
+        # TTS 配置
+        "tts_mode": settings.tts_mode,
+        "tts_cloud_api_key": settings.tts_cloud_api_key,
+        "tts_cloud_base_url": settings.tts_cloud_base_url,
+        "tts_cloud_model": settings.tts_cloud_model,
+        "tts_cloud_voice": settings.tts_cloud_voice,
+        "tts_local_backend": settings.tts_local_backend,
+        "tts_local_cosyvoice_url": settings.tts_local_cosyvoice_url,
+        "tts_local_cosyvoice_speaker": settings.tts_local_cosyvoice_speaker,
+        # Embedding 配置
+        "embedding_api_url": settings.embedding_api_url,
+        "embedding_api_key": settings.embedding_api_key,
+        "embedding_model": settings.embedding_model,
+        "embedding_dimensions": settings.embedding_dimensions,
     }
 
 
@@ -786,6 +833,29 @@ def update_api_config(
         "llm_pregnant_model": "LLM_PREGNANT_MODEL",
         "llm_nurse_model": "LLM_NURSE_MODEL",
         "llm_doctor_model": "LLM_DOCTOR_MODEL",
+        # ASR 配置
+        "asr_mode": "ASR_MODE",
+        "asr_cloud_api_key": "ASR_CLOUD_API_KEY",
+        "asr_cloud_base_url": "ASR_CLOUD_BASE_URL",
+        "asr_cloud_model": "ASR_CLOUD_MODEL",
+        "asr_local_backend": "ASR_LOCAL_BACKEND",
+        "asr_local_base_url": "ASR_LOCAL_BASE_URL",
+        "asr_local_model": "ASR_LOCAL_MODEL",
+        "asr_local_hotword": "ASR_LOCAL_HOTWORD",
+        # TTS 配置
+        "tts_mode": "TTS_MODE",
+        "tts_cloud_api_key": "TTS_CLOUD_API_KEY",
+        "tts_cloud_base_url": "TTS_CLOUD_BASE_URL",
+        "tts_cloud_model": "TTS_CLOUD_MODEL",
+        "tts_cloud_voice": "TTS_CLOUD_VOICE",
+        "tts_local_backend": "TTS_LOCAL_BACKEND",
+        "tts_local_cosyvoice_url": "TTS_LOCAL_COSYVOICE_URL",
+        "tts_local_cosyvoice_speaker": "TTS_LOCAL_COSYVOICE_SPEAKER",
+        # Embedding 配置
+        "embedding_api_url": "EMBEDDING_API_URL",
+        "embedding_api_key": "EMBEDDING_API_KEY",
+        "embedding_model": "EMBEDDING_MODEL",
+        "embedding_dimensions": "EMBEDDING_DIMENSIONS",
     }
 
     # 处理 cloud_provider 特殊逻辑

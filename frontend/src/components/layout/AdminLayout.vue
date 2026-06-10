@@ -1,18 +1,34 @@
 <template>
+  <!-- Mobile overlay backdrop -->
+  <div
+    v-if="isMobile && sidebarOpen"
+    class="admin-overlay"
+    @click="sidebarOpen = false"
+  />
+
   <div class="admin-layout">
-    <aside class="admin-sidebar">
+    <aside
+      class="admin-sidebar"
+      :class="{
+        'admin-sidebar--mobile': isMobile,
+        'admin-sidebar--open': isMobile && sidebarOpen,
+        'admin-sidebar--collapsed': !isMobile && sidebarCollapsed
+      }"
+    >
       <div class="admin-sidebar__logo">
         <el-icon :size="24"><Setting /></el-icon>
-        <span class="admin-sidebar__logo-text">管理后台</span>
+        <span v-show="!sidebarCollapsed || isMobile" class="admin-sidebar__logo-text">管理后台</span>
       </div>
 
       <el-menu
         :default-active="route.path"
         :router="true"
+        :collapse="!isMobile && sidebarCollapsed"
         class="admin-sidebar__menu"
         background-color="#0f172a"
         text-color="#94a3b8"
         active-text-color="#3b82f6"
+        @select="handleMenuSelect"
       >
         <el-menu-item index="/admin/dashboard">
           <el-icon><DataBoard /></el-icon>
@@ -55,17 +71,31 @@
       <div class="admin-sidebar__footer">
         <a href="/login" class="back-link" @click.prevent="backToMain">
           <el-icon><Back /></el-icon>
-          <span>返回主站</span>
+          <span v-show="!sidebarCollapsed || isMobile">返回主站</span>
         </a>
       </div>
     </aside>
 
-    <div class="admin-main">
+    <div
+      class="admin-main"
+      :class="{
+        'admin-main--sidebar-collapsed': !isMobile && sidebarCollapsed,
+        'admin-main--mobile': isMobile
+      }"
+    >
       <header class="admin-header">
-        <h2 class="admin-header__title">{{ route.meta?.title || '管理后台' }}</h2>
+        <div class="admin-header__left">
+          <el-button text @click="toggleSidebar" class="admin-header__toggle">
+            <el-icon :size="20">
+              <Fold v-if="!sidebarCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </el-button>
+          <h2 class="admin-header__title">{{ route.meta?.title || '管理后台' }}</h2>
+        </div>
         <div class="admin-header__actions">
           <el-date-picker
-            v-if="showDatePicker"
+            v-if="showDatePicker && !isMobile"
             v-model="dateRange"
             type="daterange"
             range-separator="至"
@@ -73,6 +103,16 @@
             end-placeholder="结束日期"
             :shortcuts="dateShortcuts"
             size="default"
+          />
+          <el-date-picker
+            v-if="showDatePicker && isMobile"
+            v-model="dateRange"
+            type="daterange"
+            range-separator="-"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            :shortcuts="dateShortcuts"
+            size="small"
           />
         </div>
       </header>
@@ -87,13 +127,37 @@
 import { ref, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { useResponsive } from '@/composables/useResponsive'
 import dayjs from 'dayjs'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const { isMobile, isTablet } = useResponsive()
 
 appStore.setRole('admin')
+
+const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
+
+function toggleSidebar() {
+  if (isMobile.value) {
+    sidebarOpen.value = !sidebarOpen.value
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+}
+
+function handleMenuSelect() {
+  if (isMobile.value) {
+    sidebarOpen.value = false
+  }
+}
+
+// Auto-collapse on tablet
+if (isTablet.value) {
+  sidebarCollapsed.value = true
+}
 
 const dateRange = ref<[Date, Date]>([
   dayjs().subtract(7, 'day').toDate(),
@@ -149,6 +213,17 @@ function backToMain() {
 </script>
 
 <style scoped>
+.admin-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+}
+
 .admin-layout {
   display: flex;
   min-height: 100vh;
@@ -165,6 +240,20 @@ function backToMain() {
   left: 0;
   height: 100vh;
   z-index: 100;
+  transition: width 0.3s, transform 0.3s;
+}
+
+.admin-sidebar--collapsed {
+  width: 64px;
+}
+
+.admin-sidebar--mobile {
+  width: 260px;
+  transform: translateX(-100%);
+}
+
+.admin-sidebar--mobile.admin-sidebar--open {
+  transform: translateX(0);
 }
 
 .admin-sidebar__logo {
@@ -231,6 +320,16 @@ function backToMain() {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  transition: margin-left 0.3s;
+  min-width: 0;
+}
+
+.admin-main--sidebar-collapsed {
+  margin-left: 64px;
+}
+
+.admin-main--mobile {
+  margin-left: 0;
 }
 
 .admin-header {
@@ -244,6 +343,18 @@ function backToMain() {
   position: sticky;
   top: 0;
   z-index: 99;
+  gap: 16px;
+}
+
+.admin-header__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-header__toggle {
+  display: none;
 }
 
 .admin-header__title {
@@ -251,10 +362,55 @@ function backToMain() {
   font-weight: 600;
   color: #0f172a;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .admin-content {
   flex: 1;
   padding: 24px;
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .admin-sidebar:not(.admin-sidebar--mobile) {
+    width: 64px;
+  }
+  .admin-sidebar:not(.admin-sidebar--mobile) .admin-sidebar__logo-text {
+    display: none;
+  }
+  .admin-main {
+    margin-left: 64px;
+  }
+  .admin-header__toggle {
+    display: flex;
+  }
+  .admin-content {
+    padding: 16px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .admin-main {
+    margin-left: 0;
+  }
+  .admin-header {
+    padding: 0 16px;
+  }
+  .admin-header__toggle {
+    display: flex;
+  }
+  .admin-content {
+    padding: 12px;
+  }
 }
 </style>

@@ -1,7 +1,13 @@
 <template>
   <div class="layout">
     <Sidebar />
-    <div class="layout__main" :class="{ collapsed: appStore.sidebarCollapsed }">
+    <div
+      class="layout__main"
+      :class="{
+        'layout__main--sidebar-collapsed': effectiveSidebarCollapsed,
+        'layout__main--mobile': isMobile
+      }"
+    >
       <HeaderBar />
       <main class="layout__content">
         <router-view />
@@ -12,16 +18,28 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import Sidebar from './Sidebar.vue'
 import HeaderBar from './HeaderBar.vue'
 import NurseAIFab from '@/views/nurse/components/NurseAIFab.vue'
 import { useAppStore } from '@/stores/app'
+import { useResponsive } from '@/composables/useResponsive'
 
 const appStore = useAppStore()
+const { isMobile, isTablet } = useResponsive()
+
+const effectiveSidebarCollapsed = computed(() => {
+  if (isMobile.value) return true
+  if (isTablet.value) return true
+  return appStore.sidebarCollapsed
+})
 
 onMounted(() => {
   appStore.setRole('nurse')
+  // Auto-collapse on tablet
+  if (isTablet.value) {
+    appStore.sidebarCollapsed = true
+  }
 })
 </script>
 
@@ -37,15 +55,33 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   transition: margin-left 0.3s;
+  min-width: 0;
 }
 
-.layout__main.collapsed {
+.layout__main--sidebar-collapsed {
   margin-left: 64px;
+}
+
+.layout__main--mobile {
+  margin-left: 0;
 }
 
 .layout__content {
   flex: 1;
   background: var(--bg-page);
   min-height: calc(100vh - 60px);
+  padding: 0;
+}
+
+@media (max-width: 1024px) {
+  .layout__main {
+    margin-left: 64px;
+  }
+}
+
+@media (max-width: 768px) {
+  .layout__main {
+    margin-left: 0;
+  }
 }
 </style>

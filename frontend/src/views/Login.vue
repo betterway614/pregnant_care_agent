@@ -229,4 +229,17 @@ async function handleLogin() {
   gap: 8px;
   line-height: 1.5;
 }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .login-card {
+    padding: 28px 20px;
+  }
+  .platform-title {
+    font-size: 18px;
+  }
+  .platform-desc {
+    font-size: 13px;
+  }
+}
 </style>

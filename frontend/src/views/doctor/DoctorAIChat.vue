@@ -1113,4 +1113,32 @@ onMounted(() => {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .doctor-chat__messages {
+    padding: 12px;
+    gap: 12px;
+  }
+  .doctor-chat__bubble {
+    max-width: 90%;
+    padding: 10px 12px;
+  }
+  .doctor-chat__input {
+    padding: 10px 12px;
+  }
+  .doctor-chat__toolbar {
+    padding: 6px 12px;
+  }
+  .toolbar-title {
+    font-size: 12px;
+  }
+  .record-ring {
+    width: 60px;
+    height: 60px;
+  }
+  .record-timer {
+    font-size: 18px;
+  }
+}
 </style>

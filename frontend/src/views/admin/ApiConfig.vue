@@ -176,6 +176,179 @@
       </el-result>
     </el-card>
 
+    <!-- ASR 配置 -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="section-header">
+          <div>
+            <h3>语音识别 (ASR) 配置</h3>
+            <p class="section-desc">配置语音转文字服务</p>
+          </div>
+          <el-button type="primary" plain size="small" :loading="testing" @click="testConnection('asr')">
+            <el-icon><Connection /></el-icon>
+            测试连接
+          </el-button>
+        </div>
+      </template>
+
+      <el-form label-width="120px" label-position="left" class="config-form">
+        <el-form-item label="ASR 模式">
+          <el-radio-group v-model="config.asr_mode" @change="markDirty">
+            <el-radio value="cloud">云端 API</el-radio>
+            <el-radio value="local">本地服务</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 云端 ASR 配置 -->
+        <template v-if="config.asr_mode === 'cloud'">
+          <el-form-item label="API Key">
+            <el-input v-model="config.asr_cloud_api_key" type="password" show-password placeholder="DashScope API Key" @change="markDirty" />
+          </el-form-item>
+          <el-form-item label="Base URL">
+            <el-input v-model="config.asr_cloud_base_url" placeholder="https://dashscope.aliyuncs.com/api/v1" @change="markDirty" />
+          </el-form-item>
+          <el-form-item label="模型">
+            <el-select v-model="config.asr_cloud_model" filterable allow-create @change="markDirty" style="width: 100%;">
+              <el-option label="paraformer-v1" value="paraformer-v1" />
+              <el-option label="paraformer-v2" value="paraformer-v2" />
+            </el-select>
+          </el-form-item>
+        </template>
+
+        <!-- 本地 ASR 配置 -->
+        <template v-if="config.asr_mode === 'local'">
+          <el-form-item label="后端引擎">
+            <el-radio-group v-model="config.asr_local_backend" @change="markDirty">
+              <el-radio value="funasr">FunASR</el-radio>
+              <el-radio value="whisper">Whisper</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="服务地址">
+            <el-input v-model="config.asr_local_base_url" placeholder="http://127.0.0.1:10096" @change="markDirty" />
+          </el-form-item>
+          <el-form-item label="热词">
+            <el-input v-model="config.asr_local_hotword" placeholder="可选，用于提高识别准确率" @change="markDirty" />
+          </el-form-item>
+        </template>
+      </el-form>
+    </el-card>
+
+    <!-- TTS 配置 -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="section-header">
+          <div>
+            <h3>语音合成 (TTS) 配置</h3>
+            <p class="section-desc">配置文字转语音服务</p>
+          </div>
+          <el-button type="primary" plain size="small" :loading="testing" @click="testConnection('tts')">
+            <el-icon><Connection /></el-icon>
+            测试连接
+          </el-button>
+        </div>
+      </template>
+
+      <el-form label-width="120px" label-position="left" class="config-form">
+        <el-form-item label="TTS 模式">
+          <el-radio-group v-model="config.tts_mode" @change="markDirty">
+            <el-radio value="browser">浏览器内置</el-radio>
+            <el-radio value="cloud">云端 API</el-radio>
+            <el-radio value="local">本地服务</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 云端 TTS 配置 -->
+        <template v-if="config.tts_mode === 'cloud'">
+          <el-form-item label="API Key">
+            <el-input v-model="config.tts_cloud_api_key" type="password" show-password placeholder="DashScope API Key" @change="markDirty" />
+          </el-form-item>
+          <el-form-item label="Base URL">
+            <el-input v-model="config.tts_cloud_base_url" placeholder="https://dashscope.aliyuncs.com/api/v1" @change="markDirty" />
+          </el-form-item>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="模型">
+                <el-select v-model="config.tts_cloud_model" filterable allow-create @change="markDirty" style="width: 100%;">
+                  <el-option label="cosyvoice-v1" value="cosyvoice-v1" />
+                  <el-option label="cosyvoice-v2" value="cosyvoice-v2" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="音色">
+                <el-select v-model="config.tts_cloud_voice" filterable allow-create @change="markDirty" style="width: 100%;">
+                  <el-option label="龙小春" value="longxiaochun" />
+                  <el-option label="龙小夏" value="longxiaoxia" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+
+        <!-- 本地 TTS 配置 -->
+        <template v-if="config.tts_mode === 'local'">
+          <el-form-item label="后端引擎">
+            <el-radio-group v-model="config.tts_local_backend" @change="markDirty">
+              <el-radio value="cosyvoice">CosyVoice2</el-radio>
+              <el-radio value="edge">Edge TTS</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <template v-if="config.tts_local_backend === 'cosyvoice'">
+            <el-form-item label="服务地址">
+              <el-input v-model="config.tts_local_cosyvoice_url" placeholder="http://127.0.0.1:9880" @change="markDirty" />
+            </el-form-item>
+            <el-form-item label="发音人">
+              <el-select v-model="config.tts_local_cosyvoice_speaker" filterable allow-create @change="markDirty" style="width: 100%;">
+                <el-option label="中文女" value="中文女" />
+                <el-option label="中文男" value="中文男" />
+              </el-select>
+            </el-form-item>
+          </template>
+        </template>
+      </el-form>
+    </el-card>
+
+    <!-- Embedding 配置 -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="section-header">
+          <div>
+            <h3>向量嵌入 (Embedding) 配置</h3>
+            <p class="section-desc">配置文本向量化服务（用于 RAG 知识检索）</p>
+          </div>
+          <el-button type="primary" plain size="small" :loading="testing" @click="testConnection('embedding')">
+            <el-icon><Connection /></el-icon>
+            测试连接
+          </el-button>
+        </div>
+      </template>
+
+      <el-form label-width="120px" label-position="left" class="config-form">
+        <el-form-item label="API 地址">
+          <el-input v-model="config.embedding_api_url" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" @change="markDirty" />
+        </el-form-item>
+        <el-form-item label="API Key">
+          <el-input v-model="config.embedding_api_key" type="password" show-password placeholder="DashScope API Key" @change="markDirty" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="模型">
+              <el-select v-model="config.embedding_model" filterable allow-create @change="markDirty" style="width: 100%;">
+                <el-option label="text-embedding-v3" value="text-embedding-v3" />
+                <el-option label="text-embedding-v2" value="text-embedding-v2" />
+                <el-option label="bge-m3 (本地)" value="bge-m3" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="维度">
+              <el-input-number v-model="config.embedding_dimensions" :min="128" :max="4096" :step="128" @change="markDirty" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+    </el-card>
+
     <!-- 角色专属配置 -->
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -266,6 +439,29 @@ const config = ref<ApiConfig>({
   llm_pregnant_model: '',
   llm_nurse_model: '',
   llm_doctor_model: '',
+  // ASR 配置
+  asr_mode: 'local',
+  asr_cloud_api_key: '',
+  asr_cloud_base_url: 'https://dashscope.aliyuncs.com/api/v1',
+  asr_cloud_model: 'paraformer-v1',
+  asr_local_backend: 'funasr',
+  asr_local_base_url: 'http://127.0.0.1:10096',
+  asr_local_model: 'local-funasr',
+  asr_local_hotword: '',
+  // TTS 配置
+  tts_mode: 'local',
+  tts_cloud_api_key: '',
+  tts_cloud_base_url: 'https://dashscope.aliyuncs.com/api/v1',
+  tts_cloud_model: 'cosyvoice-v1',
+  tts_cloud_voice: 'longxiaochun',
+  tts_local_backend: 'cosyvoice',
+  tts_local_cosyvoice_url: 'http://127.0.0.1:9880',
+  tts_local_cosyvoice_speaker: '中文女',
+  // Embedding 配置
+  embedding_api_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  embedding_api_key: '',
+  embedding_model: 'text-embedding-v3',
+  embedding_dimensions: 1024,
 })
 
 const selectedProvider = ref('dashscope')
@@ -345,7 +541,7 @@ function selectProvider(id: string) {
   markDirty()
 }
 
-async function testConnection(mode: 'local' | 'cloud') {
+async function testConnection(mode: 'local' | 'cloud' | 'asr' | 'tts' | 'embedding') {
   testing.value = true
   testResult.value = null
   try {
@@ -388,6 +584,29 @@ async function saveConfig() {
       llm_pregnant_model: config.value.llm_pregnant_model,
       llm_nurse_model: config.value.llm_nurse_model,
       llm_doctor_model: config.value.llm_doctor_model,
+      // ASR 配置
+      asr_mode: config.value.asr_mode,
+      asr_cloud_api_key: config.value.asr_cloud_api_key,
+      asr_cloud_base_url: config.value.asr_cloud_base_url,
+      asr_cloud_model: config.value.asr_cloud_model,
+      asr_local_backend: config.value.asr_local_backend,
+      asr_local_base_url: config.value.asr_local_base_url,
+      asr_local_model: config.value.asr_local_model,
+      asr_local_hotword: config.value.asr_local_hotword,
+      // TTS 配置
+      tts_mode: config.value.tts_mode,
+      tts_cloud_api_key: config.value.tts_cloud_api_key,
+      tts_cloud_base_url: config.value.tts_cloud_base_url,
+      tts_cloud_model: config.value.tts_cloud_model,
+      tts_cloud_voice: config.value.tts_cloud_voice,
+      tts_local_backend: config.value.tts_local_backend,
+      tts_local_cosyvoice_url: config.value.tts_local_cosyvoice_url,
+      tts_local_cosyvoice_speaker: config.value.tts_local_cosyvoice_speaker,
+      // Embedding 配置
+      embedding_api_url: config.value.embedding_api_url,
+      embedding_api_key: config.value.embedding_api_key,
+      embedding_model: config.value.embedding_model,
+      embedding_dimensions: config.value.embedding_dimensions,
     }
 
     await adminApi.updateApiConfig(payload)

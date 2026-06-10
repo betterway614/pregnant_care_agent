@@ -1,5 +1,19 @@
 <template>
-  <div class="sidebar" :class="{ collapsed: appStore.sidebarCollapsed }">
+  <!-- Mobile overlay backdrop -->
+  <div
+    v-if="isMobile && !appStore.sidebarCollapsed"
+    class="sidebar-overlay"
+    @click="appStore.sidebarCollapsed = true"
+  />
+
+  <div
+    class="sidebar"
+    :class="{
+      collapsed: appStore.sidebarCollapsed,
+      'sidebar--mobile': isMobile,
+      'sidebar--open': isMobile && !appStore.sidebarCollapsed
+    }"
+  >
     <div class="sidebar__logo">
       <div class="sidebar__logo-icon">
         <el-icon :size="28"><FirstAidKit /></el-icon>
@@ -20,6 +34,7 @@
         v-for="item in menuItems"
         :key="item.path"
         :index="item.path"
+        @click="handleMenuClick"
       >
         <el-icon><component :is="item.icon" /></el-icon>
         <template #title>
@@ -42,10 +57,18 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import { useResponsive } from '@/composables/useResponsive'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const { isMobile } = useResponsive()
+
+function handleMenuClick() {
+  if (isMobile.value) {
+    appStore.sidebarCollapsed = true
+  }
+}
 
 async function handleLogout() {
   try {
@@ -91,6 +114,17 @@ const menuItems = computed(() => {
 </script>
 
 <style scoped>
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+}
+
 .sidebar {
   width: 220px;
   height: 100vh;
@@ -98,7 +132,7 @@ const menuItems = computed(() => {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s;
+  transition: width 0.3s, transform 0.3s;
   position: fixed;
   left: 0;
   top: 0;
@@ -107,6 +141,20 @@ const menuItems = computed(() => {
 
 .sidebar.collapsed {
   width: 64px;
+}
+
+.sidebar--mobile {
+  width: 260px;
+  transform: translateX(-100%);
+}
+
+.sidebar--mobile.collapsed {
+  width: 260px;
+  transform: translateX(-100%);
+}
+
+.sidebar--mobile.sidebar--open {
+  transform: translateX(0);
 }
 
 .sidebar__logo {
@@ -177,5 +225,15 @@ const menuItems = computed(() => {
 .sidebar__logout:hover {
   background: #FEF2F2;
   color: #DC2626;
+}
+
+/* Tablet: collapsed sidebar */
+@media (max-width: 1024px) {
+  .sidebar:not(.sidebar--mobile) {
+    width: 64px;
+  }
+  .sidebar:not(.sidebar--mobile) .sidebar__logo-text {
+    display: none;
+  }
 }
 </style>
