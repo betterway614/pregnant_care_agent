@@ -168,16 +168,20 @@ class ResourceMonitor:
         # 获取 GPU 使用率
         try:
             result = subprocess.run(
-                ["rocm-smi", "--use"],
+                ["rocm-smi", "--showuse"],
                 capture_output=True, text=True, timeout=5
             )
             for line in result.stdout.split('\n'):
-                if 'GPU[' in line and '%' in line:
-                    parts = line.split()
-                    for part in parts:
-                        if '%' in part:
-                            state.gpu_percent = float(part.replace('%', ''))
-                            break
+                if 'GPU use' in line and '%' in line:
+                    # 格式: GPU[0]		: GPU use (%): 100
+                    parts = line.split(':')
+                    if len(parts) > 1:
+                        value_part = parts[-1].strip().replace('%', '').strip()
+                        try:
+                            state.gpu_percent = float(value_part)
+                        except ValueError:
+                            pass
+                    break
         except Exception as e:
             logger.debug("获取 GPU 使用率失败: {}", e)
 
