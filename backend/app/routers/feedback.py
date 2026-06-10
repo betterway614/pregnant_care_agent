@@ -55,14 +55,7 @@ async def submit_feedback(req: FeedbackRequest, db: Session = Depends(get_db), u
         audit_log_id=req.audit_log_id,
     )
     db.add(feedback)
-
-    # 反向写入审计日志的冗余字段，便于聚合查询
-    if req.audit_log_id:
-        audit_log = db.query(AgentAuditLog).filter(AgentAuditLog.id == req.audit_log_id).first()
-        if audit_log:
-            audit_log.feedback_rating = req.rating
-            audit_log.feedback_comment = req.comment
-
+    # 反馈数据仅存 Feedback 表，不再反向写入 AgentAuditLog（保持审计日志只追加不可篡改）
     db.commit()
     return {"success": True, "id": str(feedback.id)}
 

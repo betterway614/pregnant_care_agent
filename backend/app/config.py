@@ -183,6 +183,7 @@ class Settings(BaseSettings):
     agno_memory_enabled: bool = True
     agno_planning_enabled: bool = True
     persist_chat_messages: bool = True
+    audit_enabled: bool = True  # 审计日志总开关，设为 False 可禁用全部审计写入
 
     model_config = {"env_file": _env_path, "env_file_encoding": "utf-8"}
 

@@ -10,6 +10,7 @@ from .tts_service import tts_service, TTSService
 from .resource_service import resource_service, ResourceService
 from .alert_actions import register_action, get_action, list_actions
 from .followup_template_selector import select_template, register_template_rule, TemplateRule
+from .audit_service import AuditService
 
 __all__ = [
     "schedule_engine", "ScheduleEngine",
@@ -22,4 +23,5 @@ __all__ = [
     "resource_service", "ResourceService",
     "register_action", "get_action", "list_actions",
     "select_template", "register_template_rule", "TemplateRule",
+    "AuditService",
 ]

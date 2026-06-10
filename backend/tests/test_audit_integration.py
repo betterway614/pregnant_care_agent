@@ -40,7 +40,7 @@ async def test_chat_routing_uses_chat_variant():
         mock_settings.persist_chat_messages = False
         with patch("app.core.agno_agent.AGENT_VARIANT_MAP") as mock_map:
             mock_map.get.return_value = lambda: mock_agent
-            with patch("app.core.agno_chat_handler._save_audit_log") as mock_audit:
+            with patch("app.core.agno_chat_handler.AuditService.save_log") as mock_audit:
                 with patch("app.core.nlu_engine.nlu_engine.parse", return_value=mock_nlu_result):
                     from app.core.agno_chat_handler import handle_chat_with_agno
                     resp = await handle_chat_with_agno(req)
@@ -88,7 +88,7 @@ async def test_record_routing_uses_record_variant():
         mock_settings.persist_chat_messages = False
         with patch("app.core.agno_agent.AGENT_VARIANT_MAP") as mock_map:
             mock_map.get.return_value = lambda: mock_agent
-            with patch("app.core.agno_chat_handler._save_audit_log") as mock_audit:
+            with patch("app.core.agno_chat_handler.AuditService.save_log") as mock_audit:
                 with patch("app.core.nlu_engine.nlu_engine.parse", return_value=mock_nlu_result):
                     from app.core.agno_chat_handler import handle_chat_with_agno
                     resp = await handle_chat_with_agno(req)
@@ -128,7 +128,7 @@ async def test_qa_routing_uses_qa_variant():
         mock_settings.persist_chat_messages = False
         with patch("app.core.agno_agent.AGENT_VARIANT_MAP") as mock_map:
             mock_map.get.return_value = lambda: mock_agent
-            with patch("app.core.agno_chat_handler._save_audit_log") as mock_audit:
+            with patch("app.core.agno_chat_handler.AuditService.save_log") as mock_audit:
                 with patch("app.core.nlu_engine.nlu_engine.parse", return_value=mock_nlu_result):
                     from app.core.agno_chat_handler import handle_chat_with_agno
                     resp = await handle_chat_with_agno(req)
@@ -157,7 +157,7 @@ async def test_nlu_failure_falls_back_to_complex():
         mock_settings.persist_chat_messages = False
         with patch("app.core.agno_agent.AGENT_VARIANT_MAP") as mock_map:
             mock_map.get.return_value = lambda: mock_agent
-            with patch("app.core.agno_chat_handler._save_audit_log") as mock_audit:
+            with patch("app.core.agno_chat_handler.AuditService.save_log") as mock_audit:
                 # NLU 抛出异常
                 with patch("app.core.nlu_engine.nlu_engine.parse", side_effect=RuntimeError("NLU error")):
                     from app.core.agno_chat_handler import handle_chat_with_agno
@@ -173,8 +173,9 @@ async def test_nlu_failure_falls_back_to_complex():
 
 
 def test_save_audit_log_writes_to_db():
-    """验证 _save_audit_log 正确写入 AgentAuditLog"""
-    from app.core.agno_chat_handler import _save_audit_log
+    """验证 AuditService.save_log 正确写入 AgentAuditLog"""
+    from app.services.audit_service import AuditService
+    _save_audit_log = AuditService.save_log
 
     mock_response = MagicMock()
     mock_response.content = "测试回复内容"
@@ -189,13 +190,14 @@ def test_save_audit_log_writes_to_db():
     mock_db = MagicMock()
     mock_db_instance = mock_db.return_value
 
-    with patch("app.core.agno_chat_handler.SessionLocal", mock_db):
+    with patch("app.services.audit_service.SessionLocal", mock_db):
         _save_audit_log(
             session_id="test-session",
             user_id="P001",
             agent_role="pregnant",
             agent_variant="chat",
             intent_classification="GREETING",
+            user_message=None,
             run_response=mock_response,
             total_latency_ms=1000,
         )
@@ -210,7 +212,8 @@ def test_save_audit_log_writes_to_db():
 
 def test_save_audit_log_handles_missing_metrics():
     """验证 metrics 为 None 时也不会崩溃"""
-    from app.core.agno_chat_handler import _save_audit_log
+    from app.services.audit_service import AuditService
+    _save_audit_log = AuditService.save_log
 
     mock_response = MagicMock()
     mock_response.content = "回复"
@@ -220,13 +223,14 @@ def test_save_audit_log_handles_missing_metrics():
     mock_db = MagicMock()
     mock_db_instance = mock_db.return_value
 
-    with patch("app.core.agno_chat_handler.SessionLocal", mock_db):
+    with patch("app.services.audit_service.SessionLocal", mock_db):
         _save_audit_log(
             session_id="test-session",
             user_id="P001",
             agent_role="pregnant",
             agent_variant="chat",
             intent_classification=None,
+            user_message=None,
             run_response=mock_response,
             total_latency_ms=500,
         )
@@ -236,7 +240,8 @@ def test_save_audit_log_handles_missing_metrics():
 
 def test_save_audit_log_handles_db_error_gracefully():
     """验证 DB 写入失败时不会抛出异常"""
-    from app.core.agno_chat_handler import _save_audit_log
+    from app.services.audit_service import AuditService
+    _save_audit_log = AuditService.save_log
 
     mock_response = MagicMock()
     mock_response.content = "回复"
@@ -247,7 +252,7 @@ def test_save_audit_log_handles_db_error_gracefully():
     mock_db_instance = mock_db.return_value
     mock_db_instance.commit.side_effect = RuntimeError("DB error")
 
-    with patch("app.core.agno_chat_handler.SessionLocal", mock_db):
+    with patch("app.services.audit_service.SessionLocal", mock_db):
         # 不应该抛出异常
         _save_audit_log(
             session_id="test-session",
@@ -255,26 +260,29 @@ def test_save_audit_log_handles_db_error_gracefully():
             agent_role="pregnant",
             agent_variant="chat",
             intent_classification=None,
+            user_message=None,
             run_response=mock_response,
             total_latency_ms=500,
         )
-        mock_db_instance.rollback.assert_called_once()
+        assert mock_db_instance.rollback.call_count == 3
 
 
 def test_save_audit_log_handles_none_run_response():
     """验证流式异常时 run_response=None 被守卫处理"""
-    from app.core.agno_chat_handler import _save_audit_log
+    from app.services.audit_service import AuditService
+    _save_audit_log = AuditService.save_log
 
     mock_db = MagicMock()
     mock_db_instance = mock_db.return_value
 
-    with patch("app.core.agno_chat_handler.SessionLocal", mock_db):
+    with patch("app.services.audit_service.SessionLocal", mock_db):
         _save_audit_log(
             session_id="test-session",
             user_id="P001",
             agent_role="pregnant",
             agent_variant="chat",
             intent_classification="GREETING",
+            user_message=None,
             run_response=None,
             total_latency_ms=500,
         )

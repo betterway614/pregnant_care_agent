@@ -336,7 +336,9 @@ class AgentAuditLog(Base):
     total_latency_ms = Column(Integer, default=0, comment="总耗时ms")
     llm_latency_ms = Column(Integer, nullable=True, comment="LLM耗时ms")
     guardrail_triggered = Column(Boolean, default=False, comment="安全护栏触发")
-    response_preview = Column(String(200), nullable=True, comment="回复预览(前200字)")
+    response_preview = Column(String(200), nullable=True, comment="回复预览(前200字，已脱敏)")
+    user_message_preview = Column(String(500), nullable=True, comment="用户输入预览(前500字，已脱敏)")
+    nlu_detail_json = Column(JSON, nullable=True, comment="NLU完整解析结果 (entities/emotion/suggested_tools)")
     created_at = Column(DateTime, default=beijing_now, index=True, comment="创建时间")
 
 

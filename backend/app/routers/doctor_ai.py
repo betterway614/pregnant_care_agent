@@ -9,12 +9,13 @@ from ..utils.timezone import beijing_now
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from ..database import SessionLocal, get_db
-from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder, AgentAuditLog
+from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..schemas import DoctorAnalyzeRequest, DoctorAnalyzeResponse, ChatStreamRequest
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
 from ..core.auth import extract_user_from_header, get_current_user, TokenPayload
 from ..config import settings
+from ..services.audit_service import AuditService
 from loguru import logger
 
 # 医生端工具调用 → 用户友好的中文描述
@@ -29,137 +30,7 @@ DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
     "agno_query_patient_data": "正在查询患者数据...",
 }
 
-def _save_doctor_audit_log(
-    session_id: str,
-    user_id: str,
-    agent_variant: str,
-    intent_classification: str | None,
-    run_response,
-    total_latency_ms: int,
-) -> int | None:
-    """写入医生端审计日志 + 工具调用详情（同步，可靠优先）
-
-    Returns:
-        审计日志 ID，失败返回 None
-    """
-    from ..models import ToolCallDetail
-
-    # ── 过滤无效日志：没有实际 LLM 调用（延迟=0 且无 token 消耗）──
-    if total_latency_ms == 0:
-        metrics = getattr(run_response, "metrics", None) if run_response else None
-        input_tok = getattr(metrics, "input_tokens", None) if metrics else None
-        output_tok = getattr(metrics, "output_tokens", None) if metrics else None
-        if (input_tok is None or input_tok == 0) and (output_tok is None or output_tok == 0):
-            logger.debug("跳过医生端无效审计日志 session_id={}", session_id)
-            return None
-
-    try:
-        if run_response is None:
-            run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
-        metrics = getattr(run_response, "metrics", None)
-        content = getattr(run_response, "content", None) or ""
-
-        tool_calls_legacy = []
-        tool_call_details = []
-        call_order = 0
-        if hasattr(run_response, "messages") and run_response.messages:
-            for msg in run_response.messages:
-                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        call_order += 1
-                        tool_name = getattr(tc, "name", "") or getattr(tc, "function", {}).get("name", "")
-                        tool_args = None
-                        raw_args = getattr(tc, "arguments", None) or getattr(tc, "function", {}).get("arguments", None)
-                        if raw_args:
-                            if isinstance(raw_args, str):
-                                try:
-                                    import json as _json
-                                    tool_args = _json.loads(raw_args)
-                                except Exception:
-                                    tool_args = {"_raw": raw_args[:500]}
-                            elif isinstance(raw_args, dict):
-                                tool_args = raw_args
-                            if tool_args and isinstance(tool_args, dict):
-                                tool_args = {
-                                    k: (str(v)[:200] if isinstance(v, str) and len(v) > 200 else v)
-                                    for k, v in tool_args.items()
-                                }
-
-                        result_preview = None
-                        error_message = None
-                        success = True
-                        tc_result = getattr(tc, "result", None) or getattr(tc, "output", None)
-                        if tc_result is not None:
-                            result_str = str(tc_result)
-                            result_preview = result_str[:200] if result_str else None
-                            if isinstance(tc_result, dict) and "error" in tc_result:
-                                success = False
-                                error_message = str(tc_result["error"])[:500]
-
-                        tool_calls_legacy.append({"name": tool_name, "success": success})
-                        tool_call_details.append(ToolCallDetail(
-                            tool_name=tool_name,
-                            tool_args_json=tool_args,
-                            success=success,
-                            error_message=error_message,
-                            result_preview=result_preview,
-                            call_order=call_order,
-                        ))
-
-        model_id = ""
-        provider = ""
-        if metrics and hasattr(metrics, "details") and metrics.details:
-            for model_type, model_metrics_list in metrics.details.items():
-                for m in model_metrics_list:
-                    model_id = getattr(m, "id", "") or model_id
-                    provider = getattr(m, "provider", "") or provider
-        if not model_id and hasattr(run_response, "model"):
-            model_id = run_response.model or ""
-        # 兜底：从配置获取模型名称
-        if not model_id:
-            from ..core.agno_client import _resolve_model_id
-            model_id = _resolve_model_id("doctor")
-
-        tool_error_count = sum(1 for d in tool_call_details if not d.success)
-
-        db = SessionLocal()
-        try:
-            log_entry = AgentAuditLog(
-                session_id=session_id,
-                user_id=user_id,
-                agent_role="doctor",
-                agent_variant=agent_variant,
-                intent_classification=intent_classification,
-                routed_agent=f"智医-{agent_variant}",
-                input_tokens=metrics.input_tokens if metrics else 0,
-                output_tokens=metrics.output_tokens if metrics else 0,
-                total_tokens=metrics.total_tokens if metrics else 0,
-                tool_calls_json=tool_calls_legacy if tool_calls_legacy else None,
-                tool_call_count=len(tool_calls_legacy),
-                tool_error_count=tool_error_count,
-                model_id=model_id or "unknown",
-                provider=provider or "openai",
-                total_latency_ms=total_latency_ms,
-                response_preview=content[:200] if content else None,
-            )
-            db.add(log_entry)
-            db.flush()
-
-            for detail in tool_call_details:
-                detail.audit_log_id = log_entry.id
-                db.add(detail)
-
-            db.commit()
-            return log_entry.id
-        except Exception:
-            db.rollback()
-            return None
-        finally:
-            db.close()
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("审计日志写入失败: %s", e)
-        return None
+# _save_doctor_audit_log 已迁移到 app/services/audit_service.py → AuditService.save_log()
 
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
@@ -341,11 +212,14 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             timeout=120,
         )
         elapsed_ms = int((time.time() - t0) * 1000)
-        _save_doctor_audit_log(
+        await asyncio.to_thread(
+            AuditService.save_log,
             session_id=f"doctor_analyze_{pregnant.pregnant_id}",
             user_id=pregnant.pregnant_id,
+            agent_role="doctor",
             agent_variant="analyze",
             intent_classification="ANALYZE",
+            user_message=None,
             run_response=response,
             total_latency_ms=elapsed_ms,
         )
@@ -756,27 +630,29 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
         except Exception as e:
             logger.error("Doctor chat stream error: {}", e)
             yield {"event": "error", "data": "服务内部错误，请稍后重试"}
-        # 审计日志
-        elapsed_ms = int((time.time() - t0) * 1000)
-        import asyncio
-        audit_log_id = await asyncio.to_thread(
-            _save_doctor_audit_log,
-            session_id=f"doctor_chat_{pregnant_id or 'anon'}",
-            user_id=pregnant_id or "anonymous",
-            agent_variant=intent_variant,
-            intent_classification=intent_classification,
-            run_response=run_response,
-            total_latency_ms=elapsed_ms,
-        )
-
+        # 先 yield done，避免审计日志写入阻塞 SSE
         yield {
             "event": "done",
             "data": json.dumps({
                 "source": "DOCTOR_AI",
                 "tool_steps": tool_steps,
-                "audit_log_id": audit_log_id,
             }),
         }
+
+        # 审计日志（后台异步写入，不阻塞响应）
+        elapsed_ms = int((time.time() - t0) * 1000)
+        import asyncio
+        asyncio.create_task(asyncio.to_thread(
+            AuditService.save_log,
+            session_id=f"doctor_chat_{pregnant_id or 'anon'}",
+            user_id=pregnant_id or "anonymous",
+            agent_role="doctor",
+            agent_variant=intent_variant,
+            intent_classification=intent_classification,
+            user_message=None,
+            run_response=run_response,
+            total_latency_ms=elapsed_ms,
+        ))
 
     return EventSourceResponse(agno_event_generator())
 
@@ -930,11 +806,14 @@ async def generate_report(pregnant_id: str, user: TokenPayload = Depends(get_cur
     t0 = time.time()
     response = await agent.arun(input=prompt, user_id=pregnant_id)
     elapsed_ms = int((time.time() - t0) * 1000)
-    _save_doctor_audit_log(
+    await asyncio.to_thread(
+        AuditService.save_log,
         session_id=f"doctor_report_{pregnant_id}",
         user_id=pregnant_id,
+        agent_role="doctor",
         agent_variant=intent_variant,
         intent_classification=intent_classification,
+        user_message=None,
         run_response=response,
         total_latency_ms=elapsed_ms,
     )

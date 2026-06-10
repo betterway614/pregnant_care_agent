@@ -169,6 +169,8 @@ def list_audit_sessions(
                 "guardrail_triggered": log.guardrail_triggered,
                 "feedback_rating": log.feedback_rating,
                 "response_preview": log.response_preview,
+                "user_message_preview": log.user_message_preview,
+                "nlu_detail_json": log.nlu_detail_json,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }
             for log in rows

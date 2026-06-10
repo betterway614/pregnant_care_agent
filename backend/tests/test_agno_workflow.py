@@ -87,7 +87,7 @@ async def test_non_stream_routes_to_workflow_for_complex_symptom():
     with nlu_ctx, tools_ctx, \
          patch("app.core.agno_chat_handler.settings") as mock_settings, \
          patch("app.core.agno_chat_handler.conversation_store") as mock_store, \
-         patch("app.core.agno_chat_handler._save_audit_log"), \
+         patch("app.core.agno_chat_handler.AuditService.save_log"), \
          patch("app.core.agno_workflow.create_prenatal_workflow", return_value=mock_workflow), \
          patch("app.core.agno_chat_handler.create_prenatal_workflow", return_value=mock_workflow, create=True):
 
@@ -125,7 +125,7 @@ async def test_non_stream_workflow_failure_falls_back_to_agent():
     with nlu_ctx, tools_ctx, \
          patch("app.core.agno_chat_handler.settings") as mock_settings, \
          patch("app.core.agno_chat_handler.conversation_store") as mock_store, \
-         patch("app.core.agno_chat_handler._save_audit_log"), \
+         patch("app.core.agno_chat_handler.AuditService.save_log"), \
          patch("app.core.agno_workflow.create_prenatal_workflow", return_value=mock_workflow), \
          patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"complex": lambda: mock_agent}), \
          patch("app.core.agno_agent.get_main_agent", return_value=mock_agent):
@@ -163,7 +163,7 @@ async def test_non_stream_skips_workflow_for_simple_intent():
     with nlu_ctx, tools_ctx, \
          patch("app.core.agno_chat_handler.settings") as mock_settings, \
          patch("app.core.agno_chat_handler.conversation_store") as mock_store, \
-         patch("app.core.agno_chat_handler._save_audit_log"), \
+         patch("app.core.agno_chat_handler.AuditService.save_log"), \
          patch("app.core.agno_workflow.create_prenatal_workflow", return_value=mock_workflow), \
          patch("app.core.agno_agent.AGENT_VARIANT_MAP", {"simple": lambda: mock_agent}), \
          patch("app.core.agno_agent.get_main_agent", return_value=mock_agent):

@@ -221,6 +221,32 @@ def _ensure_audit_log_table():
                                 conn.execute(sa.text("ALTER TABLE agent_audit_logs MODIFY COLUMN routed_agent VARCHAR(64)"))
                             logger.info("agent_audit_logs routed_agent 列扩展为 VARCHAR(64)")
                         break
+                # 新增 user_message_preview + nlu_detail_json 列
+                if "user_message_preview" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN user_message_preview VARCHAR(500)"))
+                    logger.info("agent_audit_logs 添加 user_message_preview 列")
+                if "nlu_detail_json" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN nlu_detail_json JSON"))
+                    logger.info("agent_audit_logs 添加 nlu_detail_json 列")
+                # 复合索引：加速 Dashboard 聚合查询
+                try:
+                    conn.execute(sa.text(
+                        "CREATE INDEX IF NOT EXISTS idx_audit_created_role_variant "
+                        "ON agent_audit_logs(created_at, agent_role, agent_variant)"
+                    ))
+                    logger.info("agent_audit_logs 添加复合索引 idx_audit_created_role_variant")
+                except Exception:
+                    pass  # 索引可能已存在
+            # tool_call_details 索引
+            if "tool_call_details" in existing:
+                try:
+                    conn.execute(sa.text(
+                        "CREATE INDEX IF NOT EXISTS idx_tool_call_created "
+                        "ON tool_call_details(created_at)"
+                    ))
+                    logger.info("tool_call_details 添加 created_at 索引")
+                except Exception:
+                    pass
     except Exception as e:
         logger.warning("审计表迁移跳过: {}", e)
 
