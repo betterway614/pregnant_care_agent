@@ -40,114 +40,133 @@ class ResourceService:
         logger.info("ResourceService 初始化完成")
 
     def _auto_detect_services(self):
-        """自动检测各服务的实际运行状态，更新配置"""
-        import requests
+        """自动检测各服务的实际运行状态，更新配置
+
+        健壮性保证：
+        - 服务离线时（端口不可达）静默保留原配置，不抛错
+        - 启动时最多等待 3 秒（4 服务 × socket 检测 + 1s HTTP）
+        - 不覆盖用户通过 settings 显式配置的值
+        """
+        import socket
 
         detectors = {
-            "llm": self._detect_llm,
-            "bge_m3": self._detect_embedding,
-            "tts": self._detect_tts,
-            "asr": self._detect_asr,
+            "llm": (self._rule_engine.services["llm"].port, self._detect_llm),
+            "bge_m3": (self._rule_engine.services["bge_m3"].port, self._detect_embedding),
+            "tts": (self._rule_engine.services["tts"].port, self._detect_tts),
+            "asr": (self._rule_engine.services["asr"].port, self._detect_asr),
         }
 
-        for service_name, detector in detectors.items():
+        for service_name, (port, detector) in detectors.items():
             try:
+                # 快速 socket 检测端口是否开放，避免长时间 HTTP 超时
+                if not self._is_port_open("127.0.0.1", port, timeout=0.5):
+                    continue  # 端口不可达 = 服务离线，保留默认/用户配置
                 result = detector()
-                if result:
-                    config = self._rule_engine.services.get(service_name)
-                    if config:
-                        old_accel = config.accelerator.value
-                        new_accel = result.get("accelerator")
-                        if new_accel and new_accel != old_accel:
-                            config.accelerator = AcceleratorType(new_accel)
-                            logger.info(f"服务 {service_name} 加速器自动检测: {old_accel} -> {new_accel}")
+                if not result:
+                    continue
+                config = self._rule_engine.services.get(service_name)
+                if not config:
+                    continue
+                # 不覆盖用户通过 settings 显式配置的值
+                if self._is_user_configured(service_name):
+                    continue
+                old_accel = config.accelerator.value
+                new_accel = result.get("accelerator")
+                if new_accel and new_accel != old_accel:
+                    config.accelerator = AcceleratorType(new_accel)
+                    logger.info(f"服务 {service_name} 加速器自动检测: {old_accel} -> {new_accel}")
             except Exception as e:
+                # 静默失败，不影响启动
                 logger.debug(f"服务 {service_name} 自动检测失败: {e}")
+
+    def _is_port_open(self, host: str, port: int, timeout: float = 0.5) -> bool:
+        """快速检测端口是否开放（避免 HTTP 超时阻塞启动）"""
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                return s.connect_ex((host, port)) == 0
+        except Exception:
+            return False
+
+    def _is_user_configured(self, service_name: str) -> bool:
+        """检查用户是否通过 settings 显式配置了该服务的加速器"""
+        try:
+            from ..config import settings
+            val = getattr(settings, f"resource_{service_name}_accel", "")
+            return val in ("cpu", "gpu", "npu")
+        except Exception:
+            return False
 
     def _detect_llm(self) -> Optional[dict]:
         """检测 LLM 服务状态（vLLM/SGLang/Ollama）"""
         import requests
         port = self._rule_engine.services["llm"].port
-
         # 尝试 vLLM/SGLang API
         try:
-            resp = requests.get(f"http://localhost:{port}/v1/models", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/v1/models", timeout=1)
             if resp.ok:
-                return {"accelerator": "gpu"}  # vLLM/SGLang 通常用 GPU
-        except:
+                return {"accelerator": "gpu"}
+        except Exception:
             pass
-
         # 尝试 Ollama API
         try:
-            resp = requests.get(f"http://localhost:{port}/api/ps", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/api/ps", timeout=1)
             if resp.ok:
-                data = resp.json()
-                # Ollama 返回正在运行的模型信息
                 return {"accelerator": "gpu"}
-        except:
+        except Exception:
             pass
-
         return None
 
     def _detect_embedding(self) -> Optional[dict]:
         """检测 Embedding 服务状态"""
         import requests
         port = self._rule_engine.services["bge_m3"].port
-
+        # 优先查询 /device 端点获取精确设备
         try:
-            # 检查 embedding server 的 /status 或 /device 端点
-            resp = requests.get(f"http://localhost:{port}/device", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/device", timeout=1)
             if resp.ok:
                 data = resp.json()
                 device = data.get("device", "").lower()
                 if "cpu" in device:
                     return {"accelerator": "cpu"}
-                elif "npu" in device or "xdna" in device:
+                if "npu" in device or "xdna" in device:
                     return {"accelerator": "npu"}
-                elif "cuda" in device or "gpu" in device or "rocm" in device:
+                if "cuda" in device or "gpu" in device or "rocm" in device:
                     return {"accelerator": "gpu"}
-        except:
+        except Exception:
             pass
-
-        # 尝试 /health 端点
+        # 回退到 /health 端点
         try:
-            resp = requests.get(f"http://localhost:{port}/health", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=1)
             if resp.ok:
-                # 如果能连接但没有 device 信息，默认 GPU
                 return {"accelerator": "gpu"}
-        except:
+        except Exception:
             pass
-
         return None
 
     def _detect_tts(self) -> Optional[dict]:
         """检测 TTS 服务状态"""
         import requests
         port = self._rule_engine.services["tts"].port
-
         try:
-            # CosyVoice API
-            resp = requests.get(f"http://localhost:{port}/health", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=1)
             if resp.ok:
                 return {"accelerator": "gpu"}
-        except:
+        except Exception:
             pass
-
         return None
 
     def _detect_asr(self) -> Optional[dict]:
         """检测 ASR 服务状态"""
         import requests
         port = self._rule_engine.services["asr"].port
-
         try:
-            # FunASR API
-            resp = requests.get(f"http://localhost:{port}/", timeout=2)
+            resp = requests.get(f"http://127.0.0.1:{port}/", timeout=1)
             if resp.ok:
                 return {"accelerator": "npu"}
-        except:
+        except Exception:
             pass
-
         return None
 
     # ------------------------------------------------------------------
