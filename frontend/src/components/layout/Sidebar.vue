@@ -29,37 +29,41 @@
     </el-menu>
 
     <div class="sidebar__footer">
-      <div class="sidebar__role-switch" @click="showRoleDialog = true">
-        <el-icon><Refresh /></el-icon>
-        <span v-show="!appStore.sidebarCollapsed">切换角色</span>
+      <div class="sidebar__logout" @click="handleLogout">
+        <el-icon><SwitchButton /></el-icon>
+        <span v-show="!appStore.sidebarCollapsed">退出登录</span>
       </div>
     </div>
   </div>
-
-  <el-dialog v-model="showRoleDialog" title="切换角色" width="400px">
-    <el-radio-group v-model="selectedRole" class="role-select">
-      <el-radio-button value="nurse">护士端 - 小护</el-radio-button>
-      <el-radio-button value="doctor">医生端 - Dr.智</el-radio-button>
-      <el-radio-button value="pregnant">孕妇端 - 小安</el-radio-button>
-    </el-radio-group>
-    <template #footer>
-      <el-button @click="showRoleDialog = false">取消</el-button>
-      <el-button type="primary" @click="switchRole">确认切换</el-button>
-    </template>
-  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
-import type { UserRole } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const showRoleDialog = ref(false)
-const selectedRole = ref<UserRole>('nurse')
+
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('确定退出登录？', '退出确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return // 用户取消
+  }
+  // 清除登录状态
+  localStorage.removeItem('isLoggedIn')
+  localStorage.removeItem('currentRole')
+  localStorage.removeItem('token')
+  localStorage.removeItem('nurse_id')
+  router.push('/login')
+}
 
 const menuItems = computed(() => {
   const role = appStore.currentRole
@@ -84,17 +88,6 @@ const menuItems = computed(() => {
   return []
 })
 
-function switchRole() {
-  appStore.setRole(selectedRole.value)
-  showRoleDialog.value = false
-  const paths: Record<UserRole, string> = {
-    nurse: '/nurse/dashboard',
-    doctor: '/doctor/dashboard',
-    pregnant: '/pregnant/chat',
-    admin: '/admin/dashboard',
-  }
-  router.push(paths[selectedRole.value])
-}
 </script>
 
 <style scoped>
@@ -169,7 +162,7 @@ function switchRole() {
   border-top: 1px solid var(--border);
 }
 
-.sidebar__role-switch {
+.sidebar__logout {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -181,24 +174,8 @@ function switchRole() {
   transition: var(--transition);
 }
 
-.sidebar__role-switch:hover {
-  background: var(--primary-bg);
-  color: var(--primary);
-}
-
-.role-select {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.role-select .el-radio-button {
-  width: 100%;
-}
-
-.role-select .el-radio-button__inner {
-  width: 100%;
-  justify-content: flex-start;
-  padding: 12px 16px;
+.sidebar__logout:hover {
+  background: #FEF2F2;
+  color: #DC2626;
 }
 </style>
