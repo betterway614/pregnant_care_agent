@@ -15,6 +15,7 @@ class ResourceService:
 
     整合 ResourceMonitor 和 ResourceRuleEngine，
     提供统一的资源状态查询、策略管理和配置更新接口。
+    启动时自动检测各服务的实际运行状态。
     """
 
     _instance: Optional["ResourceService"] = None
@@ -34,7 +35,120 @@ class ResourceService:
         self._monitor = resource_monitor
         self._rule_engine = resource_rule_engine
         self._analyzer = resource_analyzer
+        # 启动时自动检测服务实际状态
+        self._auto_detect_services()
         logger.info("ResourceService 初始化完成")
+
+    def _auto_detect_services(self):
+        """自动检测各服务的实际运行状态，更新配置"""
+        import requests
+
+        detectors = {
+            "llm": self._detect_llm,
+            "bge_m3": self._detect_embedding,
+            "tts": self._detect_tts,
+            "asr": self._detect_asr,
+        }
+
+        for service_name, detector in detectors.items():
+            try:
+                result = detector()
+                if result:
+                    config = self._rule_engine.services.get(service_name)
+                    if config:
+                        old_accel = config.accelerator.value
+                        new_accel = result.get("accelerator")
+                        if new_accel and new_accel != old_accel:
+                            config.accelerator = AcceleratorType(new_accel)
+                            logger.info(f"服务 {service_name} 加速器自动检测: {old_accel} -> {new_accel}")
+            except Exception as e:
+                logger.debug(f"服务 {service_name} 自动检测失败: {e}")
+
+    def _detect_llm(self) -> Optional[dict]:
+        """检测 LLM 服务状态（vLLM/SGLang/Ollama）"""
+        import requests
+        port = self._rule_engine.services["llm"].port
+
+        # 尝试 vLLM/SGLang API
+        try:
+            resp = requests.get(f"http://localhost:{port}/v1/models", timeout=2)
+            if resp.ok:
+                return {"accelerator": "gpu"}  # vLLM/SGLang 通常用 GPU
+        except:
+            pass
+
+        # 尝试 Ollama API
+        try:
+            resp = requests.get(f"http://localhost:{port}/api/ps", timeout=2)
+            if resp.ok:
+                data = resp.json()
+                # Ollama 返回正在运行的模型信息
+                return {"accelerator": "gpu"}
+        except:
+            pass
+
+        return None
+
+    def _detect_embedding(self) -> Optional[dict]:
+        """检测 Embedding 服务状态"""
+        import requests
+        port = self._rule_engine.services["bge_m3"].port
+
+        try:
+            # 检查 embedding server 的 /status 或 /device 端点
+            resp = requests.get(f"http://localhost:{port}/device", timeout=2)
+            if resp.ok:
+                data = resp.json()
+                device = data.get("device", "").lower()
+                if "cpu" in device:
+                    return {"accelerator": "cpu"}
+                elif "npu" in device or "xdna" in device:
+                    return {"accelerator": "npu"}
+                elif "cuda" in device or "gpu" in device or "rocm" in device:
+                    return {"accelerator": "gpu"}
+        except:
+            pass
+
+        # 尝试 /health 端点
+        try:
+            resp = requests.get(f"http://localhost:{port}/health", timeout=2)
+            if resp.ok:
+                # 如果能连接但没有 device 信息，默认 GPU
+                return {"accelerator": "gpu"}
+        except:
+            pass
+
+        return None
+
+    def _detect_tts(self) -> Optional[dict]:
+        """检测 TTS 服务状态"""
+        import requests
+        port = self._rule_engine.services["tts"].port
+
+        try:
+            # CosyVoice API
+            resp = requests.get(f"http://localhost:{port}/health", timeout=2)
+            if resp.ok:
+                return {"accelerator": "gpu"}
+        except:
+            pass
+
+        return None
+
+    def _detect_asr(self) -> Optional[dict]:
+        """检测 ASR 服务状态"""
+        import requests
+        port = self._rule_engine.services["asr"].port
+
+        try:
+            # FunASR API
+            resp = requests.get(f"http://localhost:{port}/", timeout=2)
+            if resp.ok:
+                return {"accelerator": "npu"}
+        except:
+            pass
+
+        return None
 
     # ------------------------------------------------------------------
     # 系统状态

@@ -114,6 +114,15 @@ async def health():
     )
 
 
+@app.get("/device")
+async def get_device():
+    """返回当前运行设备（供资源监控自动检测）"""
+    return {
+        "device": DEVICE,
+        "model_loaded": _model is not None,
+    }
+
+
 @app.get("/v1/models")
 async def list_models():
     return {
