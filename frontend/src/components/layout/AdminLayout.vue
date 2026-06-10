@@ -38,6 +38,18 @@
           <el-icon><Promotion /></el-icon>
           <template #title>API 配置</template>
         </el-menu-item>
+        <el-menu-item index="/admin/resource-monitor">
+          <el-icon><Monitor /></el-icon>
+          <template #title>资源监控</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/resource-config">
+          <el-icon><Tools /></el-icon>
+          <template #title>资源配置</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/operation-report">
+          <el-icon><Document /></el-icon>
+          <template #title>运营报告</template>
+        </el-menu-item>
       </el-menu>
 
       <div class="admin-sidebar__footer">
@@ -119,7 +131,7 @@ const dateShortcuts = [
 ]
 
 const showDatePicker = computed(() =>
-  ['AdminDashboard', 'AdminTokenAnalysis', 'AdminRouteMonitor'].includes(route.name as string)
+  ['AdminDashboard', 'AdminTokenAnalysis', 'AdminRouteMonitor', 'AdminResourceMonitor', 'AdminOperationReport'].includes(route.name as string)
 )
 
 const formatDate = (d: Date) => dayjs(d).format('YYYY-MM-DD')
