@@ -81,12 +81,6 @@ pregnant_care_agent/
 ├── embedding_server/                 # 向量嵌入服务（BGE-M3）
 ├── tts_server/                       # TTS语音合成服务
 │
-├── docs/                             # 项目文档
-│   ├── AI-Care技术论文.md             #   技术论文
-│   ├── 赛题要求和赛题方向.md           #   竞赛赛题说明
-│   ├── 项目说明与体验指南.md           #   体验指南
-│   └── design/                       #   设计文档
-│
 ├── docker-compose.yml                # 容器编排
 ├── start.sh                          # 一键启动脚本
 └── README.md                         # 项目说明
