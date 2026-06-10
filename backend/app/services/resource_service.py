@@ -46,26 +46,34 @@ class ResourceService:
         - 服务离线时（端口不可达）静默保留原配置，不抛错
         - 启动时最多等待 3 秒（4 服务 × socket 检测 + 1s HTTP）
         - 不覆盖用户通过 settings 显式配置的值
+        - 服务地址可通过 resource_*_host 配置（SSH 端口转发场景）
+
+        注意: SSH 端口转发场景下，后端监听的 127.0.0.1:port 实际是远程服务
+        （通过 SSH 隧道映射过来），检测本地端口即可。
+        如果服务部署在不同机器，需通过 resource_*_host 配置远程地址。
         """
         import socket
+        from ..config import settings
 
         detectors = {
-            "llm": (self._rule_engine.services["llm"].port, self._detect_llm),
-            "bge_m3": (self._rule_engine.services["bge_m3"].port, self._detect_embedding),
-            "tts": (self._rule_engine.services["tts"].port, self._detect_tts),
-            "asr": (self._rule_engine.services["asr"].port, self._detect_asr),
+            "llm": self._detect_llm,
+            "bge_m3": self._detect_embedding,
+            "tts": self._detect_tts,
+            "asr": self._detect_asr,
         }
 
-        for service_name, (port, detector) in detectors.items():
+        for service_name, detector in detectors.items():
             try:
-                # 快速 socket 检测端口是否开放，避免长时间 HTTP 超时
-                if not self._is_port_open("127.0.0.1", port, timeout=0.5):
-                    continue  # 端口不可达 = 服务离线，保留默认/用户配置
-                result = detector()
-                if not result:
-                    continue
                 config = self._rule_engine.services.get(service_name)
                 if not config:
+                    continue
+                host = getattr(settings, f"resource_{service_name}_host", "127.0.0.1")
+                port = config.port
+                # 快速 socket 检测端口是否开放，避免长时间 HTTP 超时
+                if not self._is_port_open(host, port, timeout=0.5):
+                    continue
+                result = detector()
+                if not result:
                     continue
                 # 不覆盖用户通过 settings 显式配置的值
                 if self._is_user_configured(service_name):
@@ -101,17 +109,19 @@ class ResourceService:
     def _detect_llm(self) -> Optional[dict]:
         """检测 LLM 服务状态（vLLM/SGLang/Ollama）"""
         import requests
+        from ..config import settings
+        host = settings.resource_llm_host
         port = self._rule_engine.services["llm"].port
         # 尝试 vLLM/SGLang API
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/v1/models", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/v1/models", timeout=1)
             if resp.ok:
                 return {"accelerator": "gpu"}
         except Exception:
             pass
         # 尝试 Ollama API
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/api/ps", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/api/ps", timeout=1)
             if resp.ok:
                 return {"accelerator": "gpu"}
         except Exception:
@@ -121,10 +131,12 @@ class ResourceService:
     def _detect_embedding(self) -> Optional[dict]:
         """检测 Embedding 服务状态"""
         import requests
+        from ..config import settings
+        host = settings.resource_bge_m3_host
         port = self._rule_engine.services["bge_m3"].port
         # 优先查询 /device 端点获取精确设备
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/device", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/device", timeout=1)
             if resp.ok:
                 data = resp.json()
                 device = data.get("device", "").lower()
@@ -138,7 +150,7 @@ class ResourceService:
             pass
         # 回退到 /health 端点
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/health", timeout=1)
             if resp.ok:
                 return {"accelerator": "gpu"}
         except Exception:
@@ -148,9 +160,11 @@ class ResourceService:
     def _detect_tts(self) -> Optional[dict]:
         """检测 TTS 服务状态"""
         import requests
+        from ..config import settings
+        host = settings.resource_tts_host
         port = self._rule_engine.services["tts"].port
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/health", timeout=1)
             if resp.ok:
                 return {"accelerator": "gpu"}
         except Exception:
@@ -160,9 +174,11 @@ class ResourceService:
     def _detect_asr(self) -> Optional[dict]:
         """检测 ASR 服务状态"""
         import requests
+        from ..config import settings
+        host = settings.resource_asr_host
         port = self._rule_engine.services["asr"].port
         try:
-            resp = requests.get(f"http://127.0.0.1:{port}/", timeout=1)
+            resp = requests.get(f"http://{host}:{port}/", timeout=1)
             if resp.ok:
                 return {"accelerator": "npu"}
         except Exception:

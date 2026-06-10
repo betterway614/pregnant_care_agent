@@ -209,6 +209,18 @@ def _ensure_audit_log_table():
                 if "feedback_comment" not in audit_cols:
                     conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN feedback_comment TEXT"))
                     logger.info("agent_audit_logs 添加 feedback_comment 列")
+                # routed_agent 列从 VARCHAR(32) 扩展到 VARCHAR(64)
+                router_col = inspector.get_columns("agent_audit_logs")
+                for col_info in router_col:
+                    if col_info["name"] == "routed_agent":
+                        col_type = str(col_info["type"])
+                        if "32" in col_type or col_info.get("type_length") == 32:
+                            if settings.db_type == "postgres":
+                                conn.execute(sa.text("ALTER TABLE agent_audit_logs ALTER COLUMN routed_agent TYPE VARCHAR(64)"))
+                            else:
+                                conn.execute(sa.text("ALTER TABLE agent_audit_logs MODIFY COLUMN routed_agent VARCHAR(64)"))
+                            logger.info("agent_audit_logs routed_agent 列扩展为 VARCHAR(64)")
+                        break
     except Exception as e:
         logger.warning("审计表迁移跳过: {}", e)
 

@@ -165,6 +165,7 @@ def list_audit_sessions(
                 "total_latency_ms": log.total_latency_ms,
                 "tool_call_count": log.tool_call_count or 0,
                 "tool_error_count": log.tool_error_count or 0,
+                "model_id": log.model_id,
                 "guardrail_triggered": log.guardrail_triggered,
                 "feedback_rating": log.feedback_rating,
                 "response_preview": log.response_preview,
@@ -994,3 +995,50 @@ async def test_api_connection(
             "message": f"连接失败: {str(e)}",
             "latency_ms": latency,
         }
+
+
+# ==================== 数据保留 ====================
+
+@router.post("/audit/cleanup")
+def cleanup_audit_logs(
+    days: int = Query(90, description="保留最近 N 天的审计日志，默认 90 天"),
+    user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """清理超过指定天数的审计日志和工具调用详情（需管理员权限）
+
+    只清理旧数据，保留近期日志用于分析和审计追溯。
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    cutoff = datetime.now() - timedelta(days=max(days, 30))  # 至少保留 30 天
+    deleted_logs = 0
+    deleted_tools = 0
+
+    try:
+        # 先删子表（工具调用详情）
+        old_log_ids = db.query(AgentAuditLog.id).filter(
+            AgentAuditLog.created_at < cutoff
+        ).subquery()
+        deleted_tools = db.query(ToolCallDetail).filter(
+            ToolCallDetail.audit_log_id.in_(old_log_ids)
+        ).delete(synchronize_session=False)
+
+        # 再删主表
+        deleted_logs = db.query(AgentAuditLog).filter(
+            AgentAuditLog.created_at < cutoff
+        ).delete(synchronize_session=False)
+
+        db.commit()
+        logger.info("审计日志清理完成: 删除 %d 条日志, %d 条工具调用", deleted_logs, deleted_tools)
+
+        return {
+            "success": True,
+            "cutoff": cutoff.isoformat(),
+            "deleted_audit_logs": deleted_logs,
+            "deleted_tool_calls": deleted_tools,
+        }
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "清理审计日志失败")

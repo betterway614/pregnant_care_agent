@@ -1,16 +1,56 @@
 """Alert 分析服务 - 接入 Agno Workflow / Agent"""
 from __future__ import annotations
 
+import time
 from loguru import logger
 
 from ..utils.timezone import beijing_now
 
-from ..models import Alert, Pregnant, FollowUpRecord
+from ..models import Alert, Pregnant, FollowUpRecord, AgentAuditLog
+from ..database import SessionLocal
 from ..core.agno_medical_agents import get_nurse_agent, get_doctor_agent
 from ..core.agno_structured import extract_structured_content
 from ..core.agno_workflow import get_alert_analysis_workflow
 from ..core.agno_team import get_alert_team
 from ..services.patient_context_service import get_recent_health_data
+
+
+def _alert_quick_audit(
+    session_id: str,
+    user_id: str,
+    agent_variant: str,
+    intent: str,
+    run_response,
+    elapsed_ms: int,
+    agent_role: str = "nurse",
+) -> int | None:
+    """预警分析的轻量审计日志"""
+    if elapsed_ms < 10:
+        return None
+    try:
+        content = getattr(run_response, "content", "") or ""
+        db = SessionLocal()
+        try:
+            log = AgentAuditLog(
+                session_id=session_id,
+                user_id=user_id,
+                agent_role=agent_role,
+                agent_variant=agent_variant,
+                intent_classification=intent,
+                routed_agent=f"{'小护' if agent_role == 'nurse' else '智医'}-{agent_variant}",
+                input_tokens=0, output_tokens=0, total_tokens=0,
+                model_id=getattr(run_response, "model", "") or "unknown",
+                provider="openai",
+                total_latency_ms=elapsed_ms,
+                response_preview=content[:200],
+            )
+            db.add(log)
+            db.commit()
+            return log.id
+        finally:
+            db.close()
+    except Exception:
+        return None
 
 
 def _build_data_snapshot(db, pregnant_id: str) -> str:
@@ -49,7 +89,16 @@ class AlertAnalysisService:
         )
         try:
             agent = get_nurse_agent()
+            t0 = time.time()
             response = await agent.arun(input=prompt, user_id=alert.pregnant_id)
+            _alert_quick_audit(
+                session_id=f"alert_nurse_{alert.id}",
+                user_id=alert.pregnant_id,
+                agent_variant="analyze",
+                intent="ALERT_ANALYZE",
+                run_response=response,
+                elapsed_ms=int((time.time() - t0) * 1000),
+            )
             data = extract_structured_content(response.content)
             if data:
                 return {
@@ -81,7 +130,17 @@ class AlertAnalysisService:
         )
         try:
             agent = get_doctor_agent()
+            t0 = time.time()
             response = await agent.arun(input=prompt, user_id=alert.pregnant_id)
+            _alert_quick_audit(
+                session_id=f"alert_doctor_{alert.id}",
+                user_id=alert.pregnant_id,
+                agent_variant="analyze",
+                intent="ALERT_ANALYZE",
+                run_response=response,
+                elapsed_ms=int((time.time() - t0) * 1000),
+                agent_role="doctor",
+            )
             data = extract_structured_content(response.content)
             if data:
                 return {
@@ -111,14 +170,34 @@ class AlertAnalysisService:
         # 优先使用 Team 并行分析（护士+医生同时分析）
         try:
             team = get_alert_team()
+            t0_team = time.time()
             run = await team.arun(input=input_text, user_id=alert.pregnant_id)
+            _alert_quick_audit(
+                session_id=f"alert_team_{alert.id}",
+                user_id=alert.pregnant_id,
+                agent_variant="team",
+                intent="ALERT_ANALYZE",
+                run_response=run,
+                elapsed_ms=int((time.time() - t0_team) * 1000),
+                agent_role="nurse",
+            )
             result_payload["workflow_output"] = run.content if hasattr(run, "content") else str(run)
             result_payload["mode"] = "team_parallel"
         except Exception as exc:
             logger.warning("Alert Team 并行分析失败，降级串行 Workflow: {}", exc)
             try:
                 workflow = get_alert_analysis_workflow()
+                t0_wf = time.time()
                 run = await workflow.arun(input=input_text, user_id=alert.pregnant_id)
+                _alert_quick_audit(
+                    session_id=f"alert_wf_{alert.id}",
+                    user_id=alert.pregnant_id,
+                    agent_variant="workflow",
+                    intent="ALERT_ANALYZE",
+                    run_response=run,
+                    elapsed_ms=int((time.time() - t0_wf) * 1000),
+                    agent_role="nurse",
+                )
                 result_payload["workflow_output"] = run.content if hasattr(run, "content") else str(run)
                 result_payload["mode"] = "workflow_sequential"
             except Exception as exc2:

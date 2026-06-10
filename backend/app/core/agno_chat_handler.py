@@ -74,6 +74,15 @@ def _save_audit_log(
     """
     from ..models import ToolCallDetail
 
+    # ── 过滤无效日志：延迟 <10ms 且无 token 消耗视为无效请求 ──
+    if total_latency_ms < 10:
+        metrics = getattr(run_response, "metrics", None) if run_response else None
+        input_tok = getattr(metrics, "input_tokens", None) if metrics else None
+        output_tok = getattr(metrics, "output_tokens", None) if metrics else None
+        if (input_tok is None or input_tok == 0) and (output_tok is None or output_tok == 0):
+            logger.debug("跳过无效审计日志 session_id={} latency={}ms", session_id, total_latency_ms)
+            return None
+
     try:
         # 守卫：流式异常时 run_response 可能为 None
         if run_response is None:
@@ -154,6 +163,11 @@ def _save_audit_log(
 
         if not model_id and hasattr(run_response, "model"):
             model_id = run_response.model or ""
+
+        # 兜底：从配置获取模型名称（避免存储 "unknown"）
+        if not model_id:
+            from .agno_client import _resolve_model_id
+            model_id = _resolve_model_id("pregnant")
 
         tool_error_count = sum(1 for d in tool_call_details if not d.success)
 
@@ -325,6 +339,9 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
             # 注入 NLU 结果到模块级上下文
             set_nlu_context(session_id, nlu_dict)
+        else:
+            # 空消息：默认使用聊天变体 + GREETING 意图（避免审计日志为空）
+            intent_variant = "chat"
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -340,14 +357,21 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
             if content:
                 elapsed_ms = int((time.time() - start_time) * 1000)
                 import asyncio
-                await asyncio.to_thread(
+                # 为工作流响应构造兼容结构（用于审计日志）
+                class _WorkflowResponse:
+                    def __init__(self, wf_resp):
+                        self.content = getattr(wf_resp, "content", "") or ""
+                        self.messages = getattr(wf_resp, "messages", []) or []
+                        self.metrics = getattr(wf_resp, "metrics", None)
+                        self.model = getattr(wf_resp, "model", "") or ""
+                audit_log_id = await asyncio.to_thread(
                     _save_audit_log,
                     session_id=session_id,
                     user_id=req.pregnant_id,
                     agent_role="pregnant",
                     agent_variant="workflow",
                     intent_classification=nlu_result.intent,
-                    run_response=None,
+                    run_response=_WorkflowResponse(workflow_response),
                     total_latency_ms=elapsed_ms,
                 )
                 if settings.persist_chat_messages:
@@ -356,7 +380,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
                         await conversation_store.async_save_single(session_id, req.pregnant_id, "assistant", content)
                     except Exception:
                         logger.warning("工作流对话持久化失败 session_id={}", session_id, exc_info=True)
-                return ChatResponse(content=content, session_id=session_id, source="AI_CARE")
+                return ChatResponse(content=content, session_id=session_id, source="AI_CARE", audit_log_id=audit_log_id)
         except Exception as e:
             logger.warning("工作流路由失败，回退到单Agent: {}", e)
 
@@ -388,7 +412,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
 
     # 5. 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
     import asyncio
-    await asyncio.to_thread(
+    audit_log_id = await asyncio.to_thread(
         _save_audit_log,
         session_id=session_id,
         user_id=req.pregnant_id,
@@ -418,6 +442,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         content=content,
         session_id=session_id,
         source="AI_CARE",
+        audit_log_id=audit_log_id,
     )
 
 
@@ -466,6 +491,9 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             _, intent_variant = resolve_tools_by_intent(nlu_dict)
             # 注入 NLU 结果到模块级上下文
             set_nlu_context(session_id, nlu_dict)
+        else:
+            # 空消息：默认使用聊天变体（避免审计日志为空）
+            intent_variant = "chat"
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
@@ -481,6 +509,23 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             if content:
                 yield {"event": "chunk", "data": content}
                 elapsed_ms = int((time.time() - start_time) * 1000)
+                import asyncio
+                class _WorkflowResponse:
+                    def __init__(self, wf_resp):
+                        self.content = getattr(wf_resp, "content", "") or ""
+                        self.messages = getattr(wf_resp, "messages", []) or []
+                        self.metrics = getattr(wf_resp, "metrics", None)
+                        self.model = getattr(wf_resp, "model", "") or ""
+                audit_log_id = await asyncio.to_thread(
+                    _save_audit_log,
+                    session_id=session_id,
+                    user_id=req.pregnant_id,
+                    agent_role="pregnant",
+                    agent_variant="workflow",
+                    intent_classification=nlu_result.intent,
+                    run_response=_WorkflowResponse(workflow_response),
+                    total_latency_ms=elapsed_ms,
+                )
                 yield {
                     "event": "done",
                     "data": json.dumps({
@@ -490,19 +535,9 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
                         "memory_updated": [],
                         "tool_steps": ["工作流处理"],
                         "transcribed_text": transcribed_text,
+                        "audit_log_id": audit_log_id,
                     }),
                 }
-                import asyncio
-                await asyncio.to_thread(
-                    _save_audit_log,
-                    session_id=session_id,
-                    user_id=req.pregnant_id,
-                    agent_role="pregnant",
-                    agent_variant="workflow",
-                    intent_classification=nlu_result.intent,
-                    run_response=None,
-                    total_latency_ms=elapsed_ms,
-                )
                 if settings.persist_chat_messages:
                     try:
                         await conversation_store.async_save_single(session_id, req.pregnant_id, "user", req.message)
@@ -582,21 +617,9 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 
-    yield {
-        "event": "done",
-        "data": json.dumps({
-            "session_id": session_id,
-            "source": "AI_CARE",
-            "nlu_result": None,
-            "memory_updated": [],
-            "tool_steps": tool_steps,
-            "transcribed_text": transcribed_text,
-        }),
-    }
-
     # 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
     import asyncio
-    await asyncio.to_thread(
+    audit_log_id = await asyncio.to_thread(
         _save_audit_log,
         session_id=session_id,
         user_id=req.pregnant_id,
@@ -606,6 +629,19 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         run_response=run_response,
         total_latency_ms=elapsed_ms,
     )
+
+    yield {
+        "event": "done",
+        "data": json.dumps({
+            "session_id": session_id,
+            "source": "AI_CARE",
+            "nlu_result": None,
+            "memory_updated": [],
+            "tool_steps": tool_steps,
+            "transcribed_text": transcribed_text,
+            "audit_log_id": audit_log_id,
+        }),
+    }
 
     # 对话持久化
     if settings.persist_chat_messages:

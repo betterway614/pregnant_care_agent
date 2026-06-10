@@ -106,6 +106,13 @@ class Settings(BaseSettings):
     resource_bge_m3_accel: Literal["", "cpu", "gpu", "npu"] = ""
     resource_tts_accel: Literal["", "cpu", "gpu", "npu"] = ""
     resource_asr_accel: Literal["", "cpu", "gpu", "npu"] = ""
+
+    # 资源监控 - 服务地址 (host:port)，用于 SSH 端口转发等场景
+    # 默认 127.0.0.1:port（本地）；SSH 转发场景下设置为远程实际地址
+    resource_llm_host: str = "127.0.0.1"
+    resource_bge_m3_host: str = "127.0.0.1"
+    resource_tts_host: str = "127.0.0.1"
+    resource_asr_host: str = "127.0.0.1"
     nnunet_folds: str = "all"
 
     # NLU配置

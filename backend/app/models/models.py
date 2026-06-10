@@ -322,7 +322,7 @@ class AgentAuditLog(Base):
     agent_role = Column(String(16), nullable=False, index=True, comment="pregnant|nurse|doctor")
     agent_variant = Column(String(32), nullable=False, comment="chat|record|qa|emergency|complex|main")
     intent_classification = Column(String(32), nullable=True, comment="NLU识别的意图")
-    routed_agent = Column(String(32), nullable=False, comment="最终路由的Agent变体")
+    routed_agent = Column(String(64), nullable=False, comment="最终路由的Agent名称（格式: 中文名-英文变体）")
     input_tokens = Column(Integer, default=0, comment="输入token数")
     output_tokens = Column(Integer, default=0, comment="输出token数")
     total_tokens = Column(Integer, default=0, comment="总token数")

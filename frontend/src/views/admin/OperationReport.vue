@@ -78,29 +78,29 @@
           </el-row>
 
           <el-row :gutter="16" style="margin-top: 16px;">
-            <!-- Token 消耗分析 -->
-            <el-col :span="12">
+            <!-- Token 消耗分析 (按角色) -->
+            <el-col :xs="24" :sm="24" :md="12">
               <el-card shadow="never" class="section-card">
                 <template #header>Token 消耗分析</template>
-                <VChart :option="tokenChartOption" autoresize style="height: 280px;" />
-                <div class="metric-list" v-if="agentDetail.token_analysis">
-                  <div class="metric-item" v-for="item in agentDetail.token_analysis.details" :key="item.label">
-                    <span class="metric-label">{{ item.label }}</span>
-                    <span class="metric-value">{{ formatTokens(item.value) }}</span>
+                <VChart :option="tokenByRoleChartOption" autoresize style="height: 280px;" />
+                <div class="metric-list" v-if="agentDetail.token_analysis?.by_role">
+                  <div class="metric-item" v-for="(stat, role) in agentDetail.token_analysis.by_role" :key="role">
+                    <span class="metric-label">{{ roleLabel(role) }}</span>
+                    <span class="metric-value">{{ formatTokens(stat.total) }} ({{ stat.count }}次)</span>
                   </div>
                 </div>
               </el-card>
             </el-col>
 
-            <!-- 路由分配分析 -->
-            <el-col :span="12">
+            <!-- 意图分布分析 (新增) -->
+            <el-col :xs="24" :sm="24" :md="12">
               <el-card shadow="never" class="section-card">
-                <template #header>路由分配分析</template>
-                <VChart :option="routeChartOption" autoresize style="height: 280px;" />
-                <div class="metric-list" v-if="agentDetail.route_analysis">
-                  <div class="metric-item" v-for="item in agentDetail.route_analysis.details" :key="item.label">
-                    <span class="metric-label">{{ item.label }}</span>
-                    <span class="metric-value">{{ item.value }}</span>
+                <template #header>意图分布分析</template>
+                <VChart :option="intentChartOption" autoresize style="height: 280px;" />
+                <div class="metric-list" v-if="agentDetail.intent_analysis?.distribution">
+                  <div class="metric-item" v-for="item in topIntents" :key="item.intent">
+                    <span class="metric-label">{{ item.intent }}</span>
+                    <span class="metric-value">{{ item.count }}</span>
                   </div>
                 </div>
               </el-card>
@@ -109,12 +109,13 @@
 
           <el-row :gutter="16" style="margin-top: 16px;">
             <!-- 工具使用分析 -->
-            <el-col :span="12">
+            <el-col :xs="24" :sm="24" :md="12">
               <el-card shadow="never" class="section-card">
                 <template #header>工具使用分析</template>
-                <el-table :data="agentDetail.tool_usage" stripe size="small" v-if="agentDetail.tool_usage?.length">
-                  <el-table-column prop="tool_name" label="工具名称" min-width="120" />
-                  <el-table-column prop="call_count" label="调用次数" width="90" />
+                <VChart :option="toolSuccessChartOption" autoresize style="height: 280px;" />
+                <el-table :data="agentDetail.tool_analysis?.top_tools?.slice(0, 5)" stripe size="small" style="margin-top: 12px;">
+                  <el-table-column prop="name" label="工具名称" min-width="120" />
+                  <el-table-column prop="count" label="调用次数" width="90" />
                   <el-table-column prop="success_rate" label="成功率" width="90">
                     <template #default="{ row }">
                       <el-progress
@@ -124,16 +125,42 @@
                       />
                     </template>
                   </el-table-column>
-                  <el-table-column prop="avg_latency_ms" label="平均延迟" width="100">
-                    <template #default="{ row }">{{ row.avg_latency_ms }}ms</template>
-                  </el-table-column>
                 </el-table>
-                <el-empty v-else description="暂无工具使用数据" :image-size="80" />
               </el-card>
             </el-col>
 
-            <!-- 优化建议 -->
-            <el-col :span="12">
+            <!-- 反馈汇总 (新增) -->
+            <el-col :xs="24" :sm="24" :md="12">
+              <el-card shadow="never" class="section-card">
+                <template #header>用户反馈分析</template>
+                <div class="feedback-summary" v-if="agentDetail.feedback_summary">
+                  <div class="feedback-stat">
+                    <div class="feedback-stat__value positive">{{ agentDetail.feedback_summary.positive }}</div>
+                    <div class="feedback-stat__label">👍正面</div>
+                  </div>
+                  <div class="feedback-stat">
+                    <div class="feedback-stat__value negative">{{ agentDetail.feedback_summary.negative }}</div>
+                    <div class="feedback-stat__label">👎 负面</div>
+                  </div>
+                  <div class="feedback-stat">
+                    <div class="feedback-stat__value">{{ agentDetail.feedback_summary.total }}</div>
+                    <div class="feedback-stat__label">总计</div>
+                  </div>
+                  <div class="feedback-stat">
+                    <div class="feedback-stat__value" :class="feedbackRateClass">
+                      {{ feedbackRate }}%
+                    </div>
+                    <div class="feedback-stat__label">满意率</div>
+                  </div>
+                </div>
+                <el-empty v-else description="暂无反馈数据" :image-size="80" />
+              </el-card>
+            </el-col>
+          </el-row>
+
+          <!-- 优化建议 -->
+          <el-row :gutter="16" style="margin-top: 16px;">
+            <el-col :xs="24" :sm="24" :md="12">
               <el-card shadow="never" class="section-card">
                 <template #header>优化建议</template>
                 <div class="suggestion-list" v-if="agentDetail.suggestions?.length">
@@ -160,39 +187,41 @@
                 <el-empty v-else description="暂无优化建议" :image-size="80" />
               </el-card>
             </el-col>
-          </el-row>
 
-          <!-- 异常告警 -->
-          <el-card shadow="never" class="section-card" style="margin-top: 16px;">
-            <template #header>
-              <div class="section-header">
-                <h3>异常告警</h3>
-                <el-tag :type="agentDetail.anomaly_count > 0 ? 'danger' : 'success'" size="small">
-                  {{ agentDetail.anomaly_count }} 条
-                </el-tag>
-              </div>
-            </template>
-            <el-table :data="agentDetail.anomalies" stripe size="small" v-if="agentDetail.anomalies?.length">
-              <el-table-column prop="time" label="时间" width="170" />
-              <el-table-column prop="level" label="级别" width="80">
-                <template #default="{ row }">
-                  <el-tag :type="row.level === 'critical' ? 'danger' : row.level === 'warning' ? 'warning' : 'info'" size="small">
-                    {{ row.level === 'critical' ? '严重' : row.level === 'warning' ? '警告' : '提示' }}
-                  </el-tag>
+            <!-- 异常告警 -->
+            <el-col :xs="24" :sm="24" :md="12">
+              <el-card shadow="never" class="section-card">
+                <template #header>
+                  <div class="section-header">
+                    <h3>异常告警</h3>
+                    <el-tag :type="agentDetail.anomaly_count > 0 ? 'danger' : 'success'" size="small">
+                      {{ agentDetail.anomaly_count }} 条
+                    </el-tag>
+                  </div>
                 </template>
-              </el-table-column>
-              <el-table-column prop="type" label="类型" width="120" />
-              <el-table-column prop="message" label="描述" min-width="200" show-overflow-tooltip />
-              <el-table-column prop="resolved" label="状态" width="80">
-                <template #default="{ row }">
-                  <el-tag :type="row.resolved ? 'success' : 'danger'" size="small">
-                    {{ row.resolved ? '已解决' : '未解决' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-else description="暂无异常告警" :image-size="80" />
-          </el-card>
+                <el-table :data="agentDetail.anomalies" stripe size="small" v-if="agentDetail.anomalies?.length">
+                  <el-table-column prop="time" label="时间" width="170" />
+                  <el-table-column prop="level" label="级别" width="80">
+                    <template #default="{ row }">
+                      <el-tag :type="row.level === 'critical' ? 'danger' : row.level === 'warning' ? 'warning' : 'info'" size="small">
+                        {{ row.level === 'critical' ? '严重' : row.level === 'warning' ? '警告' : '提示' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="type" label="类型" width="120" />
+                  <el-table-column prop="message" label="描述" min-width="200" show-overflow-tooltip />
+                  <el-table-column prop="resolved" label="状态" width="80">
+                    <template #default="{ row }">
+                      <el-tag :type="row.resolved ? 'success' : 'danger'" size="small">
+                        {{ row.resolved ? '已解决' : '未解决' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-empty v-else description="暂无异常告警" :image-size="80" />
+              </el-card>
+            </el-col>
+          </el-row>
         </template>
       </el-tab-pane>
 
@@ -487,6 +516,9 @@ const deviceDetail = ref<any>(null)
 
 // ==================== 工具函数 ====================
 const CHART_COLORS = ['#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#60a5fa', '#f472b6', '#a78bfa']
+const ROLE_LABELS: Record<string, string> = { pregnant: '孕妇', nurse: '护士', doctor: '医生', admin: '管理员' }
+
+function roleLabel(role: string) { return ROLE_LABELS[role] ?? role }
 
 function formatTokens(n: number): string {
   if (!n && n !== 0) return '-'
@@ -514,31 +546,90 @@ function getProgressColor(pct: number): string {
   return '#10b981'
 }
 
+//反馈满意率计算
+const feedbackRate = computed(() => {
+  const fb = agentDetail.value?.feedback_summary
+  if (!fb || fb.total === 0) return 0
+  return Math.round(fb.positive / fb.total * 100)
+})
+const feedbackRateClass = computed(() => {
+  const r = feedbackRate.value
+  if (r >= 80) return 'success'
+  if (r >= 60) return 'warning'
+  return 'danger'
+})
+
+// Top 意图 (前5)
+const topIntents = computed(() => {
+  const dist = agentDetail.value?.intent_analysis?.distribution || {}
+  return Object.entries(dist)
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .slice(0, 5)
+    .map(([intent, count]) => ({ intent, count }))
+})
+
 // ==================== 智能体报告图表 ====================
-const tokenChartOption = computed(() => {
-  const data = agentDetail.value?.token_analysis?.chart || []
+
+// Token 消耗按角色分解
+const tokenByRoleChartOption = computed(() => {
+  const byRole = agentDetail.value?.token_analysis?.by_role || {}
+  const roles = Object.keys(byRole)
+  return {
+    color: ['#3b82f6', '#f97316', '#10b981', '#8b5cf6'],
+    tooltip: { trigger: 'axis' as const },
+    legend: { data: ['输入Token', '输出Token', '总Token'], bottom: 0 },
+    grid: { left: 60, right: 20, top: 20, bottom: 40 },
+    xAxis: { type: 'category' as const, data: roles.map(r => roleLabel(r)) },
+    yAxis: { type: 'value' as const, name: 'Token' },
+    series: [
+      { name: '输入Token', type: 'bar', data: roles.map(r => byRole[r]?.input || 0), itemStyle: { color: '#3b82f6' } },
+      { name: '输出Token', type: 'bar', data: roles.map(r => byRole[r]?.output || 0), itemStyle: { color: '#f97316' } },
+      { name: '总Token', type: 'bar', data: roles.map(r => byRole[r]?.total || 0), itemStyle: { color: '#10b981' } },
+    ],
+  }
+})
+
+// 意图分布饼图
+const intentChartOption = computed(() => {
+  const chart = agentDetail.value?.intent_analysis?.chart || []
   return {
     color: CHART_COLORS,
-    tooltip: { trigger: 'axis' as const },
-    grid: { left: 60, right: 20, top: 20, bottom: 30 },
-    xAxis: { type: 'category' as const, data: data.map((d: any) => d.label) },
-    yAxis: { type: 'value' as const },
+    tooltip: { trigger: 'item' as const },
+    legend: { orient: 'vertical', right: 10, top: 20 },
     series: [
       {
-        name: '输入 Token',
-        type: 'bar',
-        stack: 'total',
-        data: data.map((d: any) => d.input_tokens),
-        itemStyle: { color: '#3b82f6' },
-      },
-      {
-        name: '输出 Token',
-        type: 'bar',
-        stack: 'total',
-        data: data.map((d: any) => d.output_tokens),
-        itemStyle: { color: '#f97316' },
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['40%', '50%'],
+        data: chart.map((d: any) => ({ name: d.intent, value: d.count })),
+        emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.12)' } },
+        label: { show: true, fontSize: 10 },
+        itemStyle: { borderColor: '#fff', borderWidth: 2 },
       },
     ],
+  }
+})
+
+// 工具成功率图表
+const toolSuccessChartOption = computed(() => {
+  const rates = agentDetail.value?.tool_analysis?.success_rates || []
+  const top5 = rates.slice(0, 8)
+  return {
+    color: ['#10b981', '#f97316', '#ef4444'],
+    tooltip: { trigger: 'axis' as const },
+    grid: { left: 100, right: 20, top: 20, bottom: 30 },
+    xAxis: { type: 'value' as const, max: 100, name: '成功率 %' },
+    yAxis: { type: 'category' as const, data: top5.map(d => d.name), inverse: true },
+    series: [{
+      type: 'bar',
+      data: top5.map(d => ({
+        value: d.success_rate,
+        itemStyle: {
+          color: d.success_rate >= 90 ? '#10b981' : d.success_rate >= 70 ? '#f97316' : '#ef4444',
+        }
+      })),
+      barWidth: 16,
+    }],
   }
 })
 
@@ -856,6 +947,40 @@ fetchDeviceReportList()
   font-size: 13px;
   color: #3b82f6;
   line-height: 1.5;
+}
+
+/* 反馈汇总 */
+.feedback-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.feedback-stat {
+  text-align: center;
+  padding: 16px 8px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.feedback-stat__value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.feedback-stat__value.positive { color: #10b981; }
+.feedback-stat__value.negative { color: #ef4444; }
+.feedback-stat__value.success { color: #10b981; }
+.feedback-stat__value.warning { color: #f97316; }
+.feedback-stat__value.danger { color: #ef4444; }
+
+.feedback-stat__label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 /* 表格行可点击 */

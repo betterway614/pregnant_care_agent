@@ -8,6 +8,7 @@
 - archived: 长期存档
 """
 import json
+import time
 from typing import Optional, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,7 +21,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from ..database import get_db
 from ..utils.timezone import beijing_now
-from ..models import FollowUpRecord, Pregnant
+from ..models import FollowUpRecord, Pregnant, AgentAuditLog
 from ..database import SessionLocal
 from ..schemas import (
     FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
@@ -32,6 +33,53 @@ from ..services import followup_service
 from ..core.auth import get_current_user, TokenPayload
 from ..core.state_machine import followup_fsm, FollowUpStatus, InvalidTransition
 from loguru import logger
+
+def _quick_audit(
+    session_id: str,
+    user_id: str,
+    agent_variant: str,
+    intent_classification: str,
+    run_response,
+    total_latency_ms: int,
+    agent_role: str = "nurse",
+) -> int | None:
+    """随访/分析场景的轻量审计日志（同步写入，可靠优先）"""
+    if total_latency_ms < 10:
+        return None
+    metrics = getattr(run_response, "metrics", None) if run_response else None
+    input_tok = getattr(metrics, "input_tokens", None) if metrics else None
+    output_tok = getattr(metrics, "output_tokens", None) if metrics else None
+    if (input_tok is None or input_tok == 0) and (output_tok is None or output_tok == 0):
+        return None
+    try:
+        db = SessionLocal()
+        try:
+            log = AgentAuditLog(
+                session_id=session_id,
+                user_id=user_id,
+                agent_role=agent_role,
+                agent_variant=agent_variant,
+                intent_classification=intent_classification,
+                routed_agent=f"小护-{agent_variant}",
+                input_tokens=input_tok or 0,
+                output_tokens=output_tok or 0,
+                total_tokens=(input_tok or 0) + (output_tok or 0),
+                model_id=getattr(run_response, "model", "") or "unknown",
+                provider="openai",
+                total_latency_ms=total_latency_ms,
+                response_preview=(getattr(run_response, "content", "") or "")[:200],
+            )
+            db.add(log)
+            db.commit()
+            return log.id
+        except Exception:
+            db.rollback()
+            return None
+        finally:
+            db.close()
+    except Exception:
+        return None
+
 
 router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
 
@@ -263,7 +311,16 @@ async def ai_review_followup(record_id: str, db: Session = Depends(get_db),
         from ..core.agno_medical_agents import create_followup_review_agent
         from ..core.agno_structured import extract_structured_content
         agent = create_followup_review_agent()
+        t0 = time.time()
         response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
+        _quick_audit(
+            session_id=f"followup_review_{record_id}",
+            user_id=record.pregnant_id,
+            agent_variant="review",
+            intent_classification="FOLLOWUP_REVIEW",
+            run_response=response,
+            total_latency_ms=int((time.time() - t0) * 1000),
+        )
         data = extract_structured_content(response.content)
         if data:
             return FollowUpAiReviewResponse(
@@ -812,7 +869,9 @@ async def _stream_followup_analysis(
             f"本次随访数据：\n{answer_text}"
             f"{context_section}"
         )
+        t0 = time.time()
         full_response = ""
+        run_response = None
         async for chunk in agent.arun(input=prompt, stream=True):
             if hasattr(chunk, "content") and chunk.content:
                 content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
@@ -831,6 +890,14 @@ async def _stream_followup_analysis(
                     "nurse_action_suggestion": data.get("nurse_action_suggestion", "确认通过"),
                 }
                 agno_success = True
+        _quick_audit(
+            session_id=f"followup_stream_{pregnant_id or 'anon'}",
+            user_id=pregnant_id or "anonymous",
+            agent_variant="analyze",
+            intent_classification="FOLLOWUP_ANALYZE",
+            run_response=run_response,
+            total_latency_ms=int((time.time() - t0) * 1000),
+        )
     except Exception:
         logger.warning("Agno stream analysis failed, falling back to standard LLM")
 
@@ -1037,7 +1104,16 @@ async def _generate_llm_summary(
             f"本次随访数据：\n{answer_text}"
             f"{context_section}"
         )
+        t0 = time.time()
         response = await agent.arun(input=prompt)
+        _quick_audit(
+            session_id=f"followup_analyze_{pregnant_id or 'anon'}",
+            user_id=pregnant_id or "anonymous",
+            agent_variant="analyze",
+            intent_classification="FOLLOWUP_ANALYZE",
+            run_response=response,
+            total_latency_ms=int((time.time() - t0) * 1000),
+        )
         data = extract_structured_content(response.content)
         if data:
             return {

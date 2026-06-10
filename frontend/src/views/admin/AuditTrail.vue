@@ -45,6 +45,7 @@
         <el-table-column prop="agent_variant" label="路由" width="90">
           <template #default="{ row }"><el-tag size="small">{{ row.agent_variant }}</el-tag></template>
         </el-table-column>
+        <el-table-column prop="model_id" label="模型" width="140" show-overflow-tooltip />
         <el-table-column prop="total_tokens" label="Token 数" width="80" />
         <el-table-column prop="total_latency_ms" label="延迟" width="80">
           <template #default="{ row }">{{ row.total_latency_ms }}ms</template>

@@ -79,7 +79,7 @@ def update_service_config(
     if not success:
         raise HTTPException(status_code=404, detail=f"服务 {service_name} 不存在或更新失败")
 
-    logger.info("管理员 {} 更新服务 {} 配置: {}", user.sub, service_name, kwargs)
+    logger.info("管理员 %s 更新服务 %s 配置: %s", user.sub, service_name, kwargs)
     return {"message": f"服务 {service_name} 配置已更新", "config": kwargs}
 
 
@@ -106,7 +106,7 @@ def set_policy(
     if not success:
         raise HTTPException(status_code=400, detail=f"无效的策略名称: {body.policy}")
 
-    logger.info("管理员 {} 切换策略为 {}", user.sub, body.policy)
+    logger.info("管理员 %s 切换策略为 %s", user.sub, body.policy)
     return {"message": f"策略已切换到 {body.policy}", "policy": body.policy}
 
 
@@ -194,7 +194,7 @@ def start_monitoring(
     interval = body.interval if body else 5.0
     resource_service.start_monitoring(interval=interval)
 
-    logger.info("管理员 {} 启动资源监控 (间隔: {}s)", user.sub, interval)
+    logger.info("管理员 %s 启动资源监控 (间隔: %ss)", user.sub, interval)
     return {"message": f"资源监控已启动 (间隔: {interval}s)"}
 
 
@@ -206,7 +206,7 @@ def stop_monitoring(user: TokenPayload = Depends(get_current_user)):
     from ..services.resource_service import resource_service
     resource_service.stop_monitoring()
 
-    logger.info("管理员 {} 停止资源监控", user.sub)
+    logger.info("管理员 %s 停止资源监控", user.sub)
     return {"message": "资源监控已停止"}
 
 
@@ -303,7 +303,7 @@ def acknowledge_alert(
         alert.acknowledged_at = datetime.now()
         db.commit()
 
-        logger.info("管理员 {} 确认资源预警 {}", user.sub, alert_id)
+        logger.info("管理员 %s 确认资源预警 %s", user.sub, alert_id)
         return {"message": "预警已确认", "alert_id": alert_id}
     finally:
         db.close()
@@ -333,7 +333,7 @@ def resolve_alert(
         alert.resolution = resolution
         db.commit()
 
-        logger.info("管理员 {} 解决资源预警 {}", user.sub, alert_id)
+        logger.info("管理员 %s 解决资源预警 %s", user.sub, alert_id)
         return {"message": "预警已解决", "alert_id": alert_id}
     finally:
         db.close()
@@ -384,28 +384,45 @@ def get_alert_stats(
 
 
 class ReportDateRange(BaseModel):
-    """报告日期范围请求"""
-    from_date: str  # ISO 格式: YYYY-MM-DD
-    to_date: str  # ISO 格式: YYYY-MM-DD
+    """报告日期范围请求（日期可选，默认最近7天）"""
+    from_date: Optional[str] = None  # ISO 格式: YYYY-MM-DD
+    to_date: Optional[str] = None    # ISO 格式: YYYY-MM-DD
+
+
+def _parse_date_range(body: Optional[ReportDateRange]) -> tuple:
+    """解析日期范围，默认最近7天"""
+    from datetime import datetime as dt_cls, timedelta
+    today = dt_cls.now().date()
+    from_date_val = body.from_date if body else None
+    to_date_val = body.to_date if body else None
+    if from_date_val:
+        dt_from = dt_cls.fromisoformat(from_date_val)
+    else:
+        dt_from = dt_cls.combine(today - timedelta(days=7), dt_cls.min.time())
+    if to_date_val:
+        dt_to = dt_cls.fromisoformat(to_date_val + "T23:59:59")
+    else:
+        dt_to = dt_cls.combine(today, dt_cls.max.time())
+    return dt_from, dt_to
 
 
 @router.post("/report/agent")
-def generate_agent_report(
-    body: ReportDateRange,
+async def generate_agent_report(
+    body: Optional[ReportDateRange] = None,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """生成智能体工具路由与 Token 消耗报告"""
+    """生成智能体工具路由与 Token 消耗报告（LLM 分析 + 规则 fallback）"""
     _require_admin(user)
 
     from ..database import SessionLocal
     from ..models.models import AgentAuditLog, ToolCallDetail, GeneratedReport
     from sqlalchemy import func
     from datetime import datetime
+    import json
 
     db = SessionLocal()
     try:
-        dt_from = datetime.fromisoformat(body.from_date)
-        dt_to = datetime.fromisoformat(body.to_date + "T23:59:59")
+        dt_from, dt_to = _parse_date_range(body or ReportDateRange())
 
         # 查询审计日志
         logs = db.query(AgentAuditLog).filter(
@@ -414,7 +431,7 @@ def generate_agent_report(
         ).all()
 
         if not logs:
-            return {"message": "指定时间段内无审计日志数据", "report": None}
+            raise HTTPException(status_code=404, detail="指定时间段内无审计日志数据")
 
         total_logs = len(logs)
         total_input = sum(l.input_tokens or 0 for l in logs)
@@ -430,6 +447,26 @@ def generate_agent_report(
         for l in logs:
             intent = l.intent_classification or "unknown"
             intent_counts[intent] = intent_counts.get(intent, 0) + 1
+
+        # 按角色统计 Token 消耗
+        role_token_stats = {}
+        for l in logs:
+            role = l.agent_role or "unknown"
+            if role not in role_token_stats:
+                role_token_stats[role] = {"input": 0, "output": 0, "total": 0, "count": 0}
+            role_token_stats[role]["input"] += l.input_tokens or 0
+            role_token_stats[role]["output"] += l.output_tokens or 0
+            role_token_stats[role]["total"] += l.total_tokens or 0
+            role_token_stats[role]["count"] += 1
+
+        # 按角色统计意图分布
+        role_intent_stats = {}
+        for l in logs:
+            role = l.agent_role or "unknown"
+            intent = l.intent_classification or "unknown"
+            if role not in role_intent_stats:
+                role_intent_stats[role] = {}
+            role_intent_stats[role][intent] = role_intent_stats[role].get(intent, 0) + 1
 
         # Agent 路由分布
         agent_counts = {}
@@ -447,48 +484,168 @@ def generate_agent_report(
         tool_fail = total_tool_calls - tool_success
         success_rate = round(tool_success / total_tool_calls * 100, 1) if total_tool_calls else 0
 
-        # Top 工具
-        tool_name_counts = {}
+        # Top 工具 (带成功率)
+        tool_stats = {}
         for t in tool_calls:
             name = t.tool_name
-            tool_name_counts[name] = tool_name_counts.get(name, 0) + 1
-        top_tools = sorted(tool_name_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            if name not in tool_stats:
+                tool_stats[name] = {"count": 0, "success": 0, "fail": 0}
+            tool_stats[name]["count"] += 1
+            if t.success:
+                tool_stats[name]["success"] += 1
+            else:
+                tool_stats[name]["fail"] += 1
+        top_tools = []
+        for name, stats in sorted(tool_stats.items(), key=lambda x: x[1]["count"], reverse=True)[:10]:
+            sr = round(stats["success"] / stats["count"] * 100, 1) if stats["count"] else 0
+            top_tools.append({
+                "name": name,
+                "count": stats["count"],
+                "success_rate": sr,
+                "avg_latency_ms": 0,
+            })
+
+        tool_success_rates = [
+            {"name": name, "success_rate": round(s["success"] / s["count"] * 100, 1)}
+            for name, s in sorted(tool_stats.items(), key=lambda x: x[1]["count"], reverse=True)
+        ]
 
         # 反馈统计
         positive = sum(1 for l in logs if l.feedback_rating == "thumbs_up")
         negative = sum(1 for l in logs if l.feedback_rating == "thumbs_down")
 
-        # 异常检测
-        anomalies = []
+        # --- 规则引擎 fallback: 异常检测 ---
+        fallback_anomalies = []
         high_error_tools = [
             name for name, _ in top_tools
             if sum(1 for t in tool_calls if t.tool_name == name and not t.success) /
                max(sum(1 for t in tool_calls if t.tool_name == name), 1) > 0.3
         ]
         if high_error_tools:
-            anomalies.append(f"以下工具错误率超过30%: {', '.join(high_error_tools)}")
+            fallback_anomalies.append(f"以下工具错误率超过30%: {', '.join(high_error_tools)}")
         if negative > positive and (positive + negative) > 5:
-            anomalies.append("负面反馈数量超过正面反馈，建议检查回复质量")
+            fallback_anomalies.append("负面反馈数量超过正面反馈，建议检查回复质量")
 
-        # 建议
-        recommendations = []
+        # --- 规则引擎 fallback: 建议 ---
+        fallback_recommendations = []
         if success_rate < 90:
-            recommendations.append("工具调用成功率偏低，建议排查高频失败工具的入参或依赖")
+            fallback_recommendations.append("工具调用成功率偏低，建议排查高频失败工具的入参或依赖")
         if total_tokens / max(total_logs, 1) > 3000:
-            recommendations.append("单次对话平均 Token 消耗较高，建议优化 Prompt 长度或启用上下文裁剪")
-        if not recommendations:
-            recommendations.append("当前运行状态良好，继续保持")
+            fallback_recommendations.append("单次对话平均 Token 消耗较高，建议优化 Prompt 长度或启用上下文裁剪")
+        if not fallback_recommendations:
+            fallback_recommendations.append("当前运行状态良好，继续保持")
+
+        fallback_summary = f"报告期间共 {total_logs} 次 Agent 调用，消耗 {total_tokens} Token，工具成功率 {success_rate}%"
+
+        # --- LLM 智能分析 ---
+        llm_summary = ""
+        llm_recommendations = []
+        llm_anomalies = []
+        llm_used = False
+
+        try:
+            from ..core import get_llm_client
+
+            # 构建结构化的数据 prompt
+            data_context = json.dumps({
+                "period": {"from": str(dt_from.date()), "to": str(dt_to.date())},
+                "token": {
+                    "total": total_tokens, "input": total_input, "output": total_output,
+                    "daily_avg": daily_avg, "avg_per_call": round(total_tokens / total_logs, 1),
+                    "cost_estimate": round(total_tokens * 0.000002, 4),
+                    "by_role": {r: {"input": v["input"], "output": v["output"], "count": v["count"]}
+                                for r, v in role_token_stats.items()},
+                },
+                "intent": {"distribution": intent_counts, "by_role": role_intent_stats},
+                "routing": {"agent_distribution": agent_counts},
+                "tool": {
+                    "total_calls": total_tool_calls, "success": tool_success,
+                    "fail": tool_fail, "success_rate": success_rate,
+                    "top_tools": top_tools,
+                },
+                "feedback": {"positive": positive, "negative": negative},
+            }, ensure_ascii=False, indent=2)
+
+            system_prompt = (
+                "你是一位专业的 AI Agent 运维分析师，擅长分析 Agent 调用模式、Token 消耗和工具使用效率。"
+                "请根据提供的 Agent 运营数据生成分析报告。严格按格式输出，每部分以指定标签开头。"
+            )
+            user_prompt = f"""请分析以下 AI Agent 运营数据并生成报告：
+
+{data_context}
+
+请严格按以下格式输出（每部分以标签开头）：
+
+【智能摘要】
+（1-2句话总结核心指标和整体趋势，包含关键数字）
+
+【异常检测】
+（列出发现的问题，每条一行，以 "- " 开头。如无异常则写 "未发现明显异常"）
+
+【优化建议】
+（列出3-5条具体建议，每条一行，以 "- " 开头，按优先级排序）
+
+【趋势判断】
+（一句话判断：负载在上升/下降/稳定）"""
+
+            client = get_llm_client()
+            llm_response = await client.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ])
+
+            # 解析 LLM 响应
+            import re
+            summary_match = re.search(r"【智能摘要】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+            anomaly_match = re.search(r"【异常检测】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+            recommend_match = re.search(r"【优化建议】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+
+            if summary_match:
+                llm_summary = summary_match.group(1).strip()
+            if anomaly_match:
+                anomaly_text = anomaly_match.group(1).strip()
+                llm_anomalies = [line.lstrip("- ").strip() for line in anomaly_text.split("\n")
+                                 if line.strip().startswith("-") and len(line.strip()) > 3]
+            if recommend_match:
+                rec_text = recommend_match.group(1).strip()
+                llm_recommendations = [line.lstrip("- ").strip() for line in rec_text.split("\n")
+                                       if line.strip().startswith("-") and len(line.strip()) > 3]
+
+            llm_used = bool(llm_summary)
+            logger.info("Agent 报告 LLM 分析完成, response_len=%s", len(llm_response))
+
+        except Exception as e:
+            logger.warning("Agent 报告 LLM 分析失败，降级规则引擎: %s", e)
+
+        # --- 合并结果 (LLM 优先，规则 fallback) ---
+        executive_summary = llm_summary if llm_summary else fallback_summary
+        recommendations = llm_recommendations if llm_recommendations else fallback_recommendations
+        anomalies = llm_anomalies if llm_anomalies else fallback_anomalies
+
+        # 趋势数据
+        trend = "stable"
+        if "上升" in llm_summary:
+            trend = "rising"
+        elif "下降" in llm_summary:
+            trend = "declining"
 
         report_data = {
-            "period": {"from": body.from_date, "to": body.to_date},
-            "executive_summary": f"报告期间共 {total_logs} 次 Agent 调用，消耗 {total_tokens} Token，工具成功率 {success_rate}%",
+            "period": {"from": dt_from.date().isoformat(), "to": dt_to.date().isoformat()},
+            "executive_summary": executive_summary,
+            "llm_analyzed": llm_used,
             "token_analysis": {
                 "total": total_tokens,
                 "input": total_input,
                 "output": total_output,
                 "daily_average": daily_avg,
-                "trend": "stable",
+                "trend": trend,
                 "cost_estimate": round(total_tokens * 0.000002, 4),
+                "by_role": role_token_stats,
+            },
+            "intent_analysis": {
+                "distribution": intent_counts,
+                "by_role": role_intent_stats,
+                "chart": [{"intent": k, "count": v} for k, v in sorted(intent_counts.items(), key=lambda x: x[1], reverse=True)],
             },
             "routing_analysis": {
                 "intent_distribution": intent_counts,
@@ -499,7 +656,8 @@ def generate_agent_report(
                 "success_count": tool_success,
                 "fail_count": tool_fail,
                 "success_rate": success_rate,
-                "top_tools": [{"name": n, "count": c} for n, c in top_tools],
+                "top_tools": top_tools,
+                "success_rates": tool_success_rates,
             },
             "feedback_summary": {
                 "positive": positive,
@@ -513,7 +671,7 @@ def generate_agent_report(
         # 持久化报告
         report = GeneratedReport(
             report_type="agent",
-            title=f"智能体报告 ({body.from_date} ~ {body.to_date})",
+            title=f"智能体报告 ({dt_from.date()} ~ {dt_to.date()})",
             period_from=dt_from,
             period_to=dt_to,
             report_data=report_data,
@@ -523,29 +681,29 @@ def generate_agent_report(
         db.commit()
         db.refresh(report)
 
-        logger.info("管理员 {} 生成智能体报告 #{}", user.sub, report.id)
+        logger.info("管理员 %s 生成智能体报告 #%s", user.sub, report.id)
         return {"report_id": report.id, "report": report_data}
     finally:
         db.close()
 
 
 @router.post("/report/device")
-def generate_device_report(
-    body: ReportDateRange,
+async def generate_device_report(
+    body: Optional[ReportDateRange] = None,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """生成设备使用情况报告"""
+    """生成设备使用情况报告（LLM 分析 + 规则 fallback）"""
     _require_admin(user)
 
     from ..database import SessionLocal
     from ..models.models import ResourceMetric, ResourceAlert, GeneratedReport
     from sqlalchemy import func
     from datetime import datetime
+    import json
 
     db = SessionLocal()
     try:
-        dt_from = datetime.fromisoformat(body.from_date)
-        dt_to = datetime.fromisoformat(body.to_date + "T23:59:59")
+        dt_from, dt_to = _parse_date_range(body or ReportDateRange())
 
         # 查询资源指标
         metrics = db.query(ResourceMetric).filter(
@@ -554,7 +712,7 @@ def generate_device_report(
         ).all()
 
         if not metrics:
-            return {"message": "指定时间段内无资源指标数据", "report": None}
+            raise HTTPException(status_code=404, detail="指定时间段内无资源指标数据")
 
         # 查询预警
         alerts = db.query(ResourceAlert).filter(
@@ -615,21 +773,101 @@ def generate_device_report(
         health_score -= warning_alerts * 1
         health_score = max(0, min(100, round(health_score, 1)))
 
-        # 建议
-        recommendations = []
+        # --- 规则引擎 fallback: 建议 ---
+        fallback_recommendations = []
         if avg_vram and avg_vram > 80:
-            recommendations.append("VRAM 使用率长期偏高，建议优化模型加载策略或增加显存")
+            fallback_recommendations.append("VRAM 使用率长期偏高，建议优化模型加载策略或增加显存")
         if _avg(temp_vals) and _avg(temp_vals) > 75:
-            recommendations.append("GPU 温度偏高，建议检查散热或降低负载")
+            fallback_recommendations.append("GPU 温度偏高，建议检查散热或降低负载")
         if critical_alerts > 10:
-            recommendations.append(f"报告期间出现 {critical_alerts} 次严重预警，建议排查根因")
+            fallback_recommendations.append(f"报告期间出现 {critical_alerts} 次严重预警，建议排查根因")
         if load_counts["critical"] > len(metrics) * 0.1:
-            recommendations.append("超过10%的时间处于 critical 负载，建议启用自动降级策略")
-        if not recommendations:
-            recommendations.append("设备运行状态良好，继续保持当前配置")
+            fallback_recommendations.append("超过10%的时间处于 critical 负载，建议启用自动降级策略")
+        if not fallback_recommendations:
+            fallback_recommendations.append("设备运行状态良好，继续保持当前配置")
+
+        # --- LLM 智能分析 ---
+        llm_summary = ""
+        llm_recommendations = []
+        llm_health_assessment = ""
+        llm_used = False
+
+        try:
+            from ..core import get_llm_client
+
+            resource_data = {
+                "period": {"from": str(dt_from.date()), "to": str(dt_to.date()), "samples": len(metrics)},
+                "vram": {"avg": avg_vram, "max": _max_val(vram_vals), "min": _min_val(vram_vals)},
+                "gpu": {"avg": avg_gpu, "max": _max_val(gpu_vals), "min": _min_val(gpu_vals)},
+                "cpu": {"avg": _avg(cpu_vals), "max": _max_val(cpu_vals), "min": _min_val(cpu_vals)},
+                "power_temp": {
+                    "gpu_power_w": {"avg": _avg(power_vals), "max": _max_val(power_vals)},
+                    "gpu_temp_c": {"avg": _avg(temp_vals), "max": _max_val(temp_vals)},
+                },
+                "load_distribution": load_counts,
+                "overall_status": overall,
+                "alerts": {
+                    "total": len(alerts), "critical": critical_alerts, "warning": warning_alerts,
+                    "top_types": [{"type": t, "count": c} for t, c in top_alerts],
+                },
+                "health_score": health_score,
+            }
+
+            system_prompt = (
+                "你是一位专业的硬件资源运维分析师，擅长分析 GPU/NPU 服务器资源使用情况和预警趋势。"
+                "请根据提供的设备资源数据生成运维分析报告。严格按格式输出，每部分以指定标签开头。"
+            )
+            user_prompt = f"""请分析以下设备资源数据并生成报告：
+
+{json.dumps(resource_data, ensure_ascii=False, indent=2)}
+
+请严格按以下格式输出（每部分以标签开头）：
+
+【运维摘要】
+（1-2句话总结设备整体运行状态和关键指标）
+
+【健康评估】
+（对系统健康状态给出判断，说明主要风险点。如健康则写"系统运行正常"）
+
+【优化建议】
+（列出3-5条具体建议，每条一行，以 "- " 开头，按优先级排序）"""
+
+            client = get_llm_client()
+            llm_response = await client.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ])
+
+            # 解析 LLM 响应
+            import re
+            summary_match = re.search(r"【运维摘要】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+            health_match = re.search(r"【健康评估】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+            recommend_match = re.search(r"【优化建议】\s*\n?(.*?)(?=【|$)", llm_response, re.DOTALL)
+
+            if summary_match:
+                llm_summary = summary_match.group(1).strip()
+            if health_match:
+                llm_health_assessment = health_match.group(1).strip()
+            if recommend_match:
+                rec_text = recommend_match.group(1).strip()
+                llm_recommendations = [line.lstrip("- ").strip() for line in rec_text.split("\n")
+                                       if line.strip().startswith("-") and len(line.strip()) > 3]
+
+            llm_used = bool(llm_summary)
+            logger.info("Device 报告 LLM 分析完成, response_len=%s", len(llm_response))
+
+        except Exception as e:
+            logger.warning("Device 报告 LLM 分析失败，降级规则引擎: %s", e)
+
+        # --- 合并结果 (LLM 优先，规则 fallback) ---
+        executive_summary = llm_summary
+        recommendations = llm_recommendations if llm_recommendations else fallback_recommendations
 
         report_data = {
-            "period": {"from": body.from_date, "to": body.to_date},
+            "period": {"from": dt_from.date().isoformat(), "to": dt_to.date().isoformat()},
+            "executive_summary": executive_summary,
+            "health_assessment": llm_health_assessment,
+            "llm_analyzed": llm_used,
             "device_overview": {
                 "gpu": "AMD Radeon (详见系统状态接口)",
                 "vram_total": "详见系统状态接口",
@@ -659,7 +897,7 @@ def generate_device_report(
         # 持久化报告
         report = GeneratedReport(
             report_type="device",
-            title=f"设备报告 ({body.from_date} ~ {body.to_date})",
+            title=f"设备报告 ({dt_from.date()} ~ {dt_to.date()})",
             period_from=dt_from,
             period_to=dt_to,
             report_data=report_data,
@@ -669,7 +907,7 @@ def generate_device_report(
         db.commit()
         db.refresh(report)
 
-        logger.info("管理员 {} 生成设备报告 #{}", user.sub, report.id)
+        logger.info("管理员 %s 生成设备报告 #%s", user.sub, report.id)
         return {"report_id": report.id, "report": report_data}
     finally:
         db.close()

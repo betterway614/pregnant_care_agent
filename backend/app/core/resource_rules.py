@@ -192,9 +192,9 @@ class ResourceRuleEngine:
         """设置当前策略"""
         if policy_name in self.policies:
             self.current_policy = PolicyType(policy_name)
-            logger.info("资源策略切换到: {}", policy_name)
+            logger.info("资源策略切换到: %s", policy_name)
             return True
-        logger.warning("未知策略: {}", policy_name)
+        logger.warning("未知策略: %s", policy_name)
         return False
 
     def get_policy(self) -> ResourcePolicy:
@@ -216,13 +216,13 @@ class ResourceRuleEngine:
             try:
                 config.accelerator = AcceleratorType(kwargs["accelerator"])
             except ValueError:
-                logger.warning("无效的加速器类型: {}", kwargs["accelerator"])
+                logger.warning("无效的加速器类型: %s", kwargs["accelerator"])
                 return False
 
         if "priority" in kwargs:
             config.priority = max(1, min(10, kwargs["priority"]))
 
-        logger.info("服务 {} 配置已更新: {}", service_name, kwargs)
+        logger.info("服务 %s 配置已更新: %s", service_name, kwargs)
         return True
 
     def calculate_optimal_config(self, state: ResourceState) -> Dict[str, ServiceResourceConfig]:
@@ -278,7 +278,7 @@ class ResourceRuleEngine:
                 if policy.enable_cpu_offload and config.can_offload_to_cpu:
                     new_config.accelerator = AcceleratorType.CPU
                     new_config.batch_size = config.min_batch_size
-                    logger.warning("[CRITICAL] {} 卸载到 CPU", name)
+                    logger.warning("[CRITICAL] %s 卸载到 CPU", name)
 
             elif load_level == LoadLevel.HIGH:
                 # 高负载: 降低批处理，考虑 NPU
@@ -290,23 +290,23 @@ class ResourceRuleEngine:
 
                 if policy.enable_npu_offload and config.can_offload_to_npu:
                     new_config.accelerator = AcceleratorType.NPU
-                    logger.info("[HIGH] {} 切换到 NPU", name)
+                    logger.info("[HIGH] %s 切换到 NPU", name)
 
             elif load_level == LoadLevel.MEDIUM:
                 # 中等负载: 适度调整
                 if policy.enable_batch_adjustment:
+                    # 修复: 基于 max_batch_size 计算，而非 current
                     new_config.batch_size = max(
                         config.min_batch_size,
-                        int(config.batch_size * 0.75),
+                        int(config.max_batch_size * 0.75),
                     )
 
             else:
                 # 低负载: 恢复默认或增加批处理
                 if policy.enable_batch_adjustment:
-                    new_config.batch_size = min(
-                        config.max_batch_size,
-                        int(config.batch_size * 1.25),
-                    )
+                    # 修复: 基于 max_batch_size 计算最优值，而非 current
+                    # 这样用户应用变更后，current=optimal，不会无限循环建议
+                    new_config.batch_size = config.max_batch_size
 
             adjustments[name] = new_config
 

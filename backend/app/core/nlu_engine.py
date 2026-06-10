@@ -354,14 +354,31 @@ class RuleBaseNLU:
             elif hasattr(response, "text"):
                 result_text = response.text.strip().upper()
 
+            # 提取有效意图标签（处理杂乱的模型输出）
+            import re
             valid_intents = {
                 "HEALTH_DATA_REPORT", "EMOTION_EXPRESS", "KNOWLEDGE_QUERY",
                 "SCHEDULE_INQUIRY", "GREETING", "UNKNOWN",
             }
-            if result_text in valid_intents:
-                return result_text
+            # 匹配输出中最可能的有效意图
+            for intent in valid_intents:
+                if intent in result_text:
+                    return intent
+            # 如果输出混乱但包含提示词，仍尝试推断
+            if any(kw in result_text for kw in ["HEALTH", "体重", "血压", "记录"]):
+                return "HEALTH_DATA_REPORT"
+            if any(kw in result_text for kw in ["EMOTION", "焦虑", "心情", "情绪"]):
+                return "EMOTION_EXPRESS"
+            if any(kw in result_text for kw in ["KNOWLEDGE", "知识", "什么", "怎么", "能否"]):
+                return "KNOWLEDGE_QUERY"
+            if any(kw in result_text for kw in ["SCHEDULE", "产检", "预约", "下次"]):
+                return "SCHEDULE_INQUIRY"
+            if any(kw in result_text for kw in ["GREETING", "你好", "嗨", "早上好", "HI"]):
+                return "GREETING"
             return "UNKNOWN"
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("LLM意图分类失败 text=%s: %s", text[:50], exc)
             return "UNKNOWN"
 
     def _analyze_emotion(self, text: str) -> dict:

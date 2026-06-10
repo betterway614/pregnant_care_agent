@@ -142,6 +142,7 @@ class ChatResponse(BaseModel):
     nlu_result: Optional[ChatNLUResult] = None
     session_id: str = ""
     memory_updated: list[str] = []
+    audit_log_id: Optional[int] = None  # 关联的审计日志 ID，供前端提交反馈时使用
     source: Optional[str] = None
     followup_progress: Optional[dict] = None  # 随访进度 {answered, total, status}
 

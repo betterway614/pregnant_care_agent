@@ -44,6 +44,15 @@ def _save_doctor_audit_log(
     """
     from ..models import ToolCallDetail
 
+    # ── 过滤无效日志：没有实际 LLM 调用（延迟=0 且无 token 消耗）──
+    if total_latency_ms == 0:
+        metrics = getattr(run_response, "metrics", None) if run_response else None
+        input_tok = getattr(metrics, "input_tokens", None) if metrics else None
+        output_tok = getattr(metrics, "output_tokens", None) if metrics else None
+        if (input_tok is None or input_tok == 0) and (output_tok is None or output_tok == 0):
+            logger.debug("跳过医生端无效审计日志 session_id={}", session_id)
+            return None
+
     try:
         if run_response is None:
             run_response = type("_NullResponse", (), {"metrics": None, "content": "", "messages": [], "model": ""})()
@@ -98,12 +107,18 @@ def _save_doctor_audit_log(
                         ))
 
         model_id = ""
+        provider = ""
         if metrics and hasattr(metrics, "details") and metrics.details:
             for model_type, model_metrics_list in metrics.details.items():
                 for m in model_metrics_list:
                     model_id = getattr(m, "id", "") or model_id
+                    provider = getattr(m, "provider", "") or provider
         if not model_id and hasattr(run_response, "model"):
             model_id = run_response.model or ""
+        # 兜底：从配置获取模型名称
+        if not model_id:
+            from ..core.agno_client import _resolve_model_id
+            model_id = _resolve_model_id("doctor")
 
         tool_error_count = sum(1 for d in tool_call_details if not d.success)
 
@@ -123,7 +138,7 @@ def _save_doctor_audit_log(
                 tool_call_count=len(tool_calls_legacy),
                 tool_error_count=tool_error_count,
                 model_id=model_id or "unknown",
-                provider="openai",
+                provider=provider or "openai",
                 total_latency_ms=total_latency_ms,
                 response_preview=content[:200] if content else None,
             )
@@ -741,11 +756,11 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
         except Exception as e:
             logger.error("Doctor chat stream error: {}", e)
             yield {"event": "error", "data": "服务内部错误，请稍后重试"}
-        yield {"event": "done", "data": json.dumps({"source": "DOCTOR_AI", "tool_steps": tool_steps})}
-
         # 审计日志
         elapsed_ms = int((time.time() - t0) * 1000)
-        _save_doctor_audit_log(
+        import asyncio
+        audit_log_id = await asyncio.to_thread(
+            _save_doctor_audit_log,
             session_id=f"doctor_chat_{pregnant_id or 'anon'}",
             user_id=pregnant_id or "anonymous",
             agent_variant=intent_variant,
@@ -753,6 +768,15 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             run_response=run_response,
             total_latency_ms=elapsed_ms,
         )
+
+        yield {
+            "event": "done",
+            "data": json.dumps({
+                "source": "DOCTOR_AI",
+                "tool_steps": tool_steps,
+                "audit_log_id": audit_log_id,
+            }),
+        }
 
     return EventSourceResponse(agno_event_generator())
 
