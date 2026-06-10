@@ -147,16 +147,18 @@ class ResourceMonitor:
                 capture_output=True, text=True, timeout=5
             )
             for line in result.stdout.split('\n'):
-                if 'VRAM Total Memory' in line:
+                if 'VRAM Total Memory' in line and 'Used' not in line:
+                    # 格式: GPU[0]		: VRAM Total Memory (B): 103079215104
                     parts = line.split(':')
                     if len(parts) > 1:
-                        value = parts[1].strip().split()[0]
+                        value = parts[-1].strip().split()[0]
                         if value.isdigit():
                             state.vram_total_gb = int(value) / (1024**3)
-                if 'VRAM Total Used' in line:
+                if 'VRAM Total Used Memory' in line:
+                    # 格式: GPU[0]		: VRAM Total Used Memory (B): 41218314240
                     parts = line.split(':')
                     if len(parts) > 1:
-                        value = parts[1].strip().split()[0]
+                        value = parts[-1].strip().split()[0]
                         if value.isdigit():
                             state.vram_used_gb = int(value) / (1024**3)
         except Exception as e:

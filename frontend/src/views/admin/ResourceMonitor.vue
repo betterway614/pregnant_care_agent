@@ -598,6 +598,8 @@ async function fetchServices() {
     services.value = res.data
   } catch (err: any) {
     console.error('ResourceMonitor fetchServices error:', err)
+    // 如果是 401 错误，axios 拦截器会自动跳转登录页
+    // 其他错误保持当前状态，不覆盖
   }
 }
 
