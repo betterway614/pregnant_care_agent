@@ -636,7 +636,8 @@ async function fetchAll() {
 
 onMounted(() => {
   fetchAll()
-  refreshTimer = setInterval(fetchAll, 5000)
+  // 系统状态每30秒刷新一次（服务配置不会频繁变化）
+  refreshTimer = setInterval(fetchAll, 30000)
 })
 
 onUnmounted(() => {

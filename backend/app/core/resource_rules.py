@@ -87,12 +87,21 @@ class ResourceRuleEngine:
     """资源规则引擎"""
 
     def __init__(self):
-        # 默认服务配置
+        import os
+        # 支持环境变量覆盖加速器类型: RESOURCE_LLM_ACCEL, RESOURCE_BGE_M3_ACCEL, etc.
+        def _get_accel(service_name: str, default: AcceleratorType) -> AcceleratorType:
+            env_key = f"RESOURCE_{service_name.upper()}_ACCEL"
+            val = os.getenv(env_key, "").lower()
+            if val in ("cpu", "gpu", "npu"):
+                return AcceleratorType(val)
+            return default
+
+        # 默认服务配置（支持环境变量覆盖）
         self.services: Dict[str, ServiceResourceConfig] = {
             "llm": ServiceResourceConfig(
                 name="LLM (Qwen3.6 Q4)",
                 port=8080,
-                accelerator=AcceleratorType.GPU,
+                accelerator=_get_accel("llm", AcceleratorType.GPU),
                 batch_size=4,
                 min_batch_size=1,
                 max_batch_size=8,
@@ -103,7 +112,7 @@ class ResourceRuleEngine:
             "bge_m3": ServiceResourceConfig(
                 name="BGE-M3 (Embedding)",
                 port=8081,
-                accelerator=AcceleratorType.GPU,
+                accelerator=_get_accel("bge_m3", AcceleratorType.GPU),
                 batch_size=64,
                 min_batch_size=8,
                 max_batch_size=256,
@@ -114,7 +123,7 @@ class ResourceRuleEngine:
             "tts": ServiceResourceConfig(
                 name="TTS (CosyVoice2)",
                 port=9880,
-                accelerator=AcceleratorType.GPU,
+                accelerator=_get_accel("tts", AcceleratorType.GPU),
                 batch_size=4,
                 min_batch_size=1,
                 max_batch_size=16,
@@ -125,7 +134,7 @@ class ResourceRuleEngine:
             "asr": ServiceResourceConfig(
                 name="ASR (FunASR)",
                 port=10096,
-                accelerator=AcceleratorType.NPU,
+                accelerator=_get_accel("asr", AcceleratorType.NPU),
                 batch_size=4,
                 min_batch_size=1,
                 max_batch_size=16,
