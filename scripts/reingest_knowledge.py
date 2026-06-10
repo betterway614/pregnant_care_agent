@@ -93,9 +93,30 @@ async def reingest_all(docs):
                     from agno.knowledge.reader.text_reader import TextReader
                     reader = TextReader(chunking_strategy=chunking_strategy)
 
+            # 根据文档内容设定 audience 元数据，用于角色级知识库隔离
+            # patient/all — 孕妇可读；doctor/nurse — 仅医护人员
+            _audience_map = {
+                "common_lab_values": "doctor",
+                "exercise_activity": "all",
+                "fetal_movement_monitoring": "all",
+                "gdm_management": "doctor",
+                "health_education": "all",
+                "labor_delivery": "all",
+                "medication_safety": "all",
+                "mental_health_expanded": "all",
+                "newborn_care": "all",
+                "nutrition_diet": "all",
+                "postpartum_recovery": "all",
+                "prenatal_diagnosis": "doctor",
+                "prenatal_guidelines": "doctor",
+                "preeclampsia_guidelines": "doctor",
+                "travel_safety": "all",
+                "vaccination": "all",
+            }
             doc_metadata = {
                 "source": "admin_upload",
                 "filename": fname,
+                "audience": _audience_map.get(doc_name, "all"),
             }
 
             kwargs = {

@@ -13,11 +13,15 @@ from functools import lru_cache
 
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
+from agno.filters import IN
 from .agno_client import get_agno_model
 from .agno_knowledge import knowledge
 from .prompts import get_pregnant_system_prompt_instructions, VARIANT_INSTRUCTIONS
 from .agno_tools import MEDICAL_TOOLS, TOOL_GROUPS
 from .agno_guardrails import EmergencyGuardrail, MedicalSafetyGuardrail
+
+# 孕妇端知识库过滤器：仅检索面向孕妇和通用的知识
+_PREGNANT_KNOWLEDGE_FILTERS = [IN("audience", ["patient", "all"])]
 
 import os
 
@@ -41,6 +45,7 @@ def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
         tools=tools,
         knowledge=knowledge,
         search_knowledge=True,
+        knowledge_filters=_PREGNANT_KNOWLEDGE_FILTERS,
         db=_create_pregnant_db(),
         add_history_to_context=True,
         num_history_runs=8,

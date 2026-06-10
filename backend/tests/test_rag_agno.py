@@ -296,6 +296,156 @@ class TestAgentSearchKnowledge:
         assert "search_knowledge_base" not in tool_names
 
 
+# ==================== Knowledge Filters 角色隔离测试 ====================
+
+
+class TestKnowledgeFilters:
+    """验证三端 Agent 的 knowledge_filters 角色隔离"""
+
+    def _make_mock_model(self):
+        mock = MagicMock()
+        mock.__class__.__name__ = "MockModel"
+        return mock
+
+    def test_pregnant_agent_has_knowledge_filters(self):
+        """孕妇端 Agent 设置了 knowledge_filters"""
+        from app.core.agno_agent import create_main_agent
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_main_agent()
+                assert agent.knowledge_filters is not None
+                assert len(agent.knowledge_filters) > 0
+
+    def test_pregnant_agent_filters_exclude_doctor_content(self):
+        """孕妇端过滤器仅允许 patient 和 all"""
+        from app.core.agno_agent import create_main_agent, _PREGNANT_KNOWLEDGE_FILTERS
+        from agno.filters import IN
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_main_agent()
+                filters = agent.knowledge_filters
+                assert len(filters) == 1
+                f = filters[0]
+                assert isinstance(f, IN)
+                assert f.to_dict()["key"] == "audience"
+                assert set(f.to_dict()["values"]) == {"patient", "all"}
+
+    def test_nurse_agent_has_knowledge_filters(self):
+        """护士端 Agent 设置了 knowledge_filters"""
+        from app.core.agno_medical_agents import create_nurse_agent
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_nurse_agent()
+                assert agent.knowledge_filters is not None
+                assert len(agent.knowledge_filters) > 0
+
+    def test_nurse_agent_filters_include_nurse_and_all(self):
+        """护士端过滤器允许 nurse 和 all"""
+        from app.core.agno_medical_agents import create_nurse_agent
+        from agno.filters import IN
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_nurse_agent()
+                filters = agent.knowledge_filters
+                assert len(filters) == 1
+                f = filters[0]
+                assert isinstance(f, IN)
+                assert f.to_dict()["key"] == "audience"
+                assert set(f.to_dict()["values"]) == {"nurse", "all"}
+
+    def test_doctor_agent_has_knowledge_filters(self):
+        """医生端 Agent 设置了 knowledge_filters"""
+        from app.core.agno_medical_agents import create_doctor_agent
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_doctor_agent()
+                assert agent.knowledge_filters is not None
+                assert len(agent.knowledge_filters) > 0
+
+    def test_doctor_agent_filters_include_doctor_nurse_all(self):
+        """医生端过滤器允许 doctor、nurse 和 all"""
+        from app.core.agno_medical_agents import create_doctor_agent
+        from agno.filters import IN
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = create_doctor_agent()
+                filters = agent.knowledge_filters
+                assert len(filters) == 1
+                f = filters[0]
+                assert isinstance(f, IN)
+                assert f.to_dict()["key"] == "audience"
+                assert set(f.to_dict()["values"]) == {"doctor", "nurse", "all"}
+
+    def test_pregnant_cannot_see_doctor_only_content(self):
+        """孕妇端与医生端的过滤器不重叠 doctor-only 内容"""
+        from app.core.agno_agent import _PREGNANT_KNOWLEDGE_FILTERS
+        from app.core.agno_medical_agents import _DOCTOR_KNOWLEDGE_FILTERS
+        from agno.filters import IN
+        pregnant_values = set(_PREGNANT_KNOWLEDGE_FILTERS[0].to_dict()["values"])
+        doctor_values = set(_DOCTOR_KNOWLEDGE_FILTERS[0].to_dict()["values"])
+        # 孕妇端不应包含 doctor
+        assert "doctor" not in pregnant_values
+        # 医生端包含 doctor
+        assert "doctor" in doctor_values
+
+    @pytest.mark.parametrize("variant_name,getter", [
+        ("chat", "get_chat_agent"),
+        ("record", "get_record_agent"),
+        ("qa", "get_qa_agent"),
+        ("emergency", "get_emergency_agent"),
+        ("complex", "get_main_agent"),
+    ])
+    def test_all_pregnant_variants_have_filters(self, variant_name, getter):
+        """孕妇端所有变体都设置了 knowledge_filters"""
+        from app.core import agno_agent as mod
+        factory = getattr(mod, getter)
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = factory()
+                assert agent.knowledge_filters is not None, f"{variant_name} missing knowledge_filters"
+
+    @pytest.mark.parametrize("getter", [
+        "get_nurse_analyze_agent",
+        "get_nurse_followup_agent",
+        "get_nurse_report_agent",
+        "get_nurse_chat_variant_agent",
+        "get_nurse_agent",
+    ])
+    def test_all_nurse_variants_have_filters(self, getter):
+        """护士端所有变体都设置了 knowledge_filters"""
+        from app.core import agno_medical_agents as mod
+        factory = getattr(mod, getter)
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = factory()
+                assert agent.knowledge_filters is not None, f"{getter} missing knowledge_filters"
+
+    @pytest.mark.parametrize("getter", [
+        "get_doctor_analyze_agent",
+        "get_doctor_order_agent",
+        "get_doctor_issue_agent",
+        "get_doctor_chat_variant_agent",
+        "get_doctor_agent",
+    ])
+    def test_all_doctor_variants_have_filters(self, getter):
+        """医生端所有变体都设置了 knowledge_filters"""
+        from app.core import agno_medical_agents as mod
+        factory = getattr(mod, getter)
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = factory()
+                assert agent.knowledge_filters is not None, f"{getter} missing knowledge_filters"
+
+
 # ==================== 旧模块清理验证 ====================
 
 

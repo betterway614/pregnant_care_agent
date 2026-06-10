@@ -178,7 +178,11 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
     """查询临床指南和规范。优先使用知识库检索。"""
     try:
         from ..agno_knowledge import knowledge
-        results = knowledge.search(query=topic, max_results=3)
+        from agno.filters import IN
+        results = knowledge.search(
+            query=topic, max_results=3,
+            filters=[IN("audience", ["doctor", "nurse", "all"])],
+        )
         if results:
             return {
                 "topic": topic,

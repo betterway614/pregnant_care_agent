@@ -11,12 +11,17 @@ from functools import lru_cache
 
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
+from agno.filters import IN
 from .agno_client import get_agno_model
 from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
     NURSE_TOOLS, DOCTOR_TOOLS, NURSE_TOOL_GROUPS, DOCTOR_TOOL_GROUPS,
 )
+
+# 角色级知识库过滤器
+_NURSE_KNOWLEDGE_FILTERS = [IN("audience", ["nurse", "all"])]
+_DOCTOR_KNOWLEDGE_FILTERS = [IN("audience", ["doctor", "nurse", "all"])]
 from .schemas import (
     NurseAnalysisOutput, DoctorAnalysisOutput,
     FollowUpGenerateOutput, FollowUpAnalysisOutput, FollowUpAiReviewOutput,
@@ -61,6 +66,7 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
         db=_create_nurse_db(),
         knowledge=medical_knowledge,
         search_knowledge=True,
+        knowledge_filters=_NURSE_KNOWLEDGE_FILTERS,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
@@ -83,6 +89,7 @@ def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit:
         db=_create_doctor_db(),
         knowledge=medical_knowledge,
         search_knowledge=True,
+        knowledge_filters=_DOCTOR_KNOWLEDGE_FILTERS,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
