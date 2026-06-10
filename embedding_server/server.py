@@ -146,21 +146,23 @@ async def create_embeddings(req: EmbeddingRequest):
 
 def _encode(texts: list[str]) -> np.ndarray:
     """调用模型编码，返回 [N, dim] float32 数组"""
-    from FlagEmbedding import BGEM3FlagModel
+    try:
+        from FlagEmbedding import BGEM3FlagModel
+        if isinstance(_model, BGEM3FlagModel):
+            output = _model.encode(
+                texts,
+                batch_size=BATCH_SIZE,
+                max_length=MAX_LENGTH,
+                return_dense=True,
+                return_sparse=False,
+                return_colbert_vecs=False,
+            )
+            return output["dense_vecs"]
+    except ImportError:
+        pass
 
-    if isinstance(_model, BGEM3FlagModel):
-        output = _model.encode(
-            texts,
-            batch_size=BATCH_SIZE,
-            max_length=MAX_LENGTH,
-            return_dense=True,
-            return_sparse=False,
-            return_colbert_vecs=False,
-        )
-        return output["dense_vecs"]
-    else:
-        # sentence-transformers fallback
-        return _model.encode(texts, batch_size=BATCH_SIZE, normalize_embeddings=True)
+    # sentence-transformers fallback
+    return _model.encode(texts, batch_size=BATCH_SIZE, normalize_embeddings=True)
 
 
 # ── 入口 ──
