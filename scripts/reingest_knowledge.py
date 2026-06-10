@@ -23,21 +23,37 @@ KNOWLEDGE_DOCS_DIR = os.path.normpath(
 )
 
 
+def _resolve_table_name(conn, table_name: str) -> str:
+    """解析表名的实际 schema 限定名（ai schema > public schema）"""
+    if "." in table_name:
+        return table_name
+    for schema in ("ai", "public"):
+        exists = conn.execute(text(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema=:s AND table_name=:t"
+        ), {"s": schema, "t": table_name}).fetchone()
+        if exists:
+            return f"{schema}.{table_name}" if schema != "ai" else f"ai.{table_name}"
+    return table_name
+
+
 def clear_vectors():
     """清空向量数据库中的现有嵌入数据"""
     print(f"\n[1/3] 清空向量数据库表: {settings.agno_knowledge_table}")
     engine = create_engine(settings.database_url)
     with engine.connect() as conn:
+        table = _resolve_table_name(conn, settings.agno_knowledge_table)
         # 检查表是否存在
-        exists = conn.execute(text(
-            "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=:t"
-        ), {"t": settings.agno_knowledge_table}).fetchone()
-        if not exists:
-            print(f"  表不存在，跳过清空（首次入库）")
-            engine.dispose()
-            return
+        if table == settings.agno_knowledge_table:
+            # 未找到表，尝试原名
+            exists = conn.execute(text(
+                "SELECT 1 FROM information_schema.tables WHERE table_name=:t"
+            ), {"t": settings.agno_knowledge_table}).fetchone()
+            if not exists:
+                print(f"  表不存在，跳过清空（首次入库）")
+                engine.dispose()
+                return
         # 删除所有记录
-        result = conn.execute(text(f"DELETE FROM {settings.agno_knowledge_table}"))
+        result = conn.execute(text(f"DELETE FROM {table}"))
         conn.commit()
         print(f"  已删除 {result.rowcount} 条旧向量记录")
     engine.dispose()
@@ -145,12 +161,13 @@ def verify():
     print(f"\n[验证] 检查向量数据库...")
     engine = create_engine(settings.database_url)
     with engine.connect() as conn:
-        total = conn.execute(text(f"SELECT COUNT(*) FROM {settings.agno_knowledge_table}")).scalar()
+        table = _resolve_table_name(conn, settings.agno_knowledge_table)
+        total = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
         print(f"  总向量记录数: {total}")
 
         # 按文档分组统计
         rows = conn.execute(text(
-            f"SELECT name, COUNT(*) FROM {settings.agno_knowledge_table} GROUP BY name ORDER BY name"
+            f"SELECT name, COUNT(*) FROM {table} GROUP BY name ORDER BY name"
         )).fetchall()
         print(f"  文档分布:")
         for row in rows:
