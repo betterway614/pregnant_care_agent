@@ -5,26 +5,30 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5-42b883.svg)](https://vuejs.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-基于AMD锐龙AI Max+平台的孕期智能管理平台，集成通用医疗大模型与专科FGR评估算法，提供孕妇端、护士端、医生端三端协同的智能医疗辅助服务。
+基于AMD锐龙AI Max+平台的孕期智能管理平台，通过通用大模型（Qwen/DeepSeek）结合医学知识库RAG增强，集成FGR专病风险评估模块，提供孕妇端、护士端、医生端三端协同的智能医疗辅助服务。
 
 > **声明**：本系统仅用于科研教学辅助，不替代临床诊断、不提供治疗决策。
 
 ## 核心特性
 
-- **三端协同智能体**：孕妇端（健康咨询/情绪陪伴）、护士端（随访管理/排期）、医生端（FGR预警/医嘱辅助）
-- **RAG知识检索**：基于pgvector的向量检索，结合医学知识库增强LLM回答准确性
-- **NLU意图识别**：规则引擎+LLM混合模式，支持紧急情况检测与情绪分析
-- **FGR风险评估**：胎儿生长受限专病算法，支持多模态超声指标分析
-- **本地推理优先**：支持Ollama本地模型，保护医疗数据隐私
+- **Agno多智能体框架**：基于Agno SDK构建，孕妇端（健康咨询/情绪陪伴）、护士端（随访管理/排期）、医生端（FGR预警/医嘱辅助）三端协同
+- **RAG知识检索**：基于pgvector的混合检索（向量+关键词），结合医学知识库增强LLM回答的专业准确性
+- **语音交互**：集成ASR语音识别（FunASR/Whisper/DashScope）与TTS语音合成（CosyVoice），支持全语音对话
+- **NLU意图识别**：规则引擎+LLM混合模式，支持紧急情况检测、情绪分析与工具路由
+- **FGR风险评估**：胎儿生长受限专病评估模块，支持多后端推理（PyTorch/ONNX/ROCm/NPU）
+- **端侧部署优先**：支持Ollama本地模型+FunASR本地识别，医疗数据本地处理，保护隐私
 
 ## 技术栈
 
 ### 后端
 - **框架**：FastAPI + SQLAlchemy + Pydantic
+- **Agent框架**：Agno SDK（多智能体编排、工具调用、工作流引擎）
 - **数据库**：PostgreSQL + pgvector（向量检索）/ SQLite（开发模式）
 - **缓存**：Redis
-- **LLM**：DeepSeek API / Ollama本地模型（Qwen2.5-7B）
-- **向量模型**：BAAI/bge-m3
+- **LLM**：Qwen3.5-35b（DashScope）/ DeepSeek API / Ollama本地模型（Qwen2.5-7B）
+- **向量模型**：BAAI/bge-m3 / DashScope text-embedding-v3
+- **ASR**：FunASR（本地）/ Whisper / DashScope（云端）
+- **TTS**：CosyVoice（端侧语音合成）
 
 ### 前端
 - **框架**：Vue 3 + TypeScript + Vite
@@ -39,140 +43,52 @@
 ## 项目结构
 
 ```
-medical_agent1/
+pregnant_care_agent/
 │
 ├── backend/                          # 后端服务（FastAPI）
 │   ├── app/
-│   │   ├── core/                     # 核心引擎模块
-│   │   │   ├── llm_client.py         #   LLM客户端（DeepSeek/Ollama/Mock）
-│   │   │   ├── nlu_engine.py         #   NLU意图识别引擎（规则+LLM混合）
-│   │   │   ├── rag_engine.py         #   RAG检索增强生成引擎
-│   │   │   ├── embedding.py          #   向量嵌入服务
-│   │   │   ├── memory_manager.py     #   对话记忆管理
-│   │   │   ├── rule_engine.py        #   规则引擎（业务逻辑）
-│   │   │   └── followup_tools.py     #   随访工具集
-│   │   │
-│   │   ├── models/                   # 数据模型层
-│   │   │   ├── models.py             #   核心业务模型（孕妇/护士/医生/随访等）
-│   │   │   └── vector_models.py      #   向量数据库模型（知识库文档块）
-│   │   │
+│   │   ├── core/                     # 核心引擎模块（Agent/RAG/NLU/规则引擎等）
+│   │   ├── models/                   # 数据模型层（ORM模型）
 │   │   ├── routers/                  # API路由层
-│   │   │   ├── auth.py               #   用户认证（JWT登录）
-│   │   │   ├── chat.py               #   孕妇智能问答（核心对话接口）
-│   │   │   ├── pregnant.py           #   孕妇信息管理
-│   │   │   ├── schedule.py           #   产检排期管理
-│   │   │   ├── followup.py           #   随访任务管理
-│   │   │   ├── alerts.py             #   高危预警管理
-│   │   │   ├── fgr.py                #   FGR风险评估
-│   │   │   ├── orders.py             #   医嘱管理
-│   │   │   ├── dashboard.py          #   数据统计看板
-│   │   │   ├── fetal_movement.py     #   胎动记录管理
-│   │   │   ├── recommend.py          #   健康建议推荐
-│   │   │   ├── nurse_ai.py           #   护士端AI助手
-│   │   │   └── doctor_ai.py          #   医生端AI助手
-│   │   │
 │   │   ├── schemas/                  # Pydantic数据校验
-│   │   │   └── schemas.py            #   请求/响应模型定义
-│   │   │
 │   │   ├── services/                 # 业务逻辑层
-│   │   │   ├── followup_service.py   #   随访业务服务
-│   │   │   ├── order_service.py      #   医嘱业务服务
-│   │   │   └── schedule_engine.py    #   排期引擎
-│   │   │
-│   │   ├── scripts/                  # 数据初始化
-│   │   │   └── seed_data.py          #   Mock数据注入脚本
-│   │   │
+│   │   ├── scripts/                  # 数据初始化脚本
 │   │   ├── config.py                 # 应用配置（环境变量管理）
 │   │   ├── database.py               # 数据库连接（SQLAlchemy）
 │   │   └── main.py                   # FastAPI应用入口
 │   │
+│   ├── fgr_compete/                  # FGR专病评估模块
 │   ├── knowledge_docs/               # 医学知识库（向量化前的原始文档）
-│   │   ├── prenatal_guidelines.md    #   产前检查指南
-│   │   ├── health_education.md       #   健康教育资料
-│   │   └── medication_safety.md      #   孕期用药安全
-│   │
-│   ├── scripts/                      # 工具脚本
-│   │   ├── init_pgvector.sql         #   PostgreSQL向量扩展初始化
-│   │   └── ingest_knowledge.py       #   知识库文档向量化导入
-│   │
-│   ├── .env                          # 环境变量配置
+│   ├── tests/                        # 后端测试
+│   ├── .env.example                  # 环境变量示例
 │   ├── Dockerfile                    # 后端容器镜像
-│   ├── init_db.py                    # 数据库初始化脚本
 │   ├── run.py                        # 开发服务器启动
 │   └── requirements.txt              # Python依赖
 │
-├── frontend/                         # 前端应用（Vue 3）
+├── frontend/                         # 前端应用（Vue 3 + TypeScript）
 │   ├── src/
 │   │   ├── api/                      # API请求层
-│   │   │   ├── client.ts             #   Axios实例配置
-│   │   │   └── endpoints.ts          #   后端接口定义
-│   │   │
-│   │   ├── views/                    # 页面组件
-│   │   │   ├── Login.vue             #   登录页
-│   │   │   ├── pregnant/             #   孕妇端页面
-│   │   │   │   ├── PregnantHome.vue   #     孕妇首页
-│   │   │   │   ├── PregnantChat.vue   #     智能问答对话
-│   │   │   │   ├── PregnantSchedule.vue #   产检日程
-│   │   │   │   ├── PregnantProfile.vue #    个人档案
-│   │   │   │   └── PregnantTools.vue  #     健康工具
-│   │   │   ├── nurse/                #   护士端页面
-│   │   │   │   ├── NurseDashboard.vue #    护士工作台
-│   │   │   │   ├── ScheduleManage.vue #    排期管理
-│   │   │   │   ├── FollowUpList.vue   #    随访列表
-│   │   │   │   └── AlertList.vue     #     预警处理
-│   │   │   └── doctor/               #   医生端页面
-│   │   │       ├── DoctorDashboard.vue #   医生看板
-│   │   │       ├── FGRBoard.vue      #     FGR风险看板
-│   │   │       ├── OrderManage.vue   #     医嘱管理
-│   │   │       └── ReviewWorkbench.vue #   病例审核
-│   │   │
-│   │   ├── components/               # 通用组件
-│   │   │   ├── layout/               #   布局组件
-│   │   │   │   ├── HeaderBar.vue     #     顶部导航
-│   │   │   │   ├── Sidebar.vue       #     侧边栏
-│   │   │   │   ├── PregnantLayout.vue #    孕妇端布局
-│   │   │   │   ├── NurseLayout.vue   #     护士端布局
-│   │   │   │   └── DoctorLayout.vue  #     医生端布局
-│   │   │   └── common/               #   公共组件
-│   │   │       ├── StatCard.vue      #     统计卡片
-│   │   │       └── RiskBadge.vue     #     风险等级标签
-│   │   │
+│   │   ├── views/                    # 页面组件（孕妇/护士/医生端）
+│   │   ├── components/               # 通用UI组件
 │   │   ├── router/                   # 路由配置
-│   │   │   └── index.ts              #   Vue Router定义
-│   │   │
 │   │   ├── stores/                   # 状态管理（Pinia）
-│   │   │   ├── app.ts                #   全局应用状态
-│   │   │   └── chat.ts               #   对话状态管理
-│   │   │
-│   │   ├── types/                    # TypeScript类型
-│   │   │   └── index.ts              #   全局类型定义
-│   │   │
-│   │   ├── utils/                    # 工具函数
-│   │   │   └── markdown.ts           #   Markdown渲染
-│   │   │
-│   │   ├── App.vue                   # 根组件
-│   │   ├── main.ts                   # 应用入口
-│   │   └── env.d.ts                  # 环境类型声明
-│   │
+│   │   └── utils/                    # 工具函数
 │   ├── public/                       # 静态资源
-│   ├── dist/                         # 构建输出
 │   ├── nginx.conf                    # Nginx配置
 │   ├── Dockerfile                    # 前端容器镜像
-│   ├── index.html                    # HTML入口
-│   ├── vite.config.ts                # Vite构建配置
-│   ├── tsconfig.json                 # TypeScript配置
 │   └── package.json                  # Node依赖
 │
-├── docs/                             # 项目文档
-│   ├── 赛题要求和赛题方向.md           #   竞赛赛题说明
-│   ├── chatui.md                     #   聊天UI设计文档
-│   └── design/                       #   设计文档
-│       ├── 2026-04-28-medical-agent-design.md
-│       ├── 2026-04-29-hardware-adaptation.md
-│       └── 2026-04-29-technical-architecture.md
+├── embedding_server/                 # 向量嵌入服务（BGE-M3）
+├── tts_server/                       # TTS语音合成服务
 │
-├── docker-compose.yml                # 容器编排（Backend/Frontend/PostgreSQL/Redis）
-├── .gitignore                        # Git忽略配置
+├── docs/                             # 项目文档
+│   ├── AI-Care技术论文.md             #   技术论文
+│   ├── 赛题要求和赛题方向.md           #   竞赛赛题说明
+│   ├── 项目说明与体验指南.md           #   体验指南
+│   └── design/                       #   设计文档
+│
+├── docker-compose.yml                # 容器编排
+├── start.sh                          # 一键启动脚本
 └── README.md                         # 项目说明
 ```
 
@@ -180,11 +96,14 @@ medical_agent1/
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| **LLM客户端** | `backend/app/core/llm_client.py` | 封装DeepSeek/Ollama调用，支持cloud/local/mock三种模式 |
-| **NLU引擎** | `backend/app/core/nlu_engine.py` | 规则+LLM混合意图识别，支持紧急检测与情绪分析 |
-| **RAG引擎** | `backend/app/core/rag_engine.py` | 向量检索+LLM生成，基于pgvector的医学知识增强 |
+| **Agno智能体** | `backend/app/core/agno_agent.py` | 基于Agno SDK的多Agent编排，支持工具调用、团队协作与工作流 |
+| **LLM客户端** | `backend/app/core/llm_client.py` | 封装DashScope/DeepSeek/Ollama调用，支持cloud/local/mock三种模式 |
+| **NLU引擎** | `backend/app/core/nlu_engine.py` | 规则+LLM混合意图识别，支持紧急检测、情绪分析与工具路由 |
+| **RAG知识库** | `backend/app/core/agno_knowledge.py` | 基于pgvector的混合检索（向量+关键词），医学知识增强生成 |
+| **ASR服务** | `backend/app/interfaces/asr_backend.py` | 语音识别接口，支持FunASR/Whisper/DashScope多后端 |
+| **TTS服务** | `backend/app/interfaces/tts_backend.py` | 语音合成接口，集成CosyVoice端侧TTS |
 | **对话路由** | `backend/app/routers/chat.py` | 孕妇智能问答核心接口，集成NLU/RAG/记忆管理 |
-| **FGR评估** | `backend/app/routers/fgr.py` | 胎儿生长受限风险评估接口 |
+| **FGR评估** | `backend/app/routers/fgr.py` | 胎儿生长受限风险评估，支持PyTorch/ONNX/ROCm多后端 |
 
 ## 快速开始
 
@@ -198,8 +117,8 @@ medical_agent1/
 
 ```bash
 # 1. 克隆项目
-git clone <repository-url>
-cd medical_agent1
+git clone git@github.com:betterway614/pregnant_care_agent.git
+cd pregnant_care_agent
 
 # 2. 配置环境变量（可选）
 cp backend/.env.example backend/.env
@@ -236,19 +155,27 @@ npm run dev
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `LLM_MODE` | LLM模式：cloud/local/mock | mock |
-| `LLM_API_KEY` | LLM API密钥 | - |
-| `LLM_BASE_URL` | LLM API地址 | https://api.deepseek.com/v1 |
-| `LLM_MODEL` | LLM模型名称 | deepseek-chat |
-| `FGR_MODE` | FGR算法模式：mock/npu | mock |
+| `LLM_MODE` | LLM模式：cloud/local/mock/mixed | cloud |
+| `LLM_API_KEY` | LLM API密钥（DashScope/DeepSeek） | - |
+| `LLM_BASE_URL` | LLM API地址 | https://dashscope.aliyuncs.com/compatible-mode/v1 |
+| `LLM_MODEL` | LLM模型名称 | qwen3.5-35b-a3b |
+| `AGNO_ENABLED` | 启用Agno智能体框架 | true |
+| `FGR_MODE` | FGR算法开关：true/false | true |
+| `FGR_BACKEND` | FGR推理后端：pytorch/onnx_igpu/onnx_npu/onnx_cpu | pytorch |
 | `DB_TYPE` | 数据库类型：sqlite/postgres | sqlite |
-| `RAG_ENABLED` | 启用RAG检索 | false |
+| `DB_NAME` | 数据库名称 | ai_care |
+| `RAG_ENABLED` | 启用RAG检索 | true |
+| `RAG_SEARCH_TYPE` | RAG检索方式：hybrid/vector/keyword | hybrid |
+| `EMBEDDING_MODEL` | 向量嵌入模型 | text-embedding-v3 |
+| `ASR_MODE` | ASR模式：local/cloud | cloud |
+| `JWT_SECRET_KEY` | JWT签名密钥 | - |
 
 ### LLM模式说明
 
-- **cloud**：使用云端API（DeepSeek）
-- **local**：使用Ollama本地模型
-- **mock**：模拟响应（开发测试）
+- **cloud**：使用云端API（通义千问 DashScope / DeepSeek）
+- **local**：使用Ollama本地模型（Qwen2.5-7B等）
+- **mixed**：cloud→local→mock 自动降级链，保证服务可用性
+- **mock**：模拟响应（开发测试用）
 
 ## API接口
 
@@ -257,34 +184,40 @@ npm run dev
 | 模块 | 端点 | 说明 |
 |------|------|------|
 | 认证 | `POST /api/auth/login` | 用户登录 |
-| 聊天 | `POST /api/chat` | 孕妇智能问答 |
+| 聊天 | `POST /api/chat` | 孕妇智能问答（支持语音） |
 | 随访 | `POST /api/followup` | 随访管理 |
 | 预警 | `GET /api/alerts` | 高危预警列表 |
 | FGR | `POST /api/fgr/assess` | FGR风险评估 |
 | 医嘱 | `POST /api/orders/generate` | AI医嘱生成 |
 | 仪表盘 | `GET /api/dashboard` | 数据统计看板 |
+| 健康趋势 | `GET /api/health-trends` | 健康数据趋势分析 |
+| 心理评估 | `POST /api/mental-health` | 心理健康评估 |
+| 知识库 | `GET /api/knowledge` | 医学知识库管理 |
+| TTS | `POST /api/tts/synthesize` | 语音合成 |
+| WebSocket | `WS /ws/chat` | 实时对话推送 |
 
 完整API文档请访问：`http://localhost:8000/docs`
 
 ## 功能模块
 
 ### 孕妇端
-- 智能健康咨询（RAG增强）
-- 产检日程管理
-- 健康数据记录（体重/血压/胎动）
-- 情绪陪伴与心理支持
+- 智能健康咨询（RAG增强，支持语音输入/输出）
+- 产检日程管理与提醒
+- 健康数据记录（体重/血压/胎动/健康趋势）
+- 情绪陪伴与心理评估
+- 胎动计数工具
 
 ### 护士端
-- 随访任务管理
-- 孕妇排期管理
-- 高危预警处理
-- 随访记录生成
+- 随访任务管理与智能排期
+- 高危预警处理与升级
+- 孕妇健康趋势追踪
+- 随访记录自动生成
 
 ### 医生端
-- FGR风险看板
+- FGR风险看板与多维数据分析
 - 辅助医嘱生成
 - 病例审核工作台
-- 多维度数据分析
+- WebSocket实时数据推送
 
 ## 开发指南
 
