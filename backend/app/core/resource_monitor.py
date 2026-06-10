@@ -102,6 +102,40 @@ class ResourceMonitor:
             self._psutil = None
             logger.warning("psutil 未安装，CPU/RAM 监控将使用默认值")
 
+    def _detect_npu(self) -> bool:
+        """检测 NPU 是否可用 (多种检测方式)"""
+        # 方法 1: /dev/accel0 设备节点
+        if os.path.exists("/dev/accel0"):
+            return True
+
+        # 方法 2: /sys/class/accel/accel0 (sysfs)
+        if os.path.isdir("/sys/class/accel/accel0"):
+            return True
+
+        # 方法 3: lspci 检测 AMD NPU
+        try:
+            result = subprocess.run(
+                ["lspci"],
+                capture_output=True, text=True, timeout=5
+            )
+            if "17f0" in result.stdout or "Neural Processing Unit" in result.stdout:
+                return True
+        except Exception:
+            pass
+
+        # 方法 4: 检查 amdxdna 内核模块
+        try:
+            result = subprocess.run(
+                ["lsmod"],
+                capture_output=True, text=True, timeout=5
+            )
+            if "amdxdna" in result.stdout:
+                return True
+        except Exception:
+            pass
+
+        return False
+
     def get_current_state(self) -> ResourceState:
         """获取当前系统资源状态"""
         state = ResourceState()
@@ -158,8 +192,8 @@ class ResourceMonitor:
             except Exception as e:
                 logger.debug("获取 CPU/RAM 信息失败: {}", e)
 
-        # 检查 NPU
-        state.npu_available = os.path.exists("/dev/accel0")
+        # 检查 NPU (多种检测方式)
+        state.npu_available = self._detect_npu()
 
         # 获取 GPU 功率和温度
         try:
