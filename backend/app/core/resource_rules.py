@@ -72,7 +72,7 @@ class ResourcePolicy:
 
     def to_dict(self) -> dict:
         return {
-            "name": self.name,
+            "name": self.name.value if isinstance(self.name, PolicyType) else self.name,
             "description": self.description,
             "vram_threshold_high": self.vram_threshold_high,
             "vram_threshold_critical": self.vram_threshold_critical,
