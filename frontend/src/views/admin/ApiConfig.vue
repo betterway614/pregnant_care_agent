@@ -520,23 +520,32 @@ function selectProvider(id: string) {
   markDirty()
 }
 
-// 检查本地服务状态
+// 检查本地服务状态（通过后端代理，避免 SSH 端口转发场景下前端无法访问 127.0.0.1）
 async function checkAllServices() {
   checkingServices.value = true
-  const checks = localServices.map(async (svc) => {
-    try {
-      const res = await client.get(`/admin/resource/status`, { timeout: 3000 })
-      // 通过 health 端点检查
-      const healthRes = await fetch(`${svc.url}/health`, { signal: AbortSignal.timeout(3000) })
-      const data = await healthRes.json()
-      svc.status = 'online'
-      if (data.model_loaded !== undefined) svc.model = data.model_name || data.model_dir?.split('/').pop() || ''
-      if (data.device) svc.device = data.device
-    } catch {
-      svc.status = 'offline'
-    }
-  })
-  await Promise.all(checks)
+  try {
+    const res = await client.get(`/admin/resource/services-health`, { timeout: 5000 })
+    const servicesData = res.data?.services || {}
+    localServices.forEach((svc) => {
+      const keyMap: Record<string, string> = {
+        asr: 'asr',
+        tts: 'tts',
+        embedding: 'bge_m3',
+        llm: 'llm',
+      }
+      const backendKey = keyMap[svc.key] || svc.key
+      const data = servicesData[backendKey]
+      if (data?.online) {
+        svc.status = 'online'
+        if (data.model) svc.model = data.model
+        if (data.device) svc.device = data.device
+      } else {
+        svc.status = 'offline'
+      }
+    })
+  } catch {
+    localServices.forEach((svc) => { svc.status = 'offline' })
+  }
   checkingServices.value = false
 }
 

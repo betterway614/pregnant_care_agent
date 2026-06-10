@@ -131,6 +131,57 @@ def get_history(
     return {"history": resource_service.get_history(limit=limit)}
 
 
+@router.get("/services-health")
+def get_services_health(user: TokenPayload = Depends(get_current_user)):
+    """获取所有服务的健康状态（代理后端检测）
+
+    解决 SSH 端口转发场景下前端无法直接访问 127.0.0.1:port 的问题。
+    由后端直接检测各服务的健康状态，前端只调用本 API。
+    """
+    _require_admin(user)
+    from ..core.resource_rules import resource_rule_engine
+    from ..config import settings
+    import requests
+
+    services = ["llm", "bge_m3", "tts", "asr"]
+    result = {}
+    for name in services:
+        config = resource_rule_engine.services.get(name)
+        if not config:
+            continue
+        host = getattr(settings, f"resource_{name}_host", "127.0.0.1")
+        port = config.port
+        status = {"online": False, "model": "", "device": ""}
+        try:
+            # 优先查询 /device 端点（适用于 embedding server）
+            resp = requests.get(f"http://{host}:{port}/device", timeout=1)
+            if resp.ok:
+                data = resp.json()
+                status["online"] = True
+                if data.get("model_loaded"):
+                    status["model"] = name
+                if data.get("device"):
+                    status["device"] = data["device"]
+                result[name] = status
+                continue
+        except Exception:
+            pass
+        try:
+            # 回退到 /health 端点
+            resp = requests.get(f"http://{host}:{port}/health", timeout=1)
+            if resp.ok:
+                data = resp.json()
+                status["online"] = True
+                if data.get("model_name"):
+                    status["model"] = data["model_name"]
+                if data.get("device"):
+                    status["device"] = data["device"]
+        except Exception:
+            pass
+        result[name] = status
+    return {"services": result}
+
+
 @router.post("/monitoring/start")
 def start_monitoring(
     body: MonitoringControl = None,
