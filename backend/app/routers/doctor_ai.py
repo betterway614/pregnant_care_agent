@@ -2,6 +2,7 @@
 import json
 import asyncio
 import time
+import uuid
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from sqlalchemy.orm import Session
@@ -591,6 +592,9 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
     agent_factory = DOCTOR_AGENT_VARIANT_MAP.get(intent_variant, get_doctor_chat_agent)
     agent = agent_factory()
 
+    # 会话 ID：前端传入或自动生成
+    session_id = req.session_id or f"doctor_{pregnant_id[:8] if pregnant_id else 'anon'}_{uuid.uuid4().hex[:6]}"
+
     async def agno_event_generator():
         t0 = time.time()
         tool_steps: list[str] = []
@@ -603,6 +607,7 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
                 stream=True,
                 stream_events=True,
                 user_id=pregnant_id or "anonymous",
+                session_id=session_id,
             ):
                 event = chunk.event
                 if event == RunEvent.tool_call_started and chunk.tool is not None:
@@ -635,6 +640,7 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             "event": "done",
             "data": json.dumps({
                 "source": "DOCTOR_AI",
+                "session_id": session_id,
                 "tool_steps": tool_steps,
             }),
         }
@@ -644,17 +650,17 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
         import asyncio
         asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
-            session_id=f"doctor_chat_{pregnant_id or 'anon'}",
+            session_id=session_id,
             user_id=pregnant_id or "anonymous",
             agent_role="doctor",
             agent_variant=intent_variant,
             intent_classification=intent_classification,
-            user_message=None,
+            user_message=message,
             run_response=run_response,
             total_latency_ms=elapsed_ms,
         ))
 
-    return EventSourceResponse(agno_event_generator())
+    return EventSourceResponse(agno_event_generator(), ping=15)
 
 
 # ==================== 医生端 - 问题处理 ====================

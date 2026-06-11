@@ -206,6 +206,40 @@ const messagesRef = ref<HTMLElement | null>(null)
 const currentToolStep = ref<string | null>(null)
 const completedToolSteps = ref<string[]>([])
 
+// 会话 ID：在同一次对话中保持一致，让后端 Agent 能管理多轮上下文
+let currentSessionId: string | null = null
+// AbortController：用于组件卸载时取消正在进行的 SSE 请求
+let activeAbortController: AbortController | null = null
+// 安全超时：防止 isStreaming 永久卡死
+let streamSafetyTimer: ReturnType<typeof setTimeout> | null = null
+
+const STREAM_SAFETY_TIMEOUT_MS = 130_000  // 130s（略大于后端 120s 超时）
+
+function startStreamSafetyTimer(assistantMsg: ChatMsg) {
+  clearStreamSafetyTimer()
+  streamSafetyTimer = setTimeout(() => {
+    console.warn('[NurseAIChat] Stream safety timeout, forcing reset')
+    if (assistantMsg.loading) {
+      if (!assistantMsg.content) {
+        assistantMsg.content = '抱歉，AI处理超时，请稍后再试。'
+      }
+      assistantMsg.loading = false
+      assistantMsg.thinking = false
+    }
+    isStreaming.value = false
+    currentToolStep.value = null
+    activeAbortController?.abort()
+    activeAbortController = null
+  }, STREAM_SAFETY_TIMEOUT_MS)
+}
+
+function clearStreamSafetyTimer() {
+  if (streamSafetyTimer) {
+    clearTimeout(streamSafetyTimer)
+    streamSafetyTimer = null
+  }
+}
+
 let msgCounter = 0
 function genId() { return `nurse_${Date.now()}_${++msgCounter}` }
 
@@ -320,6 +354,10 @@ async function handleAudioTranscribe(msg: ChatMsg) {
 onUnmounted(() => {
   if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
   stopTTS()
+  // 取消正在进行的 SSE 请求
+  activeAbortController?.abort()
+  activeAbortController = null
+  clearStreamSafetyTimer()
 })
 
 function playAudio(msg: ChatMsg) {
@@ -372,6 +410,11 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
   isStreaming.value = true
   scrollToBottom()
 
+  // AbortController 用于组件卸载时取消请求
+  activeAbortController?.abort()
+  activeAbortController = new AbortController()
+  startStreamSafetyTimer(assistantMsg)
+
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
 
   try {
@@ -396,12 +439,15 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           scrollToBottom()
         },
         onDone(metadata: any) {
+          clearStreamSafetyTimer()
           assistantMsg.loading = false
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
           currentToolStep.value = null
           isStreaming.value = false
+          // 保存后端返回的 session_id，后续消息复用
+          if (metadata?.session_id) currentSessionId = metadata.session_id
           // 保存 ASR 转录文本到用户语音消息
           if (metadata?.transcribed_text) {
             const userAudioMsg = messages.value.find(m => m.role === 'user' && m.messageType === 'audio' && !m.transcribedText)
@@ -411,15 +457,18 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           autoSpeakAssistant(assistantMsg)
         },
         onError() {
+          clearStreamSafetyTimer()
           assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
           currentToolStep.value = null
           isStreaming.value = false
         },
-      }
+      },
+      activeAbortController.signal,
     )
   } catch {
+    clearStreamSafetyTimer()
     if (!assistantMsg.content) {
       assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
     }
@@ -427,6 +476,8 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
     assistantMsg.thinking = false
     currentToolStep.value = null
     isStreaming.value = false
+  } finally {
+    activeAbortController = null
   }
 }
 
@@ -464,11 +515,20 @@ async function handleSend() {
   isStreaming.value = true
   scrollToBottom()
 
+  // AbortController 用于组件卸载时取消请求
+  activeAbortController?.abort()
+  activeAbortController = new AbortController()
+  startStreamSafetyTimer(assistantMsg)
+
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
 
   try {
     await nurseAiApi.chatStream(
-      { message: text, pregnant_id: pregnantId || undefined },
+      {
+        message: text,
+        pregnant_id: pregnantId || undefined,
+        session_id: currentSessionId || undefined,
+      },
       {
         onThinking(message: string) {
           assistantMsg.thinkingMessage = message
@@ -482,25 +542,31 @@ async function handleSend() {
           scrollToBottom()
         },
         onDone(metadata: any) {
+          clearStreamSafetyTimer()
           assistantMsg.loading = false
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
           currentToolStep.value = null
           isStreaming.value = false
+          // 保存后端返回的 session_id，后续消息复用
+          if (metadata?.session_id) currentSessionId = metadata.session_id
           scrollToBottom()
           autoSpeakAssistant(assistantMsg)
         },
         onError() {
+          clearStreamSafetyTimer()
           assistantMsg.content = '抱歉，小护暂时无法回复。请稍后再试。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
           currentToolStep.value = null
           isStreaming.value = false
         },
-      }
+      },
+      activeAbortController.signal,
     )
   } catch {
+    clearStreamSafetyTimer()
     if (!assistantMsg.content) {
       assistantMsg.content = '抱歉，小护暂时无法回复。请稍后再试。'
     }
@@ -508,6 +574,8 @@ async function handleSend() {
     assistantMsg.thinking = false
     currentToolStep.value = null
     isStreaming.value = false
+  } finally {
+    activeAbortController = null
   }
 }
 

@@ -130,6 +130,7 @@ class ChatStreamRequest(BaseModel):
     message_type: str = Field(default="TEXT", pattern="^(TEXT|AUDIO|IMAGE)$")
     audio_data: Optional[str] = None
     audio_format: str = Field(default="webm", pattern="^(webm|wav|mp3|ogg|m4a)$")
+    session_id: Optional[str] = None
 
 
 class ChatNLUResult(BaseModel):

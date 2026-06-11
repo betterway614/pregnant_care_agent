@@ -67,11 +67,21 @@ def _detect_tool_error(tc_result: Any) -> tuple[bool, str | None]:
 
 
 def _desensitize_health(text: str) -> str:
-    """对健康数据进行脱敏处理，替换数值为占位符。"""
+    """对健康数据与个人信息进行脱敏处理，替换数值为占位符。
+
+    覆盖范围:
+    - 健康指标: 血压/体重/血糖/心率/体温
+    - 个人信息: 手机号
+    """
     import re
     if not text:
         return text
 
+    # ── 个人信息 ──
+    # 中国大陆手机号: 1[3-9]xxxxxxxxx
+    text = re.sub(r'(?<!\d)1[3-9]\d{9}(?!\d)', r'[手机号]', text)
+
+    # ── 健康指标 ──
     # 血压: 覆盖 90-250/40-150 → [血压值]
     text = re.sub(
         r'(?<!\d)(0?[1-9]\d|[12][0-5]\d)\s*[/／]\s*(\d{2,3})\s*(?:mmHg|毫米汞柱)?\b',

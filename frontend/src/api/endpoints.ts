@@ -220,7 +220,7 @@ export const nurseAiApi = {
   getFollowupRecommendations: () =>
     client.get<{ recommendations: any[] }>('/nurse/followup-recommendations'),
   chatStream: (
-    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string; session_id?: string },
     callbacks: SSEStreamCallbacks,
     signal?: AbortSignal,
   ) => nurseChatStream(data, callbacks, signal),
@@ -228,7 +228,7 @@ export const nurseAiApi = {
 
 /* ========== 护士 AI 流式对话 ========== */
 async function nurseChatStream(
-  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string; session_id?: string },
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -240,7 +240,7 @@ export const doctorAiApi = {
   analyze: (pregnantId: string, query: string = '') =>
     client.post<any>(`/doctor/analyze/${pregnantId}`, { pregnant_id: pregnantId, query }, { timeout: 180000 }),
   chatStream: (
-    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+    data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string; session_id?: string },
     callbacks: SSEStreamCallbacks,
     signal?: AbortSignal,
   ) => doctorChatStream(data, callbacks, signal),
@@ -262,7 +262,7 @@ export const collaborationApi = {
 
 /* ========== 医生 AI 流式对话 ========== */
 async function doctorChatStream(
-  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string },
+  data: { message: string; pregnant_id?: string; message_type?: string; audio_data?: string; audio_format?: string; session_id?: string },
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -303,6 +303,10 @@ export interface SSEStreamCallbacks {
 
 /**
  * SSE 流式请求内部实现（自动兼容非 SSE 响应）
+ *
+ * 关键设计：
+ * - 收到 done 事件后禁止自动重连（防止 POST 重复触发 Agent）
+ * - 连接异常断开时仍允许一次重连（应对网络抖动）
  */
 async function _sseFetch(
   url: string,
@@ -311,6 +315,7 @@ async function _sseFetch(
   signal?: AbortSignal,
 ): Promise<void> {
   const token = localStorage.getItem('token')
+  let doneReceived = false
   await fetchEventSource(url, {
     method: 'POST',
     headers: {
@@ -325,11 +330,9 @@ async function _sseFetch(
         const errText = await response.text().catch(() => '')
         throw new Error(`HTTP ${response.status}: ${errText}`)
       }
-      // 调试日志：检查 SSE 响应头
       const ct = response.headers.get('content-type') || ''
       const hasBody = !!response.body
       console.log('[SSE] onopen content-type:', ct, 'hasBody:', hasBody, 'url:', url)
-      // 非 SSE 响应降级：直接解析完整 JSON 并通过 callbacks 交付
       if (!ct.includes('text/event-stream') || !response.body) {
         const text = await response.text()
         if (text) {
@@ -352,11 +355,19 @@ async function _sseFetch(
       else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
       else if (msg.event === 'error') callbacks.onError?.(new Error(msg.data))
       else if (msg.event === 'done') {
+        doneReceived = true
         try { callbacks.onDone?.(JSON.parse(msg.data)) } catch { callbacks.onDone?.({}) }
       }
     },
+    onclose() {
+      // 收到 done 后服务器正常关闭，禁止重连（防止 POST 重复触发 Agent）
+      if (doneReceived) {
+        throw new Error('SSE_DONE')
+      }
+      // 未收到 done 的连接断开：允许一次重连（fetchEventSource 默认行为）
+    },
     onerror(err) {
-      if ((err as Error).message === 'HANDLED_NON_SSE') {
+      if ((err as Error).message === 'HANDLED_NON_SSE' || (err as Error).message === 'SSE_DONE') {
         class FatalError extends Error { }
         throw new FatalError(String(err))
       }

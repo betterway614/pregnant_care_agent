@@ -5,6 +5,7 @@
   - 全部日志写入 logs/app_YYYY-MM-DD.log（按天轮转，保留7天）
   - ERROR 及以上单独写入 logs/error_YYYY-MM-DD.log（保留30天）
   - 接管 uvicorn / fastapi 等标准 logging 到 loguru
+  - 全局日志脱敏：自动替换手机号、健康指标等敏感数据
 """
 import logging
 import sys
@@ -33,10 +34,31 @@ class InterceptHandler(logging.Handler):
         )
 
 
+def _log_message_patcher(record: dict) -> None:
+    """全局日志脱敏 patcher — 在每条日志格式化前自动脱敏 message 字段。
+
+    复用 audit_service._desensitize_health 的脱敏规则：
+    - 手机号 → [手机号]
+    - 血压/体重/血糖/心率/体温 → [血压值]/[体重值]/etc.
+
+    注意：仅影响 message 字段，不影响结构化 extra 字段。
+    延迟导入避免循环依赖。
+    """
+    from ..services.audit_service import _desensitize_health
+
+    msg = record.get("message")
+    if isinstance(msg, str):
+        record["message"] = _desensitize_health(msg)
+
+
 def setup_logging(log_dir: str = "logs") -> None:
     """应用启动时调用一次"""
 
     logger.remove()  # 清除 loguru 默认 handler
+
+    # ── 全局消息脱敏 ──
+    # 通过 patcher 在格式化前对所有日志消息做脱敏，覆盖所有 sink
+    logger.configure(patcher=_log_message_patcher)
 
     log_path = Path(log_dir)
     log_path.mkdir(exist_ok=True)

@@ -39,4 +39,5 @@ onnx>=1.16.0
 
 # TTS (本地模式)
 edge-tts>=6.1.0
+apscheduler>=3.10.0
 # openai-whisper>=20231117  # 可选：本地 ASR，需大量内存

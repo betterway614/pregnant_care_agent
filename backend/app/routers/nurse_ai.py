@@ -2,6 +2,7 @@
 import json
 import asyncio
 import time
+import uuid
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request, Depends
 from sqlalchemy.orm import Session
@@ -536,18 +537,22 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     agent_factory = NURSE_AGENT_VARIANT_MAP.get(intent_variant, get_nurse_chat_agent)
     agent = agent_factory()
 
+    # 会话 ID：前端传入或自动生成（用于 Agent 多轮对话上下文管理）
+    session_id = req.session_id or f"nurse_{pregnant_id[:8] if pregnant_id else 'anon'}_{uuid.uuid4().hex[:6]}"
+
     async def agno_event_generator():
         t0 = time.time()
         tool_steps: list[str] = []
         run_response = None
         content_streamed = False
+        yield {"event": "thinking", "data": "小护正在思考..."}
         try:
-            yield {"event": "thinking", "data": "小护正在思考..."}
             async for chunk in agent.arun(
                 input=message,
                 stream=True,
                 stream_events=True,
                 user_id=pregnant_id or "anonymous",
+                session_id=session_id,
             ):
                 event = chunk.event
                 if event == RunEvent.tool_call_started and chunk.tool is not None:
@@ -567,44 +572,44 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
                     if chunk.content and isinstance(chunk.content, str):
                         content_streamed = True
                         yield {"event": "chunk", "data": chunk.content}
-            # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
-            # 结构化输出需从 run_response.content 提取并发送到前端。
-            if not content_streamed and run_response is not None:
-                from ..core.agno_medical_agents import format_structured_output_to_markdown
-                fallback_text = format_structured_output_to_markdown(run_response.content)
-                if fallback_text:
-                    yield {"event": "chunk", "data": fallback_text}
         except Exception as e:
             from loguru import logger
-            logger.error("Nurse AI Agent run error: {}", e)
             logger.error("Nurse chat stream error: {}", e)
             yield {"event": "error", "data": "服务内部错误，请稍后重试"}
-            yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。如果问题持续存在，请检查网络连接或联系管理员。"}
-        # 先 yield done，避免审计日志写入阻塞 SSE
+            yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。"}
+
+        # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发
+        if not content_streamed and run_response is not None:
+            from ..core.agno_medical_agents import format_structured_output_to_markdown
+            fallback_text = format_structured_output_to_markdown(run_response.content)
+            if fallback_text:
+                yield {"event": "chunk", "data": fallback_text}
+
+        # 发送 done 事件
         yield {
             "event": "done",
             "data": json.dumps({
                 "source": "NURSE_AI",
+                "session_id": session_id,
                 "tool_steps": tool_steps,
             }),
         }
 
         # 审计日志（后台异步写入，不阻塞响应）
         elapsed_ms = int((time.time() - t0) * 1000)
-        import asyncio
         asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
-            session_id=f"nurse_chat_{pregnant_id or 'anon'}",
+            session_id=session_id,
             user_id=pregnant_id or "anonymous",
             agent_role="nurse",
             agent_variant=intent_variant,
             intent_classification=intent_classification,
-            user_message=None,
+            user_message=message,
             run_response=run_response,
             total_latency_ms=elapsed_ms,
         ))
 
-    return EventSourceResponse(agno_event_generator())
+    return EventSourceResponse(agno_event_generator(), ping=15)
 
 
 # ==================== 小Hu 工具函数 ====================
@@ -738,28 +743,51 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
     risk_tags = pregnant.risk_tags or []
     current_date = beijing_now().date()
 
-    # 1.5 检查是否有进行中的随访任务（去重：已有 draft 或 in_progress 状态则跳过推荐）
+    # 1.5 检查是否有进行中的随访任务
+    # 超时僵尸随访自动归档后继续推荐；未超时的活跃随访跳过推荐以避免重复
     active_followup = db.query(FollowUpRecord).filter(
         FollowUpRecord.pregnant_id == pregnant_id,
         FollowUpRecord.status.in_(["draft", "in_progress"]),
     ).first()
     if active_followup:
-        return {
-            "pregnant_id": pregnant_id,
-            "current_gestational_week": f"{gest_week}+{gest_day}",
-            "recommendations": [],
-            "context_summary": {
-                "days_since_last_followup": (current_date - active_followup.created_at.date()).days if active_followup.created_at else None,
-                "last_followup_date": active_followup.created_at.strftime("%Y-%m-%d") if active_followup.created_at else None,
-                "last_followup_status": active_followup.status,
-                "health_data_frequency": "active",
-                "health_data_count_14d": 0,
-                "active_alert_count": 0,
-                "has_critical_alerts": False,
-                "risk_tags": risk_tags,
-            },
-            "skip_reason": "该孕妇已有进行中的随访任务，请先处理完成后再推荐",
-        }
+        age_days = (current_date - active_followup.created_at.date()).days if active_followup.created_at else 0
+        old_status = active_followup.status
+
+        is_zombie = False
+        if old_status == "draft" and age_days > settings.followup_zombie_draft_timeout_days:
+            is_zombie = True
+        elif old_status == "in_progress" and age_days > settings.followup_zombie_inprogress_timeout_days:
+            is_zombie = True
+
+        if not is_zombie:
+            return {
+                "pregnant_id": pregnant_id,
+                "current_gestational_week": f"{gest_week}+{gest_day}",
+                "recommendations": [],
+                "context_summary": {
+                    "days_since_last_followup": age_days,
+                    "last_followup_date": active_followup.created_at.strftime("%Y-%m-%d") if active_followup.created_at else None,
+                    "last_followup_status": old_status,
+                    "health_data_frequency": "active",
+                    "health_data_count_14d": 0,
+                    "active_alert_count": 0,
+                    "has_critical_alerts": False,
+                    "risk_tags": risk_tags,
+                },
+                "skip_reason": f"该孕妇已有进行中的随访任务（{old_status}, {age_days}天），请先处理完成后再推荐",
+            }
+        else:
+            # 自动归档僵尸随访，继续执行后续推荐逻辑
+            active_followup.status = "archived"
+            active_followup.review_comment = (
+                f"[系统自动归档] 原状态 {old_status} 已超过超时时间（{age_days}天），自动关闭。"
+                f"原创建时间: {active_followup.created_at}"
+            )
+            db.flush()
+            logger.info(
+                "自动归档僵尸随访 id={} pregnant_id={} old_status={} age_days={}",
+                active_followup.id, pregnant_id, old_status, age_days,
+            )
 
     # 2. 查询最近随访记录
     last_followup = db.query(FollowUpRecord).filter(
@@ -837,21 +865,63 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
             "suggested_actions": ["安排首次随访", "建立随访档案"],
         })
 
-    # 5.3 数据督促
-    if data_freq == "inactive" and risk_tags:
+    # 5.3 信息缺失检查：从未上报任何健康数据 或 基础信息缺失
+    total_data_count = db.query(func.count(HealthDataPoint.id)).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+    ).scalar() or 0
+
+    has_basic_info = bool(
+        pregnant.gestational_age_days and
+        pregnant.height_cm and
+        pregnant.pre_pregnancy_weight_kg
+    )
+
+    if total_data_count == 0 and gest_week >= 12:
+        # 从无任何健康数据上报 — 强信号，需立即随访
+        reason = "该孕妇从未上报任何健康数据"
+        if not has_basic_info:
+            reason += "，且基础信息（孕周/身高/孕前体重）缺失"
+        recommendations.append({
+            "recommended_date": "immediate",
+            "gestational_week": f"{gest_week}+{gest_day}",
+            "template_id": template,
+            "reason": reason + "，需尽快联系确认情况并督促数据上报",
+            "priority": "high",
+            "is_overdue": False,
+            "suggested_actions": [
+                "联系孕妇确认基础信息并补全档案",
+                "指导孕妇如何使用健康数据上报功能",
+                "了解未上报数据的原因（技术障碍/认知不足/健康问题）",
+            ],
+        })
+    elif not has_basic_info and gest_week >= 12:
+        # 有部分数据但基础信息缺失
+        recommendations.append({
+            "recommended_date": "immediate",
+            "gestational_week": f"{gest_week}+{gest_day}",
+            "template_id": template,
+            "reason": "孕妇基础信息不完整（孕周/身高/孕前体重缺失），影响风险评估和个性化推荐",
+            "priority": "medium",
+            "is_overdue": False,
+            "suggested_actions": ["联系孕妇补全基础信息", "核实孕周和预产期"],
+        })
+
+    # 5.4 数据督促：14天内数据不活跃（修复：不再要求必须有风险标签）
+    if data_freq == "inactive":
         has_data_engagement = any(r.get("reason", "").startswith("数据不活跃") for r in recommendations)
-        if not has_data_engagement:
+        if not has_data_engagement and not total_data_count == 0:  # 避免与 5.3 重复
+            priority = "high" if data_count_14d == 0 else "medium"
             recommendations.append({
                 "recommended_date": "immediate",
                 "gestational_week": f"{gest_week}+{gest_day}",
                 "template_id": template,
-                "reason": f"数据不活跃：14天内仅上报{data_count_14d}条，有风险标签的孕妇需加强监测",
-                "priority": "medium",
+                "reason": f"数据不活跃：14天内仅上报{data_count_14d}条数据，需跟进确认情况",
+                "priority": priority,
                 "is_overdue": False,
                 "suggested_actions": ["督促孕妇加强健康数据上报", "了解数据未上报原因"],
             })
 
-    # 5.4 未来排期（2-3次）
+    # 5.5 未来排期（2-3次）
     for i in range(1, 4):
         future_date = current_date + timedelta(days=interval * i)
         future_days_offset = interval * i

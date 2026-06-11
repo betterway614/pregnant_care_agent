@@ -206,6 +206,34 @@ const messagesRef = ref<HTMLElement | null>(null)
 const currentToolStep = ref<string | null>(null)
 const completedToolSteps = ref<string[]>([])
 
+// 会话 ID：在同一次对话中保持一致
+let currentSessionId: string | null = null
+// AbortController：组件卸载时取消 SSE
+let activeAbortController: AbortController | null = null
+// 安全超时：防止 isStreaming 永久卡死
+let streamSafetyTimer: ReturnType<typeof setTimeout> | null = null
+const STREAM_SAFETY_TIMEOUT_MS = 130_000
+
+function startStreamSafetyTimer(assistantMsg: ChatMsg) {
+  clearStreamSafetyTimer()
+  streamSafetyTimer = setTimeout(() => {
+    console.warn('[DoctorAIChat] Stream safety timeout, forcing reset')
+    if (assistantMsg.loading) {
+      if (!assistantMsg.content) assistantMsg.content = '抱歉，AI处理超时，请稍后再试。'
+      assistantMsg.loading = false
+      assistantMsg.thinking = false
+    }
+    isStreaming.value = false
+    currentToolStep.value = null
+    activeAbortController?.abort()
+    activeAbortController = null
+  }, STREAM_SAFETY_TIMEOUT_MS)
+}
+
+function clearStreamSafetyTimer() {
+  if (streamSafetyTimer) { clearTimeout(streamSafetyTimer); streamSafetyTimer = null }
+}
+
 let msgCounter = 0
 function genId() { return `doctor_${Date.now()}_${++msgCounter}` }
 
@@ -320,6 +348,9 @@ async function handleAudioTranscribe(msg: ChatMsg) {
 onUnmounted(() => {
   if (ttsCheckInterval) { clearInterval(ttsCheckInterval); ttsCheckInterval = null }
   stopTTS()
+  activeAbortController?.abort()
+  activeAbortController = null
+  clearStreamSafetyTimer()
 })
 
 function playAudio(msg: ChatMsg) {
@@ -372,6 +403,10 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
   isStreaming.value = true
   scrollToBottom()
 
+  activeAbortController?.abort()
+  activeAbortController = new AbortController()
+  startStreamSafetyTimer(assistantMsg)
+
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
 
   try {
@@ -396,13 +431,14 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           scrollToBottom()
         },
         onDone(metadata: any) {
+          clearStreamSafetyTimer()
           assistantMsg.loading = false
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
           currentToolStep.value = null
           isStreaming.value = false
-          // 保存 ASR 转录文本到用户语音消息
+          if (metadata?.session_id) currentSessionId = metadata.session_id
           if (metadata?.transcribed_text) {
             const userAudioMsg = messages.value.find(m => m.role === 'user' && m.messageType === 'audio' && !m.transcribedText)
             if (userAudioMsg) userAudioMsg.transcribedText = metadata.transcribed_text
@@ -411,15 +447,18 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           autoSpeakAssistant(assistantMsg)
         },
         onError() {
+          clearStreamSafetyTimer()
           assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
           currentToolStep.value = null
           isStreaming.value = false
         },
-      }
+      },
+      activeAbortController.signal,
     )
   } catch {
+    clearStreamSafetyTimer()
     if (!assistantMsg.content) {
       assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
     }
@@ -427,6 +466,8 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
     assistantMsg.thinking = false
     currentToolStep.value = null
     isStreaming.value = false
+  } finally {
+    activeAbortController = null
   }
 }
 
@@ -464,11 +505,19 @@ async function handleSend() {
   isStreaming.value = true
   scrollToBottom()
 
+  activeAbortController?.abort()
+  activeAbortController = new AbortController()
+  startStreamSafetyTimer(assistantMsg)
+
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
 
   try {
     await doctorAiApi.chatStream(
-      { message: text, pregnant_id: pregnantId || undefined },
+      {
+        message: text,
+        pregnant_id: pregnantId || undefined,
+        session_id: currentSessionId || undefined,
+      },
       {
         onThinking(message: string) {
           assistantMsg.thinkingMessage = message
@@ -482,25 +531,30 @@ async function handleSend() {
           scrollToBottom()
         },
         onDone(metadata: any) {
+          clearStreamSafetyTimer()
           assistantMsg.loading = false
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
           currentToolStep.value = null
           isStreaming.value = false
+          if (metadata?.session_id) currentSessionId = metadata.session_id
           scrollToBottom()
           autoSpeakAssistant(assistantMsg)
         },
         onError() {
+          clearStreamSafetyTimer()
           assistantMsg.content = '抱歉，Dr.智暂时无法回复。请稍后再试。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
           currentToolStep.value = null
           isStreaming.value = false
         },
-      }
+      },
+      activeAbortController.signal,
     )
   } catch {
+    clearStreamSafetyTimer()
     if (!assistantMsg.content) {
       assistantMsg.content = '抱歉，Dr.智暂时无法回复。请稍后再试。'
     }
@@ -508,6 +562,8 @@ async function handleSend() {
     assistantMsg.thinking = false
     currentToolStep.value = null
     isStreaming.value = false
+  } finally {
+    activeAbortController = null
   }
 }
 

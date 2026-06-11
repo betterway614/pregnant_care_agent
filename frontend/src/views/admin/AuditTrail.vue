@@ -25,8 +25,8 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="search">查询</el-button>
-          <el-button @click="reset">重置</el-button>
+          <el-button type="primary" @click="search" style="background-color: #3b82f6; border-color: #3b82f6;">查询</el-button>
+          <el-button @click="reset" style="border-color: #d1d5db; color: #374151;">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>

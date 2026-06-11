@@ -47,7 +47,7 @@ async def send_message_stream(req: ChatSendRequest, user: TokenPayload = Depends
     """发送对话消息（SSE 流式）"""
     if user.role == "pregnant" and user.pregnant_id != req.pregnant_id:
         raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
-    return EventSourceResponse(handle_chat_with_agno_stream(req))
+    return EventSourceResponse(handle_chat_with_agno_stream(req), ping=15)
 
 
 class ASRRequest(BaseModel):
@@ -128,11 +128,11 @@ async def clear_conversation_history(pregnant_id: str, session_id: str = "", use
 
 
 @router.get("/history")
-async def get_memory(patient_id: str, user: TokenPayload = Depends(get_current_user)):
-    if user.role == "pregnant" and user.pregnant_id != patient_id:
+async def get_memory(pregnant_id: str, user: TokenPayload = Depends(get_current_user)):
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
         raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
-    memory = memory_manager.get_all(patient_id)
-    return {"pregnant_id": patient_id, "memory": memory}
+    memory = memory_manager.get_all(pregnant_id)
+    return {"pregnant_id": pregnant_id, "memory": memory}
 
 
 @router.get("/sessions/{pregnant_id}")
@@ -187,11 +187,11 @@ async def list_sessions(pregnant_id: str, user: TokenPayload = Depends(get_curre
 
 
 @router.delete("/memory")
-async def clear_memory(patient_id: str, user: TokenPayload = Depends(get_current_user)):
-    if user.role == "pregnant" and user.pregnant_id != patient_id:
+async def clear_memory(pregnant_id: str, user: TokenPayload = Depends(get_current_user)):
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
         raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
-    memory_manager.clear(patient_id)
-    return {"message": "记忆已清除", "pregnant_id": patient_id}
+    memory_manager.clear(pregnant_id)
+    return {"message": "记忆已清除", "pregnant_id": pregnant_id}
 
 
 @router.get("/context/{pregnant_id}")

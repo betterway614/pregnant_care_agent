@@ -159,12 +159,34 @@ if (isTablet.value) {
   sidebarCollapsed.value = true
 }
 
-const dateRange = ref<[Date, Date]>([
-  dayjs().subtract(7, 'day').toDate(),
-  new Date(),
-])
+function getDefaultDateRange(): [Date, Date] {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 7)
+  return [start, end]
+}
+
+const dateRange = ref<[Date, Date]>(getDefaultDateRange())
 
 const dateShortcuts = [
+  {
+    text: '今天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      return [start, end]
+    },
+  },
+  {
+    text: '最近3天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - 3)
+      return [start, end]
+    },
+  },
   {
     text: '最近7天',
     value: () => {
@@ -195,7 +217,7 @@ const dateShortcuts = [
 ]
 
 const showDatePicker = computed(() =>
-  ['AdminDashboard', 'AdminTokenAnalysis', 'AdminRouteMonitor', 'AdminResourceMonitor', 'AdminOperationReport'].includes(route.name as string)
+  ['AdminDashboard', 'AdminTokenAnalysis', 'AdminAuditTrail', 'AdminRouteMonitor', 'AdminResourceMonitor', 'AdminOperationReport'].includes(route.name as string)
 )
 
 const formatDate = (d: Date) => dayjs(d).format('YYYY-MM-DD')

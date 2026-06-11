@@ -185,6 +185,14 @@ class Settings(BaseSettings):
     persist_chat_messages: bool = True
     audit_enabled: bool = True  # 审计日志总开关，设为 False 可禁用全部审计写入
 
+    # 随访定时调度
+    followup_scheduler_enabled: bool = True  # 是否启用随访自动调度
+    followup_scheduler_hour: int = 8  # 每日扫描时间（北京时间，0-23）
+    followup_scheduler_minute: int = 0  # 每日扫描分钟
+    followup_zombie_draft_timeout_days: int = 3  # draft 状态超时天数
+    followup_zombie_inprogress_timeout_days: int = 7  # in_progress 状态超时天数
+    followup_no_data_alert_days: int = 14  # 无数据上报多少天后触发随访
+
     model_config = {"env_file": _env_path, "env_file_encoding": "utf-8"}
 
 

@@ -17,6 +17,7 @@ from .routers import pregnant, recommend, nurse_ai, doctor_ai, auth, fetal_movem
 from .routers import websocket, tts, admin, knowledge, resource
 from .models import AgentAuditLog, ToolCallDetail, Feedback
 from .models.models import ResourceAlert, ResourceMetric, GeneratedReport
+from .services.followup_scheduler import start_scheduler, stop_scheduler
 
 # 日志配置（在 app 创建前初始化，确保接管 uvicorn 的 logging）
 from .core.log_config import setup_logging
@@ -417,8 +418,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"预警数据修复检查跳过: {e}")
 
+    # 启动随访自动调度器（每日定时扫描 + 僵尸随访清理）
+    _scheduler = None
+    try:
+        _scheduler = start_scheduler()
+    except Exception as e:
+        logger.warning("随访调度器启动失败: {}", e)
+
     yield
     # 应用关闭
+    if _scheduler is not None:
+        try:
+            stop_scheduler()
+        except Exception as e:
+            logger.warning("随访调度器停止失败: {}", e)
+
     if settings.fgr_mode:
         from fgr_compete.predictor import _PREDICTOR as fgr_predictor
         if fgr_predictor is not None:
