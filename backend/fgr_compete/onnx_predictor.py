@@ -10,13 +10,12 @@ from PIL import Image
 from loguru import logger
 
 from .config import (
-    ONNX_DIR, IMG_SIZE, N_FOLDS, FOLD_WEIGHTS, USE_SVM,
+    ONNX_DIR, IMG_SIZE, N_FOLDS,
 )
 from .features import (
     load_raw_uint8, load_mask_bool, bytes_to_raw, bytes_to_mask, extract_features,
 )
 from .hardware_detect import select_backend
-from .svm_trainer import generate_fold_splits, load_or_train_svms
 
 
 def _sigmoid(x: float) -> float:
@@ -67,8 +66,6 @@ class ONNXFGRPredictor:
         self.onnx_sessions: list[Any] = []
         self.input_names: list[str] = []
         self.model_paths: list[str] = []
-        self.svm_models: list = []
-        self.scalers: list = []
         self._initialized = False
 
     def initialize(self) -> None:
@@ -76,14 +73,10 @@ class ONNXFGRPredictor:
         self.execution_provider = self._select_provider(self.actual_backend)
         self.hardware = hardware_label_for_provider(self.execution_provider)
         self._load_onnx_models()
-        if USE_SVM:
-            generate_fold_splits()
-            self.svm_models, self.scalers = load_or_train_svms()
         self._initialized = True
-        mode = "ResNet+SVM" if USE_SVM else "纯ResNet"
         logger.info(
-            "ONNXFGRPredictor 初始化完成（{}折{}集成, backend={}, provider={}）",
-            N_FOLDS, mode, self.actual_backend, self.execution_provider,
+            "ONNXFGRPredictor 初始化完成（{}折纯ResNet集成, backend={}, provider={}）",
+            N_FOLDS, self.actual_backend, self.execution_provider,
         )
 
     def _select_provider(self, backend: str) -> str:
@@ -168,8 +161,6 @@ class ONNXFGRPredictor:
             float(img_input.min()), float(img_input.max()),
         )
 
-        if USE_SVM:
-            return self._predict_with_svm(img_input, hc_feat)
         return self._predict_resnet_only(img_input)
 
     def _run_resnet_fold(self, fold_idx: int, img_input: np.ndarray) -> float:
@@ -199,8 +190,6 @@ class ONNXFGRPredictor:
                 {
                     "fold": i + 1,
                     "p_resnet": round(p, 4),
-                    "p_svm": 0.0,
-                    "fusion_weight": 1.0,
                     "p_fused": round(p, 4),
                 }
                 for i, p in enumerate(resnet_probs)
@@ -208,40 +197,4 @@ class ONNXFGRPredictor:
             "ensemble_fgr_probability": round(ensemble_prob, 4),
             "predicted_label": predicted_label,
             "confidence_level": confidence,
-        }
-
-    def _predict_with_svm(self, img_input: np.ndarray, hc_feat: np.ndarray) -> dict:
-        fold_results = []
-        fold_fused_probs = []
-        resnet_probs = []
-        svm_probs = []
-
-        for fold_idx in range(N_FOLDS):
-            p_resnet = self._run_resnet_fold(fold_idx, img_input)
-            resnet_probs.append(p_resnet)
-            X = self.scalers[fold_idx].transform(hc_feat.reshape(1, -1))
-            p_svm = self.svm_models[fold_idx].predict_proba(X)[0, 1]
-            svm_probs.append(p_svm)
-
-            w = FOLD_WEIGHTS[fold_idx]
-            p_fused = w * p_resnet + (1 - w) * p_svm
-            fold_fused_probs.append(p_fused)
-            logger.info(
-                "[FGR-推理] Fold{} ONNX-ResNet={:.4f} SVM={:.4f} w={:.2f} Fused={:.4f}",
-                fold_idx + 1, p_resnet, p_svm, w, p_fused,
-            )
-            fold_results.append({
-                "fold": fold_idx + 1,
-                "p_resnet": round(p_resnet, 4),
-                "p_svm": round(float(p_svm), 4),
-                "fusion_weight": w,
-                "p_fused": round(float(p_fused), 4),
-            })
-
-        ensemble_prob = float(np.mean(fold_fused_probs))
-        return {
-            "fold_results": fold_results,
-            "ensemble_fgr_probability": round(ensemble_prob, 4),
-            "predicted_label": "FGR" if ensemble_prob >= 0.5 else "NOR",
-            "confidence_level": confidence_from_probability(ensemble_prob),
         }

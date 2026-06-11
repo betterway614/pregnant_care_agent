@@ -8,7 +8,13 @@ import cv2
 from scipy import stats
 from skimage.feature import local_binary_pattern
 
-from .config import STABLE_FEATURES
+# 20 个稳定手工特征名称（特征提取顺序）
+STABLE_FEATURES = [
+    'raw_mean', 'raw_p75', 'raw_p90', 'raw_b50', 'raw_b65', 'raw_b80',
+    'clahe_p75', 'clahe_p90', 'clahe_b65', 'lbp_r2_mean', 'lbp_r3_mean',
+    'raw_kurt', 'lbp_r1_std', 'lbp_r1_entropy', 'lbp_r2_std',
+    'raw_p50', 'raw_iqr', 'clahe_std', 'lbp_r3_std', 'clahe_mean',
+]
 
 
 def load_raw_uint8(path: str) -> np.ndarray:

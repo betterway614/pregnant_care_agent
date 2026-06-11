@@ -106,21 +106,12 @@ def _run_fgr_model(image_path: str, mask_path: str, pregnant_id: str = "") -> di
             )
             if not is_correct:
                 r_mean = sum(f["p_resnet"] for f in algo_result["fold_results"]) / len(algo_result["fold_results"])
-                s_mean = sum(f["p_svm"] for f in algo_result["fold_results"]) / len(algo_result["fold_results"])
-                if s_mean > 0:
-                    logger.error(
-                        "[FGR-精度] 误判详情: 患者={} 真实={} 预测={} prob={:.4f} conf={} "
-                        "ResNet均值={:.4f} SVM均值={:.4f}",
-                        pregnant_id, true_group, algo_result["predicted_label"],
-                        prob, algo_result["confidence_level"], r_mean, s_mean,
-                    )
-                else:
-                    logger.error(
-                        "[FGR-精度] 误判详情: 患者={} 真实={} 预测={} prob={:.4f} conf={} "
-                        "ResNet均值={:.4f} (纯ResNet模式)",
-                        pregnant_id, true_group, algo_result["predicted_label"],
-                        prob, algo_result["confidence_level"], r_mean,
-                    )
+                logger.error(
+                    "[FGR-精度] 误判详情: 患者={} 真实={} 预测={} prob={:.4f} conf={} "
+                    "ResNet均值={:.4f}",
+                    pregnant_id, true_group, algo_result["predicted_label"],
+                    prob, algo_result["confidence_level"], r_mean,
+                )
     except Exception:
         pass  # 非关键路径，忽略错误
     risk_level, risk_label = _prob_to_risk(prob)

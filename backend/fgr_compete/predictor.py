@@ -8,22 +8,19 @@ from torchvision import transforms
 from loguru import logger
 
 from .config import (
-    MODEL_DIR, DEVICE, IMG_SIZE, N_FOLDS, FOLD_WEIGHTS, USE_SVM,
+    MODEL_DIR, DEVICE, IMG_SIZE, N_FOLDS,
 )
 from .model import ResNet18DualFusion
 from .features import (
     load_raw_uint8, load_mask_bool, bytes_to_raw, bytes_to_mask, extract_features,
 )
-from .svm_trainer import generate_fold_splits, load_or_train_svms
 
 
 class FGRPredictor:
-    """FGR 5 折集成预测器（ResNet + SVM）"""
+    """FGR 5 折集成预测器（纯 ResNet）"""
 
     def __init__(self):
         self.resnet_models: list[torch.nn.Module] = []
-        self.svm_models: list = []
-        self.scalers: list = []
         self.backend_name = "pytorch"
         self.execution_provider = f"torch:{DEVICE}"
         self.hardware = self._detect_hardware_label()
@@ -38,14 +35,10 @@ class FGRPredictor:
         return "CPU"
 
     def initialize(self) -> None:
-        """完整初始化：加载 5 个 ResNet，可选 SVM"""
+        """初始化：加载 5 个 ResNet"""
         self._load_resnet_models()
-        if USE_SVM:
-            generate_fold_splits()
-            self.svm_models, self.scalers = load_or_train_svms()
         self._initialized = True
-        mode = "ResNet+SVM" if USE_SVM else "纯ResNet"
-        logger.info("FGRPredictor 初始化完成（{}折{}集成, device={}）", N_FOLDS, mode, DEVICE)
+        logger.info("FGRPredictor 初始化完成（{}折纯ResNet集成, device={}）", N_FOLDS, DEVICE)
 
     def _load_resnet_models(self) -> None:
         """从 MODEL_DIR 加载 5 折 ResNet 权重"""
@@ -133,10 +126,7 @@ class FGRPredictor:
             float(img_tensor.min()), float(img_tensor.max()),
         )
 
-        if USE_SVM:
-            return self._predict_with_svm(img_tensor, hc_feat)
-        else:
-            return self._predict_resnet_only(img_tensor)
+        return self._predict_resnet_only(img_tensor)
 
     def _predict_resnet_only(self, img_tensor: torch.Tensor) -> dict:
         """纯 ResNet 5 折集成预测"""
@@ -175,88 +165,10 @@ class FGRPredictor:
             {
                 "fold": i + 1,
                 "p_resnet": round(p, 4),
-                "p_svm": 0.0,
-                "fusion_weight": 1.0,
                 "p_fused": round(p, 4),
             }
             for i, p in enumerate(resnet_probs)
         ]
-
-        return {
-            "fold_results": fold_results,
-            "ensemble_fgr_probability": round(ensemble_prob, 4),
-            "predicted_label": predicted_label,
-            "confidence_level": confidence,
-        }
-
-    def _predict_with_svm(self, img_tensor: torch.Tensor, hc_feat: np.ndarray) -> dict:
-        """ResNet + SVM 融合 5 折集成预测"""
-        fold_results = []
-        fold_fused_probs = []
-        resnet_probs = []
-        svm_probs = []
-        for fold_idx in range(N_FOLDS):
-            with torch.no_grad():
-                logit = self.resnet_models[fold_idx](img_tensor)
-                p_resnet = torch.sigmoid(logit).item()
-            resnet_probs.append(p_resnet)
-
-            X = self.scalers[fold_idx].transform(hc_feat.reshape(1, -1))
-            logger.debug(
-                "[FGR-推理] Fold{} Scaler变换后前5维: {}",
-                fold_idx + 1, [round(float(v), 4) for v in X[0, :5]],
-            )
-            p_svm = self.svm_models[fold_idx].predict_proba(X)[0, 1]
-            svm_probs.append(p_svm)
-
-            w = FOLD_WEIGHTS[fold_idx]
-            p_fused = w * p_resnet + (1 - w) * p_svm
-            fold_fused_probs.append(p_fused)
-
-            logger.info(
-                "[FGR-推理] Fold{} ResNet={:.4f} SVM={:.4f} w={:.2f} Fused={:.4f}",
-                fold_idx + 1, p_resnet, p_svm, w, p_fused,
-            )
-
-            fold_results.append({
-                "fold": fold_idx + 1,
-                "p_resnet": round(p_resnet, 4),
-                "p_svm": round(p_svm, 4),
-                "fusion_weight": w,
-                "p_fused": round(p_fused, 4),
-            })
-
-        ensemble_prob = float(np.mean(fold_fused_probs))
-        predicted_label = "FGR" if ensemble_prob >= 0.5 else "NOR"
-
-        resnet_mean = float(np.mean(resnet_probs))
-        resnet_std = float(np.std(resnet_probs))
-        svm_mean = float(np.mean(svm_probs))
-        svm_std = float(np.std(svm_probs))
-        logger.info(
-            "[FGR-集成] ResNet均值={:.4f}±{:.4f} SVM均值={:.4f}±{:.4f} 集成概率={:.4f}",
-            resnet_mean, resnet_std, svm_mean, svm_std, ensemble_prob,
-        )
-
-        resnet_label = "FGR" if resnet_mean >= 0.5 else "NOR"
-        svm_label = "FGR" if svm_mean >= 0.5 else "NOR"
-        if resnet_label != svm_label:
-            logger.warning(
-                "[FGR-分歧] ResNet倾向={} ({:.4f}) SVM倾向={} ({:.4f}) 两模型意见不一致!",
-                resnet_label, resnet_mean, svm_label, svm_mean,
-            )
-
-        if ensemble_prob >= 0.7 or ensemble_prob <= 0.3:
-            confidence = "High"
-        elif ensemble_prob >= 0.6 or ensemble_prob <= 0.4:
-            confidence = "Medium"
-        else:
-            confidence = "Low"
-
-        logger.info(
-            "[FGR-结果] 最终预测 label={} prob={:.4f} conf={}",
-            predicted_label, ensemble_prob, confidence,
-        )
 
         return {
             "fold_results": fold_results,
