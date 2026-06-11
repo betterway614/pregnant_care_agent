@@ -30,7 +30,7 @@
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="Demo默认密码：123456"
+            placeholder="Demo默认密码：demo123"
             size="large"
             :prefix-icon="Lock"
             show-password
@@ -50,11 +50,11 @@
       </el-form>
 
       <div class="login-hint">
-        <p><b>Demo账号：</b></p>
-        <p>孕妇：卡号 H202501 ~ H202520，密码 123456</p>
-        <p>护士：nurse / nurse123</p>
-        <p>医生：doctor / doctor123</p>
-        <p>管理员：admin / admin123</p>
+        <p><b>Demo账号（统一密码：demo123）：</b></p>
+        <p>孕妇：卡号 H202501 ~ H202520</p>
+        <p>护士：nurse</p>
+        <p>医生：doctor</p>
+        <p>管理员：admin</p>
       </div>
 
       <div class="compliance-notice">

@@ -27,10 +27,10 @@ def _check_rate_limit(ip: str) -> bool:
     _login_attempts[ip].append(now)
     return True
 
-_PWD_PREGNANT = os.environ.get("DEMO_PASSWORD_PREGNANT", "pregnant_demo_2026")
-_PWD_NURSE = os.environ.get("DEMO_PASSWORD_NURSE", "nurse_demo_2026")
-_PWD_DOCTOR = os.environ.get("DEMO_PASSWORD_DOCTOR", "doctor_demo_2026")
-_PWD_ADMIN = os.environ.get("DEMO_PASSWORD_ADMIN", "admin_demo_2026")
+_PWD_PREGNANT = os.environ.get("DEMO_PASSWORD_PREGNANT", "demo123")
+_PWD_NURSE = os.environ.get("DEMO_PASSWORD_NURSE", "demo123")
+_PWD_DOCTOR = os.environ.get("DEMO_PASSWORD_DOCTOR", "demo123")
+_PWD_ADMIN = os.environ.get("DEMO_PASSWORD_ADMIN", "demo123")
 
 # Pre-hash passwords at module load for fast verification
 _HASH_PREGNANT = hash_password(_PWD_PREGNANT)
