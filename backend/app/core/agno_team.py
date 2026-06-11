@@ -72,11 +72,11 @@ def create_alert_team() -> Team:
     """
     return Team(
         name="预警响应团队",
-        model=get_agno_model(role="pregnant"),
+        model=get_agno_model(role="nurse"),
         mode=TeamMode.broadcast,
         members=[
-            get_nurse_agent(),
-            get_doctor_agent(),
+            create_nurse_agent(),
+            create_doctor_agent(),
         ],
         instructions=[
             "你们是预警响应团队，收到告警后需要协作处理。",

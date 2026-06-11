@@ -123,9 +123,10 @@ def test_apply_patient_facing_safety():
     safe = apply_patient_facing_safety("建议多休息")
     assert safe == "建议多休息"
 
-    # 违规文本
+    # 违规文本 — 应被完全拦截替换为安全提示
     blocked = apply_patient_facing_safety("诊断为子痫前期")
-    assert "请咨询医生" in blocked
+    assert "诊断为" not in blocked
+    assert "医生进行专业评估" in blocked
 
 
 def test_apply_doctor_draft_safety():

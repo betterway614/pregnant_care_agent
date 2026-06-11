@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from uuid import UUID
 
 from agno.run import RunContext
@@ -13,6 +14,8 @@ from agno.tools import tool
 
 from ...utils.timezone import beijing_now
 from .common import _resolve_pid
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -178,6 +181,9 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
     """查询临床指南和规范。优先使用知识库检索。"""
     try:
         from ..agno_knowledge import knowledge
+        if knowledge is None:
+            logger.warning("[RAG] clinical_guideline: knowledge 不可用，使用硬编码指南兜底。请检查 RAG_ENABLED 和 DB_TYPE。")
+            raise RuntimeError("knowledge is None")
         from agno.filters import IN
         results = knowledge.search(
             query=topic, max_results=3,

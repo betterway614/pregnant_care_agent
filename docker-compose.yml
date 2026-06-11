@@ -13,7 +13,7 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
       - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
-      - FGR_MODE=${FGR_MODE:-mock}
+      - FGR_MODE=${FGR_MODE:-true}
       - DB_TYPE=postgres
       - DB_HOST=postgres
       - DB_PORT=5432

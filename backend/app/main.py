@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # 确保 backend 目录在 path 中
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+_package_root = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _package_root not in sys.path:
+    sys.path.append(_package_root)
 
 from .config import settings
 from .database import engine, Base
@@ -41,7 +43,11 @@ def _ensure_fgr_columns():
                     ))
             conn.commit()
     except Exception as e:
-        logger.warning("FGR 列迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("FGR 列已存在，跳过: {}", e)
+        else:
+            logger.error("FGR 列迁移意外失败: {}", e)
 
 
 def _ensure_alert_columns():
@@ -62,7 +68,11 @@ def _ensure_alert_columns():
                     logger.info("alerts.{} 列已添加", col_name)
             conn.commit()
     except Exception as e:
-        logger.warning("Alert 列迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("Alert 列已存在，跳过: {}", e)
+        else:
+            logger.error("Alert 列迁移意外失败: {}", e)
 
 
 def _ensure_followup_columns():
@@ -112,7 +122,11 @@ def _ensure_followup_columns():
         else:
             logger.info("FollowUpRecord 归档列已存在，跳过迁移")
     except Exception as e:
-        logger.warning("FollowUpRecord 列迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("FollowUpRecord 列已存在，跳过: {}", e)
+        else:
+            logger.error("FollowUpRecord 列迁移意外失败: {}", e)
 
 
 def _ensure_order_columns():
@@ -144,7 +158,11 @@ def _ensure_order_columns():
         if added:
             logger.info("MedicalOrder 签署增强列迁移完成: 新增 {} 列", added)
     except Exception as e:
-        logger.warning("MedicalOrder 列迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("MedicalOrder 列已存在，跳过: {}", e)
+        else:
+            logger.error("MedicalOrder 列迁移意外失败: {}", e)
 
 
 def _ensure_pregnant_columns():
@@ -173,7 +191,11 @@ def _ensure_pregnant_columns():
         if added:
             logger.info("Pregnant 基线列迁移完成: 新增 {} 列", added)
     except Exception as e:
-        logger.warning("Pregnant 列迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("Pregnant 列已存在，跳过: {}", e)
+        else:
+            logger.error("Pregnant 列迁移意外失败: {}", e)
 
 
 def _ensure_audit_log_table():
@@ -218,7 +240,8 @@ def _ensure_audit_log_table():
                             if settings.db_type == "postgres":
                                 conn.execute(sa.text("ALTER TABLE agent_audit_logs ALTER COLUMN routed_agent TYPE VARCHAR(64)"))
                             else:
-                                conn.execute(sa.text("ALTER TABLE agent_audit_logs MODIFY COLUMN routed_agent VARCHAR(64)"))
+                                # SQLite 不支持 ALTER/MODIFY COLUMN，且列类型不强制校验，跳过
+                                pass
                             logger.info("agent_audit_logs routed_agent 列扩展为 VARCHAR(64)")
                         break
                 # 新增 user_message_preview + nlu_detail_json 列
@@ -248,7 +271,11 @@ def _ensure_audit_log_table():
                 except Exception:
                     pass
     except Exception as e:
-        logger.warning("审计表迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("审计表列已存在，跳过: {}", e)
+        else:
+            logger.error("审计表迁移意外失败: {}", e)
 
 
 def _ensure_feedback_audit_link():
@@ -278,7 +305,11 @@ def _ensure_feedback_audit_link():
                 except Exception:
                     pass  # 已经是可空的
     except Exception as e:
-        logger.warning("feedback 迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("feedback 列已存在，跳过: {}", e)
+        else:
+            logger.error("feedback 迁移意外失败: {}", e)
 
 
 def _ensure_resource_tables():
@@ -300,7 +331,11 @@ def _ensure_resource_tables():
         else:
             logger.info("资源管理表已存在，跳过创建")
     except Exception as e:
-        logger.warning("资源管理表迁移跳过: {}", e)
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("资源管理表列已存在，跳过: {}", e)
+        else:
+            logger.error("资源管理表迁移意外失败: {}", e)
 
 
 @asynccontextmanager

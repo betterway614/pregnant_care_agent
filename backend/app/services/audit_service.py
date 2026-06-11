@@ -67,14 +67,36 @@ def _detect_tool_error(tc_result: Any) -> tuple[bool, str | None]:
 
 
 def _desensitize_health(text: str) -> str:
-    """简单健康数据脱敏：将精确数值替换为区间"""
+    """对健康数据进行脱敏处理，替换数值为占位符。"""
     import re
-    # 血压: 140/90 → [偏高]
-    text = re.sub(r'\b(1[3-9]\d|2[0-4]\d)\s*[/／]\s*(\d{2,3})\b', r'[血压值]', text)
-    # 体重: 65.5kg / 55公斤 → [体重值]
-    text = re.sub(r'\b(\d{2,3}(?:\.\d)?)\s*(kg|公斤|斤)\b', r'[体重值]', text)
-    # 血糖: 6.2mmol/L → [血糖值]
-    text = re.sub(r'\b(\d{1,2}(?:\.\d)?)\s*mmol/L\b', r'[血糖值]', text)
+    if not text:
+        return text
+
+    # 血压: 覆盖 90-250/40-150 → [血压值]
+    text = re.sub(
+        r'(?<!\d)(0?[1-9]\d|[12][0-5]\d)\s*[/／]\s*(\d{2,3})\s*(?:mmHg|毫米汞柱)?\b',
+        r'[血压值]', text
+    )
+    # 体重: 含单位的体重值 → [体重值]
+    text = re.sub(
+        r'(?<!\d)(\d{1,3}(?:\.\d)?)\s*(kg|公斤|斤|千克)\b',
+        r'[体重值]', text
+    )
+    # 血糖: mmol/L 或 mg/dL → [血糖值]
+    text = re.sub(
+        r'(?<!\d)(\d{1,3}(?:\.\d)?)\s*(?:mmol/L|mmol/l|mg/dL|mg/dl)\b',
+        r'[血糖值]', text
+    )
+    # 心率/胎心率: bpm → [心率值]
+    text = re.sub(
+        r'(?<!\d)(\d{2,3})\s*(?:bpm|次/分|次/分钟)\b',
+        r'[心率值]', text
+    )
+    # 体温: ℃ → [体温值]
+    text = re.sub(
+        r'(?<!\d)(3[6-9]|40)(?:\.\d)?\s*[℃°C](?=\s|$|[^a-zA-Z])',
+        r'[体温值]', text
+    )
     return text
 
 

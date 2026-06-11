@@ -29,7 +29,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMG_SIZE = 224
 N_FOLDS = 5
 
-# 是否启用 SVM 融合（当前 SVM 训练数据不足，关闭后纯用 ResNet 5折集成）
+# 是否启用 SVM 融合（需要原始超声数据集训练，测试环境不可用）
 USE_SVM = False
 
 # 各折融合权重（来自最优运行的 w 值）

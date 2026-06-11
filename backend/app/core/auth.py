@@ -54,6 +54,17 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
+# Token 撤销黑名单（内存存储，容器重启后清空）
+_revoked_tokens: set[str] = set()
+
+def revoke_token(token: str) -> None:
+    """将 token 加入撤销列表。"""
+    _revoked_tokens.add(token)
+
+def is_token_revoked(token: str) -> bool:
+    """检查 token 是否已被撤销。"""
+    return token in _revoked_tokens
+
 
 class TokenPayload(BaseModel):
     sub: str
@@ -78,9 +89,13 @@ def create_token(payload: TokenPayload) -> str:
 def decode_token(token: str) -> Optional[TokenPayload]:
     try:
         data = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return TokenPayload(**data)
+        payload = TokenPayload(**data)
     except JWTError:
         return None
+    # 检查 token 是否已被撤销
+    if is_token_revoked(token):
+        return None
+    return payload
 
 
 async def get_current_user(

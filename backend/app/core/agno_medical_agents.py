@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
 from agno.agent import Agent
@@ -18,6 +19,8 @@ from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
     NURSE_TOOLS, DOCTOR_TOOLS, NURSE_TOOL_GROUPS, DOCTOR_TOOL_GROUPS,
 )
+
+logger = logging.getLogger(__name__)
 
 # 角色级知识库过滤器
 _NURSE_KNOWLEDGE_FILTERS = [IN("audience", ["nurse", "all"])]
@@ -64,15 +67,18 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
         tools=tools,
         session_state={},
         db=_create_nurse_db(),
-        knowledge=medical_knowledge,
-        search_knowledge=True,
-        knowledge_filters=_NURSE_KNOWLEDGE_FILTERS,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[NurseSafetyGuardrail()],
         tool_call_limit=tool_call_limit,
         max_tool_calls_from_history=2,
     )
+    if medical_knowledge is not None:
+        kwargs["knowledge"] = medical_knowledge
+        kwargs["search_knowledge"] = True
+        kwargs["knowledge_filters"] = _NURSE_KNOWLEDGE_FILTERS
+    else:
+        logger.warning("[RAG] Nurse Agent '%s': medical_knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
     if use_schema:
         kwargs["output_schema"] = NurseAnalysisOutput
     return Agent(**kwargs)
@@ -87,15 +93,18 @@ def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit:
         tools=tools,
         session_state={},
         db=_create_doctor_db(),
-        knowledge=medical_knowledge,
-        search_knowledge=True,
-        knowledge_filters=_DOCTOR_KNOWLEDGE_FILTERS,
         add_datetime_to_context=True,
         markdown=True,
         post_hooks=[DoctorDraftGuardrail()],
         tool_call_limit=tool_call_limit,
         max_tool_calls_from_history=2,
     )
+    if medical_knowledge is not None:
+        kwargs["knowledge"] = medical_knowledge
+        kwargs["search_knowledge"] = True
+        kwargs["knowledge_filters"] = _DOCTOR_KNOWLEDGE_FILTERS
+    else:
+        logger.warning("[RAG] Doctor Agent '%s': medical_knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
     if use_schema:
         kwargs["output_schema"] = DoctorAnalysisOutput
     return Agent(**kwargs)

@@ -10,29 +10,39 @@ from ..utils.timezone import beijing_now
 
 
 class _UUID(TypeDecorator):
-    """跨数据库UUID类型：SQLite用String，PostgreSQL用原生UUID"""
-    impl = String(36)
+    """跨 SQLite/PostgreSQL 的 UUID 类型。
+    SQLite 存储为 CHAR(36)，PostgreSQL 使用原生 UUID。
+    """
+    impl = String
     cache_ok = True
+
+    def __init__(self, as_uuid: bool = False):
+        TypeDecorator.__init__(self)
+        self._as_uuid = as_uuid
+        self.impl = String(36) if not as_uuid else String(36)
 
     def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
             from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+            return dialect.type_descriptor(PG_UUID(as_uuid=self._as_uuid))
         return dialect.type_descriptor(String(36))
 
     def process_bind_param(self, value, dialect):
         if value is None:
-            return value
+            return None
         if dialect.name == "postgresql":
-            return value
-        return str(value)
+            return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+        return str(value) if not isinstance(value, str) else value
 
     def process_result_value(self, value, dialect):
         if value is None:
-            return value
+            return None
         if isinstance(value, uuid.UUID):
             return value
-        return uuid.UUID(value)
+        try:
+            return uuid.UUID(value)
+        except (ValueError, AttributeError):
+            return value
 
 
 UUIDColumn = _UUID

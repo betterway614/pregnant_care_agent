@@ -1,7 +1,7 @@
 from .agno_agent import create_main_agent, get_main_agent
 from .agno_client import get_agno_model, reset_agno_client
 from .agno_tools import MEDICAL_TOOLS
-from .agno_knowledge import knowledge
+from .agno_knowledge import knowledge, is_rag_degraded, get_rag_degraded_reason
 from .agno_team import create_care_team, get_care_team
 from .agno_workflow import get_alert_analysis_workflow
 from .agno_medical_agents import (
@@ -10,7 +10,8 @@ from .agno_medical_agents import (
     get_nurse_chat_agent,
     get_doctor_chat_agent,
 )
-from .llm_client import get_llm_client, LLMClient, MockLLMClient, CloudAPIClient, LocalOllamaClient
+from .llm_client import get_llm_client, LLMClient, CloudAPIClient, LocalOllamaClient
+from .mock_llm_client import MockLLMClient
 from .nlu_engine import nlu_engine, RuleBaseNLU, NLUResult
 from .memory_manager import memory_manager, MemoryManager
 from .rule_engine import rule_engine, RuleEngine, Rule
@@ -26,7 +27,7 @@ __all__ = [
     "nlu_engine", "RuleBaseNLU", "NLUResult",
     "memory_manager", "MemoryManager",
     "rule_engine", "RuleEngine", "Rule",
-    "knowledge",
+    "knowledge", "is_rag_degraded", "get_rag_degraded_reason",
     "MEDICAL_TOOLS",
     "create_care_team", "get_care_team",
     "get_alert_analysis_workflow",

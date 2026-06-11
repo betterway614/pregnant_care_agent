@@ -455,6 +455,8 @@ async def search_knowledge(body: SearchRequest, user: TokenPayload = Depends(get
         raise HTTPException(status_code=403, detail="需要管理员权限")
     if not settings.rag_enabled:
         raise HTTPException(status_code=400, detail="RAG 未启用")
+    if knowledge is None:
+        raise HTTPException(status_code=503, detail="知识库服务暂不可用。请检查 pgvector PostgreSQL 连接和 DB_TYPE 配置。")
 
     try:
         # Agno Knowledge.search 支持 filters 参数
@@ -722,6 +724,8 @@ async def _ingest_single(
     force: bool = False,
 ):
     """调用 Agno Knowledge 入库单个文档，支持元数据和分词策略"""
+    if knowledge is None:
+        raise RuntimeError("知识库服务暂不可用：knowledge 实例为 None。请检查 pgvector PostgreSQL 连接和 DB_TYPE 配置。")
     from agno.knowledge.chunking.fixed import FixedSizeChunking
 
     ext = os.path.splitext(filename)[1].lower()

@@ -73,10 +73,10 @@ class MedicalSafetyGuardrail:
     __name__ = "MedicalSafetyGuardrail"
 
     BLOCKED_PATTERNS = [
-        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)诊断为"),
-        re.compile(r"(?<!不是)(?<!并非)(?<!无法)确诊"),
-        re.compile(r"建议用药|建议服用|处方(?!签)"),
-        re.compile(r"可以吃药|应该吃药|用药方案"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)(?<!排除)\s*诊\s*断\s*为"),
+        re.compile(r"(?<!不是)(?<!并非)(?<!无法)\s*确\s*诊"),
+        re.compile(r"(?<!不是)(?<!并非)\s*建\s*议\s*用\s*药"),
+        re.compile(r"(?<!不是)(?<!并非)\s*建\s*议\s*服\s*用"),
     ]
 
     def __call__(self, response_content: str = "", **kwargs) -> Optional[str]:
@@ -147,10 +147,10 @@ class DoctorDraftGuardrail:
 
 # 面向患者的输出不可含诊断性结论
 PATIENT_SAFETY_PATTERNS = [
-    "诊断为", "诊断是", "确诊",
-    "建议用药", "建议服用", "处方",
-    "可以吃药", "应该吃药", "用药方案",
-    "治疗方案如下", "请按以下方案",
+    re.compile(r"诊断为"), re.compile(r"诊断是"),
+    re.compile(r"建议用药"), re.compile(r"建议服用"),
+    re.compile(r"处方"), re.compile(r"用药方案"),
+    re.compile(r"给药"),
 ]
 
 # 医生工作台草稿允许医疗建议/诊疗指导，但仍禁止确定性诊断
@@ -196,10 +196,16 @@ def check_output_safety(text: str, patterns: list) -> Optional[str]:
 
 
 def apply_patient_facing_safety(text: str) -> str:
-    """面向患者的输出安全检查，违规时追加警示"""
+    """面向患者的输出安全检查，违规时完全阻断"""
     result = check_output_safety(text, PATIENT_SAFETY_PATTERNS)
     if result:
-        return text + f"\n\n⚠️ {result}。请咨询医生获取专业意见。"
+        return (
+            "感谢您的提问。关于您咨询的内容，建议您：\n\n"
+            "1. 携带相关检查报告到产科门诊就诊\n"
+            "2. 由医生进行专业评估和诊断\n"
+            "3. 遵循医生的治疗方案和建议\n\n"
+            "本系统仅供健康教育和辅助参考，不提供诊断或用药建议。"
+        )
     return text
 
 

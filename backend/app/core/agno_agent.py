@@ -9,6 +9,7 @@ Agent 变体:
 
 安全设计：所有变体共享同一个 SqliteDb（session 跨变体连续）
 """
+import logging
 from functools import lru_cache
 
 from agno.agent import Agent
@@ -19,6 +20,8 @@ from .agno_knowledge import knowledge
 from .prompts import get_pregnant_system_prompt_instructions, VARIANT_INSTRUCTIONS
 from .agno_tools import MEDICAL_TOOLS, TOOL_GROUPS
 from .agno_guardrails import EmergencyGuardrail, MedicalSafetyGuardrail
+
+logger = logging.getLogger(__name__)
 
 # 孕妇端知识库过滤器：仅检索面向孕妇和通用的知识
 _PREGNANT_KNOWLEDGE_FILTERS = [IN("audience", ["patient", "all"])]
@@ -38,14 +41,11 @@ def _create_pregnant_db():
 
 def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
     """通用 Agent 构造器 — 所有变体共享 SqliteDb"""
-    return Agent(
+    kwargs = dict(
         name=f"小安-{variant_name}",
         model=get_agno_model(role="pregnant"),
         instructions=VARIANT_INSTRUCTIONS.get(variant_name, get_pregnant_system_prompt_instructions()),
         tools=tools,
-        knowledge=knowledge,
-        search_knowledge=True,
-        knowledge_filters=_PREGNANT_KNOWLEDGE_FILTERS,
         db=_create_pregnant_db(),
         add_history_to_context=True,
         num_history_runs=8,
@@ -57,6 +57,13 @@ def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
         tool_call_limit=tool_call_limit,
         debug_mode=False,
     )
+    if knowledge is not None:
+        kwargs["knowledge"] = knowledge
+        kwargs["search_knowledge"] = True
+        kwargs["knowledge_filters"] = _PREGNANT_KNOWLEDGE_FILTERS
+    else:
+        logger.warning("[RAG] Pregnant Agent '%s': knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
+    return Agent(**kwargs)
 
 
 def create_main_agent() -> Agent:

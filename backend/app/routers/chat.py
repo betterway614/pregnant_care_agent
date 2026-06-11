@@ -258,6 +258,8 @@ async def rag_ask(req: RAGAskRequest, user: TokenPayload = Depends(get_current_u
         raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
     if not settings.rag_enabled:
         raise HTTPException(400, "RAG功能未启用，请设置 RAG_ENABLED=true")
+    if knowledge is None:
+        raise HTTPException(503, "知识库服务暂不可用。请检查 pgvector PostgreSQL 连接和 DB_TYPE 配置。")
 
     try:
         results = knowledge.search(query=req.question, max_results=req.top_k)
@@ -296,6 +298,13 @@ async def rag_ask(req: RAGAskRequest, user: TokenPayload = Depends(get_current_u
 
 @router.get("/rag/status")
 def rag_status(user: TokenPayload = Depends(get_current_user)):
+    if knowledge is None:
+        return {
+            "enabled": settings.rag_enabled,
+            "knowledge_status": "unavailable (pgvector not available)",
+            "rag_degraded": True,
+            "rag_degraded_reason": "knowledge instance is None — check DB_TYPE=postgres and pgvector",
+        }
     try:
         results = knowledge.search(query="test", max_results=1)
         chunk_count = "available" if results else "empty"
