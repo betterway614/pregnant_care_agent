@@ -140,7 +140,7 @@
     <el-dialog v-model="imagePreviewVisible" title="超声图像" width="600px" destroy-on-close>
       <div v-if="imagePreviewId && hasImage(imagePreviewId)" style="text-align: center">
         <el-image
-          :src="fgrApi.imageUrl(imagePreviewId)"
+          :src="imagePreviewSrc"
           style="max-width: 100%; max-height: 500px; border-radius: 8px"
           fit="contain"
         />
@@ -348,6 +348,7 @@ const imagePreviewId = ref('')
 const imagePreviewName = ref('')
 const imagePreviewGestDays = ref(0)
 const imagePreviewPregnant = ref<Pregnant | null>(null)
+const imagePreviewSrc = ref('')
 
 // 上传相关状态
 const uploadDialogVisible = ref(false)
@@ -365,13 +366,19 @@ function hasImage(pid: string): boolean {
   return patientImageMap[pid]?.has_image ?? false
 }
 
-/** 预览超声图像 */
-function previewImage(row: Pregnant) {
+/** 预览超声图像（异步加载 blob URL） */
+async function previewImage(row: Pregnant) {
   imagePreviewPregnant.value = row
   imagePreviewId.value = row.pregnant_id
   imagePreviewName.value = row.display_name
   imagePreviewGestDays.value = row.gestational_age_days ?? 0
+  imagePreviewSrc.value = ''
   imagePreviewVisible.value = true
+
+  const blobUrl = await fgrApi.loadImageBlobUrl(row.pregnant_id)
+  if (blobUrl) {
+    imagePreviewSrc.value = blobUrl
+  }
 }
 
 /** 打��上传弹窗 */
@@ -406,8 +413,9 @@ async function handleUploadSubmit() {
     resultDialogVisible.value = true
     uploadDialogVisible.value = false
 
-    // 刷新图片状态
-    patientImageMap[pid] = { pregnant_id: pid, has_image: true, image_url: fgrApi.imageUrl(pid), display_name: uploadPregnant.value?.display_name ?? '' }
+    // 刷新图片状态（异步加载 blob URL，不阻塞主流程）
+    patientImageMap[pid] = { pregnant_id: pid, has_image: true, image_url: '', display_name: uploadPregnant.value?.display_name ?? '' }
+    fgrApi.loadImageBlobUrl(pid).then(url => { if (url) patientImageMap[pid].image_url = url })
     ElMessage.success('上传成功，分析完成')
     loadData()
   } catch (err: any) {

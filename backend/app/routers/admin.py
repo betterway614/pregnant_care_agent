@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["审计日志"])
 
 
+def _mask_api_key(key: str | None) -> str:
+    """脱敏 API Key：仅显示后4位，其余用 * 替代。空值返回空字符串。"""
+    if not key:
+        return ""
+    if len(key) <= 4:
+        return "****"
+    return "*" * (len(key) - 4) + key[-4:]
+
+
 @router.get("/audit/token/daily")
 def get_token_daily(
     date_from: str = Query(..., description="开始日期 YYYY-MM-DD"),
@@ -746,7 +755,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
     for p in CLOUD_PROVIDERS:
         provider = {**p}
         if provider["id"] == current_provider:
-            provider["api_key"] = settings.llm_api_key
+            provider["api_key"] = _mask_api_key(settings.llm_api_key)
             provider["base_url"] = settings.llm_base_url
         providers.append(provider)
 
@@ -756,7 +765,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
         "ollama_host": settings.ollama_host,
         "local_model": settings.local_model,
         "cloud_provider": current_provider,
-        "cloud_api_key": settings.llm_api_key,
+        "cloud_api_key": _mask_api_key(settings.llm_api_key),
         "cloud_base_url": settings.llm_base_url,
         "cloud_model": settings.llm_model,
         "cloud_vision_model": settings.llm_vision_model,
@@ -769,7 +778,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
         "llm_doctor_model": settings.llm_doctor_model,
         # ASR 配置
         "asr_mode": settings.asr_mode,
-        "asr_cloud_api_key": settings.asr_cloud_api_key,
+        "asr_cloud_api_key": _mask_api_key(settings.asr_cloud_api_key),
         "asr_cloud_base_url": settings.asr_cloud_base_url,
         "asr_cloud_model": settings.asr_cloud_model,
         "asr_local_backend": settings.asr_local_backend,
@@ -778,7 +787,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
         "asr_local_hotword": settings.asr_local_hotword,
         # TTS 配置
         "tts_mode": settings.tts_mode,
-        "tts_cloud_api_key": settings.tts_cloud_api_key,
+        "tts_cloud_api_key": _mask_api_key(settings.tts_cloud_api_key),
         "tts_cloud_base_url": settings.tts_cloud_base_url,
         "tts_cloud_model": settings.tts_cloud_model,
         "tts_cloud_voice": settings.tts_cloud_voice,
@@ -787,7 +796,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
         "tts_local_cosyvoice_speaker": settings.tts_local_cosyvoice_speaker,
         # Embedding 配置
         "embedding_api_url": settings.embedding_api_url,
-        "embedding_api_key": settings.embedding_api_key,
+        "embedding_api_key": _mask_api_key(settings.embedding_api_key),
         "embedding_model": settings.embedding_model,
         "embedding_dimensions": settings.embedding_dimensions,
     }

@@ -4,9 +4,7 @@ import random
 import time
 import uuid as uuid_lib
 from datetime import datetime
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -251,24 +249,13 @@ def get_patient_images(pregnant_id: str, current_user: TokenPayload = Depends(ge
 @router.get("/image/{pregnant_id}")
 def get_fgr_image(
     pregnant_id: str,
-    token: Optional[str] = None,  # 支持 query 参数 token（<img> 标签无法携带 header）
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """返回患者的超声原图（FileResponse）
 
-    支持两种认证方式：
-    1. Authorization header（标准方式）
-    2. ?token=xxx query 参数（用于 <img> 标签等无法携带 header 的场景）
+    认证方式：Authorization header（Bearer token）。
+    前端通过 fetch + object URL 方式加载图片，避免 token 泄露到 URL。
     """
-    from ..core.auth import decode_token
-    # 优先使用 header 中的 token，其次使用 query 参数
-    user = None
-    if credentials and credentials.credentials:
-        user = decode_token(credentials.credentials)
-    elif token:
-        user = decode_token(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="认证凭据无效或已过期")
 
     images = _get_patient_images(pregnant_id)
     if not images:

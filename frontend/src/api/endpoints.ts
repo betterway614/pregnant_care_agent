@@ -107,10 +107,19 @@ export const fgrApi = {
   // 获取患者绑定的超声图信息
   patientImages: (pregnantId: string) =>
     client.get<PatientImageInfo>(`/fgr/patient-images/${pregnantId}`),
-  // 获取超声原图 (返回带 token 的 URL，用于 <img> 标签)
-  imageUrl: (pregnantId: string) => {
-    const token = localStorage.getItem('token') || ''
-    return `/api/v1/fgr/image/${pregnantId}?token=${encodeURIComponent(token)}`
+  // 获取超声原图 Blob URL (通过 fetch + Authorization header 安全加载)
+  loadImageBlobUrl: async (pregnantId: string): Promise<string | null> => {
+    try {
+      const token = localStorage.getItem('token')
+      const resp = await fetch(`/api/v1/fgr/image/${pregnantId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!resp.ok) return null
+      const blob = await resp.blob()
+      return URL.createObjectURL(blob)
+    } catch {
+      return null
+    }
   },
   // 趋势
   trend: (pregnantId: string) =>

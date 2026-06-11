@@ -514,7 +514,10 @@ function selectProvider(id: string) {
   const provider = config.value.available_providers.find(p => p.id === id)
   if (provider) {
     config.value.cloud_base_url = provider.base_url
-    if (provider.api_key) config.value.cloud_api_key = provider.api_key
+    // 仅当 API Key 不为脱敏值时才复制（含 **** 表示已被服务端脱敏）
+    if (provider.api_key && !provider.api_key.includes('****')) {
+      config.value.cloud_api_key = provider.api_key
+    }
     config.value.cloud_model = provider.default_model
   }
   markDirty()

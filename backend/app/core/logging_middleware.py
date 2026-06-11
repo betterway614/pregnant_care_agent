@@ -3,22 +3,21 @@
 使用原生 ASGI 接口替代 BaseHTTPMiddleware，
 兼容 Starlette 1.x / FastAPI 最新版。
 在请求处理前就输出一条入口日志，方便定位卡死位置。
+
+安全策略：不记录 request/response body 内容，
+避免医疗隐私数据（PHI）泄露到日志文件。
 """
-import json
 import time
 from loguru import logger
 
 
 class RequestLogMiddleware:
-    """纯 ASGI 中间件：记录请求入口和响应状态"""
+    """纯 ASGI 中间件：记录请求入口和响应状态（不含 body 内容）"""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        import sys as _sys
-        print(f"[ASGI_CALL] type={scope.get('type')} path={scope.get('path')}", file=_sys.stderr, flush=True)
-
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -26,14 +25,14 @@ class RequestLogMiddleware:
         path = scope.get("path", "")
         method = scope.get("method", "")
 
-        # 只记录非静态资源请求
+        # 跳过静态资源/上传文件的请求日志
         if path.startswith("/static") or path.startswith("/uploads"):
             await self.app(scope, receive, send)
             return
 
         start = time.time()
 
-        # ── 读取请求体 ──
+        # ── 读取请求体（用于回放给下游，但不记录内容） ──
         body_bytes = b""
         more_body = True
         while more_body:
@@ -44,13 +43,11 @@ class RequestLogMiddleware:
             else:
                 more_body = False
 
-        body_str = self._format_body(body_bytes)
-
-        # ── 请求入口日志（在业务处理之前输出，即使后续卡死也能看到） ──
-        logger.info("[REQ] {} {} body={}", method, path, body_str[:500])
+        # ── 请求入口日志（仅记录方法+路径，不记录 body 以保护隐私） ──
+        body_size = len(body_bytes)
+        logger.info("[REQ] {} {} (body_size={}B)", method, path, body_size)
 
         # ── 将已读取的 body 回放给下游处理器 ──
-        # 否则下游中间件/路由会收到空 body，导致 POST/PUT 请求丢失数据
         body_replayed = False
 
         async def replay_receive():
@@ -60,19 +57,19 @@ class RequestLogMiddleware:
                 return {"type": "http.request", "body": body_bytes, "more_body": False}
             return {"type": "http.request", "body": b"", "more_body": False}
 
-        # ── 收集响应体 ──
-        resp_body = b""
+        # ── 收集响应状态（不收集响应 body 内容） ──
         resp_status = 200
+        resp_body_size = 0
 
         async def send_wrapper(msg):
-            nonlocal resp_body, resp_status
+            nonlocal resp_status, resp_body_size
             if msg["type"] == "http.response.start":
                 resp_status = msg.get("status", 200)
             elif msg["type"] == "http.response.body":
-                resp_body += msg.get("body", b"")
+                resp_body_size += len(msg.get("body", b""))
             await send(msg)
 
-        # ── 执行后续中间件（使用 replay_receive 替代原始 receive） ──
+        # ── 执行后续中间件 ──
         try:
             await self.app(scope, replay_receive, send_wrapper)
         except Exception:
@@ -81,21 +78,10 @@ class RequestLogMiddleware:
             raise
 
         elapsed = time.time() - start
-        resp_str = self._format_body(resp_body)
 
         logger.info(
-            "[RES] {} {} [{}] ({:.0f}ms) resp={}",
+            "[RES] {} {} [{}] ({:.0f}ms) resp_size={}B",
             method, path, resp_status,
             elapsed * 1000,
-            resp_str[:300],
+            resp_body_size,
         )
-
-    @staticmethod
-    def _format_body(body: bytes) -> str:
-        if not body:
-            return "(empty)"
-        try:
-            obj = json.loads(body)
-            return json.dumps(obj, ensure_ascii=False, indent=2)[:2000]
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return body.decode("utf-8", errors="replace")[:2000]
