@@ -7,14 +7,15 @@ Agent 变体:
 - emergency: 紧急检测（2 tools）
 - main: 全量兜底（10 tools）
 
-安全设计：所有变体共享同一个 SqliteDb（session 跨变体连续）
+安全设计：所有变体共享同一个 Db（session 跨变体连续）
+数据库适配：PostgreSQL 优先（消除 SQLite 并发锁竞争），回退到 SQLite
 """
 import logging
 from functools import lru_cache
 
 from agno.agent import Agent
-from agno.db.sqlite import SqliteDb
 from agno.filters import IN
+from ..config import settings
 from .agno_client import get_agno_model
 from .agno_knowledge import knowledge
 from .prompts import get_pregnant_system_prompt_instructions, VARIANT_INSTRUCTIONS
@@ -35,7 +36,18 @@ _pregnant_db_path = os.path.join(_db_dir, "agent_sessions_pregnant.db")
 
 
 def _create_pregnant_db():
-    """创建孕妇端 Agent 专用 SqliteDb（所有变体共享）"""
+    """创建孕妇端 Agent 会话数据库
+
+    PostgreSQL 优先（消除并发锁竞争），回退到 SQLite。
+    所有变体共享同一 session_table，保证对话历史跨变体连续。
+    """
+    if settings.db_type == "postgres":
+        from agno.db.postgres import PostgresDb
+        return PostgresDb(
+            db_url=settings.agno_database_url,
+            session_table="agent_sessions_pregnant",
+        )
+    from agno.db.sqlite import SqliteDb
     return SqliteDb(db_file=_pregnant_db_path)
 
 

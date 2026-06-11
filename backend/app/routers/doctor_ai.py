@@ -33,6 +33,9 @@ DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
 
 # _save_doctor_audit_log 已迁移到 app/services/audit_service.py → AuditService.save_log()
 
+# 保持后台审计任务引用，防止 fire-and-forget 被 GC 回收
+_audit_tasks: set = set()
+
 router = APIRouter(prefix="/api/v1/doctor", tags=["医生AI辅助"])
 
 
@@ -593,6 +596,12 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
     agent = agent_factory()
 
     # 会话 ID：前端传入或自动生成
+    # 安全校验：前端传入的 session_id 必须匹配当前 pregnant_id
+    if req.session_id:
+        expected_prefix = f"doctor_{pregnant_id[:8]}" if pregnant_id else "doctor_anon"
+        if not req.session_id.startswith(expected_prefix):
+            logger.warning("doctor session_id 归属校验失败: {} vs expected prefix {}", req.session_id[:20], expected_prefix)
+            req.session_id = None
     session_id = req.session_id or f"doctor_{pregnant_id[:8] if pregnant_id else 'anon'}_{uuid.uuid4().hex[:6]}"
 
     async def agno_event_generator():
@@ -648,7 +657,7 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
         # 审计日志（后台异步写入，不阻塞响应）
         elapsed_ms = int((time.time() - t0) * 1000)
         import asyncio
-        asyncio.create_task(asyncio.to_thread(
+        _bg_task = asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
             session_id=session_id,
             user_id=pregnant_id or "anonymous",
@@ -659,6 +668,8 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             run_response=run_response,
             total_latency_ms=elapsed_ms,
         ))
+        _bg_task.add_done_callback(_audit_tasks.discard)
+        _audit_tasks.add(_bg_task)
 
     return EventSourceResponse(agno_event_generator(), ping=15)
 

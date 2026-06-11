@@ -37,6 +37,9 @@ NURSE_TOOL_THINKING_MAP: dict[str, str] = {
 
 # _save_nurse_audit_log 已迁移到 app/services/audit_service.py → AuditService.save_log()
 
+# 保持后台审计任务引用，防止 fire-and-forget 被 GC 回收
+_audit_tasks: set = set()
+
 router = APIRouter(prefix="/api/v1/nurse", tags=["护士AI辅助"])
 
 
@@ -538,6 +541,12 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     agent = agent_factory()
 
     # 会话 ID：前端传入或自动生成（用于 Agent 多轮对话上下文管理）
+    # 安全校验：前端传入的 session_id 必须匹配当前 pregnant_id，防止越权访问他人对话
+    if req.session_id:
+        expected_prefix = f"nurse_{pregnant_id[:8]}" if pregnant_id else "nurse_anon"
+        if not req.session_id.startswith(expected_prefix):
+            logger.warning("session_id 归属校验失败: {} vs expected prefix {}", req.session_id[:20], expected_prefix)
+            req.session_id = None  # 重置，下方会自动生成
     session_id = req.session_id or f"nurse_{pregnant_id[:8] if pregnant_id else 'anon'}_{uuid.uuid4().hex[:6]}"
 
     async def agno_event_generator():
@@ -597,7 +606,7 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
 
         # 审计日志（后台异步写入，不阻塞响应）
         elapsed_ms = int((time.time() - t0) * 1000)
-        asyncio.create_task(asyncio.to_thread(
+        _bg_task = asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
             session_id=session_id,
             user_id=pregnant_id or "anonymous",
@@ -608,6 +617,8 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             run_response=run_response,
             total_latency_ms=elapsed_ms,
         ))
+        _bg_task.add_done_callback(_audit_tasks.discard)
+        _audit_tasks.add(_bg_task)
 
     return EventSourceResponse(agno_event_generator(), ping=15)
 

@@ -11,8 +11,8 @@ import logging
 from functools import lru_cache
 
 from agno.agent import Agent
-from agno.db.sqlite import SqliteDb
 from agno.filters import IN
+from ..config import settings
 from .agno_client import get_agno_model
 from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_knowledge import knowledge as medical_knowledge
@@ -48,14 +48,30 @@ _nurse_db_path = os.path.join(_db_dir, "agent_sessions_nurse.db")
 _doctor_db_path = os.path.join(_db_dir, "agent_sessions_doctor.db")
 
 
+def _create_db(session_table: str, sqlite_path: str):
+    """创建 Agent 会话数据库
+
+    PostgreSQL 优先（消除并发锁竞争），回退到 SQLite。
+    每个角色使用独立的 session_table，防止数据泄漏。
+    """
+    if settings.db_type == "postgres":
+        from agno.db.postgres import PostgresDb
+        return PostgresDb(
+            db_url=settings.agno_database_url,
+            session_table=session_table,
+        )
+    from agno.db.sqlite import SqliteDb
+    return SqliteDb(db_file=sqlite_path)
+
+
 def _create_pregnant_db():
-    return SqliteDb(db_file=_pregnant_db_path)
+    return _create_db("agent_sessions_pregnant", _pregnant_db_path)
 
 def _create_nurse_db():
-    return SqliteDb(db_file=_nurse_db_path)
+    return _create_db("agent_sessions_nurse", _nurse_db_path)
 
 def _create_doctor_db():
-    return SqliteDb(db_file=_doctor_db_path)
+    return _create_db("agent_sessions_doctor", _doctor_db_path)
 
 
 def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:

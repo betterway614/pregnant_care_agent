@@ -310,6 +310,14 @@ class AuditService:
         response_preview = _desensitize_health(raw_preview[:200]) if raw_preview else None
         user_msg_preview = _desensitize_health(user_message[:500]) if user_message else None
 
+        # ── LLM 耗时分解：从 Agno Metrics 提取纯 LLM 处理时间 ──
+        llm_latency_ms = 0
+        if metrics:
+            llm_latency_ms = getattr(metrics, "duration", None) or 0
+            # duration 可能是 timedelta 或 int(ms)
+            if hasattr(llm_latency_ms, "total_seconds"):
+                llm_latency_ms = int(llm_latency_ms.total_seconds() * 1000)
+
         # ── routed_agent 前缀 ──
         prefix = _ROUTED_AGENT_PREFIX.get(agent_role, agent_role)
         routed_agent = f"{prefix}-{agent_variant}"
@@ -333,6 +341,7 @@ class AuditService:
                 model_id=model_id or "unknown",
                 provider=provider or "openai",
                 total_latency_ms=total_latency_ms,
+                llm_latency_ms=llm_latency_ms,
                 guardrail_triggered=guardrail_triggered,
                 response_preview=response_preview,
                 user_message_preview=user_msg_preview,

@@ -28,6 +28,8 @@ from ..config import settings, get_asr_mode
 from ..services.audit_service import AuditService
 from .agno_tools import set_nlu_context, pop_nlu_context
 
+# 保持后台审计任务引用，防止 fire-and-forget 被 GC 回收
+_audit_tasks: set = set()
 
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
 TOOL_THINKING_MAP: dict[str, str] = {
@@ -55,6 +57,21 @@ def _generate_session_id(pregnant_id: str) -> str:
     date_str = beijing_now().strftime("%Y%m%d")
     rand_str = uuid.uuid4().hex[:4]
     return f"SESS_{pregnant_id[:8]}_{date_str}_{rand_str}"
+
+
+def _validate_session_id(session_id: str | None, pregnant_id: str) -> str | None:
+    """校验 session_id 归属，防止客户端注入他人会话 ID
+
+    合法的 session_id 必须以 SESS_{pregnant_id前8位} 开头。
+    不合法则返回 None，由调用方重新生成。
+    """
+    if not session_id:
+        return None
+    expected_prefix = f"SESS_{pregnant_id[:8]}"
+    if not session_id.startswith(expected_prefix):
+        logger.warning("session_id 归属校验失败: {} vs expected prefix {}", session_id[:20], expected_prefix)
+        return None
+    return session_id
 
 
 # _save_audit_log 已迁移到 app/services/audit_service.py → AuditService.save_log()
@@ -145,7 +162,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     """主对话 Agno Agent 处理（非流式）— 工具路由 + 审计日志"""
     from .agno_agent import AGENT_VARIANT_MAP, get_main_agent
 
-    session_id = req.session_id or _generate_session_id(req.pregnant_id)
+    session_id = _validate_session_id(req.session_id, req.pregnant_id) or _generate_session_id(req.pregnant_id)
     start_time = time.time()
 
     # ASR 预处理
@@ -165,9 +182,10 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
 
-            # UNKNOWN 意图：尝试 LLM 辅助分类
+            # UNKNOWN 意图：尝试 LLM 辅助分类（同步 LLM 调用移到线程池，避免阻塞事件循环）
             if nlu_result.intent == "UNKNOWN":
-                refined_intent = nlu_engine.classify_with_llm(user_text)
+                import asyncio
+                refined_intent = await asyncio.to_thread(nlu_engine.classify_with_llm, user_text)
                 if refined_intent != "UNKNOWN":
                     from .nlu_engine import NLUResult as _NR
                     nlu_result.intent = refined_intent
@@ -301,7 +319,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     """主对话 Agno Agent 流式处理 — 工具路由 + 审计日志"""
     from .agno_agent import AGENT_VARIANT_MAP, get_main_agent
 
-    session_id = req.session_id or _generate_session_id(req.pregnant_id)
+    session_id = _validate_session_id(req.session_id, req.pregnant_id) or _generate_session_id(req.pregnant_id)
     start_time = time.time()
 
     # ASR 预处理
@@ -321,9 +339,10 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         if user_text:
             nlu_result = nlu_engine.parse(user_text)
 
-            # UNKNOWN 意图：尝试 LLM 辅助分类
+            # UNKNOWN 意图：尝试 LLM 辅助分类（同步 LLM 调用移到线程池，避免阻塞事件循环）
             if nlu_result.intent == "UNKNOWN":
-                refined_intent = nlu_engine.classify_with_llm(user_text)
+                import asyncio
+                refined_intent = await asyncio.to_thread(nlu_engine.classify_with_llm, user_text)
                 if refined_intent != "UNKNOWN":
                     from .nlu_engine import NLUResult as _NR
                     nlu_result.intent = refined_intent
@@ -424,91 +443,94 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     run_response = None
 
     try:
-        async for chunk in agent.arun(
-            input=agent_input,
-            images=agent_images,
-            stream=True,
-            stream_events=True,
-            user_id=req.pregnant_id,
-            session_id=session_id,
-        ):
-            event = chunk.event
-
-            if event == RunEvent.tool_call_started and chunk.tool is not None:
-                tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                thinking_msg = TOOL_THINKING_MAP.get(
-                    tool_name, f"正在处理（{tool_name}）..."
-                )
-                yield {"event": "thinking", "data": thinking_msg}
-
-            elif event == RunEvent.tool_call_completed and chunk.tool is not None:
-                tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                step_desc = TOOL_THINKING_MAP.get(tool_name, "")
-                if step_desc and step_desc not in tool_steps:
-                    tool_steps.append(step_desc)
-
-            elif event == RunEvent.run_content:
-                if chunk.content and isinstance(chunk.content, str):
-                    full_response += chunk.content
-                    yield {"event": "chunk", "data": chunk.content}
-
-            elif event == RunEvent.run_completed:
-                run_response = chunk
-
-        # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
-        # 结构化输出需从 run_response.content 提取并发送到前端。
-        if not full_response and run_response is not None:
-            from .agno_medical_agents import format_structured_output_to_markdown
-            fallback_text = format_structured_output_to_markdown(run_response.content)
-            if fallback_text:
-                yield {"event": "chunk", "data": fallback_text}
-
-    except Exception:
-        import traceback
-        logger.error("Agno stream error: {}", traceback.format_exc())
-        yield {"event": "chunk", "data": "\n\n抱歉，我遇到了问题，请稍后再试。"}
-
-    elapsed_ms = int((time.time() - start_time) * 1000)
-
-    # 先 yield done，避免审计日志写入阻塞 SSE 流式结束
-    yield {
-        "event": "done",
-        "data": json.dumps({
-            "session_id": session_id,
-            "source": "AI_CARE",
-            "nlu_result": None,
-            "memory_updated": [],
-            "tool_steps": tool_steps,
-            "transcribed_text": transcribed_text,
-        }),
-    }
-
-    # 审计日志（后台异步写入，不阻塞 SSE 响应）
-    import asyncio
-    asyncio.create_task(asyncio.to_thread(
-        AuditService.save_log,
-        session_id=session_id,
-        user_id=req.pregnant_id,
-        agent_role="pregnant",
-        agent_variant=intent_variant,
-        intent_classification=nlu_result.intent if nlu_result else None,
-        user_message=req.message,
-        nlu_detail=nlu_dict if nlu_result else None,
-        run_response=run_response,
-        total_latency_ms=elapsed_ms,
-    ))
-
-    # 对话持久化
-    if settings.persist_chat_messages:
         try:
-            await conversation_store.async_save_single(
-                session_id, req.pregnant_id, "user", req.message,
-            )
-            await conversation_store.async_save_single(
-                session_id, req.pregnant_id, "assistant", full_response,
-            )
-        except Exception:
-            logger.warning("流式对话持久化失败 session_id={}", session_id, exc_info=True)
+            async for chunk in agent.arun(
+                input=agent_input,
+                images=agent_images,
+                stream=True,
+                stream_events=True,
+                user_id=req.pregnant_id,
+                session_id=session_id,
+            ):
+                event = chunk.event
 
-    # 清理 NLU 上下文
-    pop_nlu_context(session_id)
+                if event == RunEvent.tool_call_started and chunk.tool is not None:
+                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                    thinking_msg = TOOL_THINKING_MAP.get(
+                        tool_name, f"正在处理（{tool_name}）..."
+                    )
+                    yield {"event": "thinking", "data": thinking_msg}
+
+                elif event == RunEvent.tool_call_completed and chunk.tool is not None:
+                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
+                    step_desc = TOOL_THINKING_MAP.get(tool_name, "")
+                    if step_desc and step_desc not in tool_steps:
+                        tool_steps.append(step_desc)
+
+                elif event == RunEvent.run_content:
+                    if chunk.content and isinstance(chunk.content, str):
+                        full_response += chunk.content
+                        yield {"event": "chunk", "data": chunk.content}
+
+                elif event == RunEvent.run_completed:
+                    run_response = chunk
+
+            # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
+            # 结构化输出需从 run_response.content 提取并发送到前端。
+            if not full_response and run_response is not None:
+                from .agno_medical_agents import format_structured_output_to_markdown
+                fallback_text = format_structured_output_to_markdown(run_response.content)
+                if fallback_text:
+                    yield {"event": "chunk", "data": fallback_text}
+
+        except Exception:
+            import traceback
+            logger.error("Agno stream error: {}", traceback.format_exc())
+            yield {"event": "chunk", "data": "\n\n抱歉，我遇到了问题，请稍后再试。"}
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        # 先 yield done，避免审计日志写入阻塞 SSE 流式结束
+        yield {
+            "event": "done",
+            "data": json.dumps({
+                "session_id": session_id,
+                "source": "AI_CARE",
+                "nlu_result": None,
+                "memory_updated": [],
+                "tool_steps": tool_steps,
+                "transcribed_text": transcribed_text,
+            }),
+        }
+
+        # 审计日志（后台异步写入，不阻塞 SSE 响应）
+        import asyncio
+        _bg_audit_task = asyncio.create_task(asyncio.to_thread(
+            AuditService.save_log,
+            session_id=session_id,
+            user_id=req.pregnant_id,
+            agent_role="pregnant",
+            agent_variant=intent_variant,
+            intent_classification=nlu_result.intent if nlu_result else None,
+            user_message=req.message,
+            nlu_detail=nlu_dict if nlu_result else None,
+            run_response=run_response,
+            total_latency_ms=elapsed_ms,
+        ))
+        _bg_audit_task.add_done_callback(_audit_tasks.discard)
+        _audit_tasks.add(_bg_audit_task)
+
+        # 对话持久化
+        if settings.persist_chat_messages:
+            try:
+                await conversation_store.async_save_single(
+                    session_id, req.pregnant_id, "user", req.message,
+                )
+                await conversation_store.async_save_single(
+                    session_id, req.pregnant_id, "assistant", full_response,
+                )
+            except Exception:
+                logger.warning("流式对话持久化失败 session_id={}", session_id, exc_info=True)
+    finally:
+        # 保证客户端断开时也能清理 NLU 上下文，防止内存泄漏
+        pop_nlu_context(session_id)

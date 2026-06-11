@@ -172,6 +172,7 @@ def list_audit_sessions(
                 "output_tokens": log.output_tokens,
                 "total_tokens": log.total_tokens,
                 "total_latency_ms": log.total_latency_ms,
+                "llm_latency_ms": log.llm_latency_ms,
                 "tool_call_count": log.tool_call_count or 0,
                 "tool_error_count": log.tool_error_count or 0,
                 "model_id": log.model_id,
@@ -455,6 +456,7 @@ def get_tool_calls_by_session(
                 "tool_error_count": log.tool_error_count or 0,
                 "total_tokens": log.total_tokens,
                 "total_latency_ms": log.total_latency_ms,
+                "llm_latency_ms": log.llm_latency_ms,
                 "feedback_rating": log.feedback_rating,
                 "tool_calls": [
                     {
@@ -510,6 +512,7 @@ def get_session_audit(session_id: str, user: TokenPayload = Depends(get_current_
                 "feedback_comment": log.feedback_comment,
                 "model_id": log.model_id,
                 "total_latency_ms": log.total_latency_ms,
+                "llm_latency_ms": log.llm_latency_ms,
                 "guardrail_triggered": log.guardrail_triggered,
                 "response_preview": log.response_preview,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
@@ -622,6 +625,7 @@ def get_audit_dashboard(
                 "intent_classification": log.intent_classification,
                 "total_tokens": log.total_tokens,
                 "total_latency_ms": log.total_latency_ms,
+                "llm_latency_ms": log.llm_latency_ms,
                 "tool_call_count": log.tool_call_count or 0,
                 "tool_error_count": log.tool_error_count or 0,
                 "guardrail_triggered": log.guardrail_triggered,
