@@ -54,18 +54,13 @@
           <div class="content-card__header">
             <span class="content-card__title">健康趋势</span>
             <div class="chart-controls">
-              <div class="chart-controls__row">
-                <span class="chart-controls__label">基础指标</span>
-                <el-checkbox-group v-model="selectedMetrics" @change="loadTrendData" size="small">
-                  <el-checkbox value="weight">体重</el-checkbox>
-                  <el-checkbox value="systolic">收缩压</el-checkbox>
-                  <el-checkbox value="diastolic">舒张压</el-checkbox>
-                  <el-checkbox value="blood_sugar_fasting">空腹血糖</el-checkbox>
-                  <el-checkbox value="blood_sugar_postprandial">餐后血糖</el-checkbox>
-                  <el-checkbox value="fetal_movement">胎动</el-checkbox>
-                </el-checkbox-group>
-              </div>
-              <div class="chart-controls__row">
+              <MetricCategorySelector
+                v-model="selectedMetrics"
+                :categories="['vital_signs', 'blood_sugar', 'daily_tracking', 'fetal']"
+                role="doctor"
+                @update:model-value="loadTrendData"
+              />
+              <div class="chart-controls__row" style="margin-top: 8px">
                 <span class="chart-controls__label">生化指标</span>
                 <el-checkbox-group v-model="selectedLabMetrics" @change="loadTrendData" size="small">
                   <el-checkbox v-for="m in labMetricOptions" :key="m.value" :value="m.value">{{ m.label }}</el-checkbox>
@@ -131,6 +126,7 @@ import { pregnantApi, followUpApi } from '@/api/endpoints'
 import { ElMessage } from 'element-plus'
 import FollowUpTimeline from '@/components/followup/FollowUpTimeline.vue'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
+import MetricCategorySelector from '@/components/charts/MetricCategorySelector.vue'
 import type { TrendSeries, FollowUpHistoryRecord, Pregnant, LabTrendItem } from '@/types'
 import { LAB_METRIC_OPTIONS, LAB_METRIC_META } from '@/utils/labelMaps'
 

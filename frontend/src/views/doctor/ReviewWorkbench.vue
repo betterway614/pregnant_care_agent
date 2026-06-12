@@ -624,6 +624,7 @@
               :pregnant-id="selectedAlert.pregnant_id"
               :show-trends="true"
               :show-lab="true"
+              role="doctor"
             />
           </el-tab-pane>
         </el-tabs>

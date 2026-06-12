@@ -7,6 +7,99 @@
 
 // ==================== 健康趋势指标 ====================
 
+/** 指标分类定义 */
+export interface IndicatorCategory {
+  key: string           // 分类唯一标识
+  name: string          // 中文名
+  icon: string          // emoji 图标
+  description: string   // 简短描述，提示用户此分类的查看场景
+  metrics: string[]     // 包含的指标 code
+  /** 配对组：同一组内的指标渲染为 combo chart（共享 tooltip 和 X 轴） */
+  comboGroups?: { name: string; metrics: string[] }[]
+  /** 建议同时显示的指标上限，超限时提示用户 */
+  maxVisible?: number
+}
+
+/** 指标分类体系 — 按临床领域 + 单位类型分组 */
+export const CATEGORIES: IndicatorCategory[] = [
+  {
+    key: 'vital_signs',
+    name: '生命体征',
+    icon: '🫀',
+    description: '体重、血压、心率等常规监测指标',
+    metrics: ['weight', 'systolic', 'diastolic', 'heart_rate'],
+    comboGroups: [{ name: '血压', metrics: ['systolic', 'diastolic'] }],
+    maxVisible: 4,
+  },
+  {
+    key: 'blood_sugar',
+    name: '血糖管理',
+    icon: '🍬',
+    description: '空腹和餐后血糖',
+    metrics: ['blood_sugar_fasting', 'blood_sugar_postprandial'],
+    comboGroups: [{ name: '血糖', metrics: ['blood_sugar_fasting', 'blood_sugar_postprandial'] }],
+    maxVisible: 2,
+  },
+  {
+    key: 'daily_tracking',
+    name: '生活管理',
+    icon: '📊',
+    description: '睡眠、运动、情绪等日常记录',
+    metrics: ['sleep_hours', 'steps', 'emotion_score'],
+    maxVisible: 3,
+  },
+  {
+    key: 'fetal',
+    name: '胎儿监测',
+    icon: '👶',
+    description: '胎动计数',
+    metrics: ['fetal_movement'],
+    maxVisible: 1,
+  },
+]
+
+/** 化验指标分类（独立于健康趋势，单位体系不同） */
+export const LAB_CATEGORY: IndicatorCategory = {
+  key: 'lab_tests',
+  name: '化验指标',
+  icon: '🔬',
+  description: '血常规、肝肾功能等实验室检查',
+  metrics: [
+    'hemoglobin_g_L', 'albumin',           // g/L 组
+    'alt', 'ast',                            // U/L 组
+    'creatinine', 'uric_acid', 'bilirubin_total', // μmol/L 组
+    'wbc', 'platelet',                       // ×10⁹/L 组
+    'hct',                                    // % 组
+  ],
+  maxVisible: 6,
+}
+
+/** 根据分类 key 获取该分类下所有指标的元数据 */
+export function getCategoryMetrics(categoryKey: string): string[] {
+  if (categoryKey === 'lab_tests') return LAB_CATEGORY.metrics
+  const cat = CATEGORIES.find(c => c.key === categoryKey)
+  return cat ? cat.metrics : []
+}
+
+/** 根据分类 key 获取分类信息 */
+export function getCategory(categoryKey: string): IndicatorCategory | undefined {
+  if (categoryKey === 'lab_tests') return LAB_CATEGORY
+  return CATEGORIES.find(c => c.key === categoryKey)
+}
+
+/** 获取所有分类（含化验） */
+export function getAllCategories(): IndicatorCategory[] {
+  return [...CATEGORIES, LAB_CATEGORY]
+}
+
+/** 根据指标 code 反向查找所属分类 */
+export function getCategoryByMetric(metric: string): IndicatorCategory | undefined {
+  for (const cat of getAllCategories()) {
+    if (cat.metrics.includes(metric)) return cat
+  }
+  return undefined
+}
+
 /** 健康趋势指标选项（含 value + label），用于 checkbox/select */
 export const METRIC_OPTIONS = [
   { value: 'weight', label: '体重' },

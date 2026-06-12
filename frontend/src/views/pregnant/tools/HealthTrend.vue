@@ -7,14 +7,13 @@
     </div>
 
     <div class="patient-info-card">
-      <!-- 指标选择器 -->
-      <div class="trend-metric-selector">
-        <el-checkbox-group v-model="selectedMetrics" @change="loadTrendData">
-          <el-checkbox v-for="m in metricOptions" :key="m.value" :value="m.value">
-            {{ m.label }}
-          </el-checkbox>
-        </el-checkbox-group>
-      </div>
+      <!-- 分类指标选择器 -->
+      <MetricCategorySelector
+        v-model="selectedMetrics"
+        :categories="['vital_signs', 'blood_sugar', 'daily_tracking', 'fetal']"
+        role="pregnant"
+        @update:model-value="loadTrendData"
+      />
 
       <!-- 横轴模式切换 -->
       <div class="trend-axis-toggle">
@@ -57,16 +56,14 @@
 import { ref, onMounted } from 'vue'
 import { pregnantApi } from '@/api/endpoints'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
+import MetricCategorySelector from '@/components/charts/MetricCategorySelector.vue'
 import type { TrendSeries } from '@/types'
-import { METRIC_OPTIONS } from '@/utils/labelMaps'
 
 const selectedMetrics = ref<string[]>(['weight', 'systolic', 'diastolic'])
 const trendAxisMode = ref<'date' | 'gestational_week'>('date')
 const trendSeries = ref<TrendSeries[]>([])
 const trendLoading = ref(false)
 const pointDetail = ref<{ metric: string; name: string; date: string; value: number; unit: string; isNormal: boolean | null } | null>(null)
-
-const metricOptions = METRIC_OPTIONS
 
 function loadTrendData() {
   const pid = localStorage.getItem('currentPregnantId')
@@ -100,8 +97,6 @@ onMounted(() => { loadTrendData() })
 <style scoped>
 .page-container { overflow-y: auto; -webkit-overflow-scrolling: touch; height: 100%; box-sizing: border-box; padding-bottom: 24px; }
 .sub-page-header { margin: 12px 16px; padding: 12px 16px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); position: sticky; top: 12px; z-index: 10; }
-.trend-metric-selector { margin-bottom: 12px; --el-color-primary: var(--pt-primary); }
-.trend-metric-selector .el-checkbox { margin-right: 12px; margin-bottom: 4px; }
 .trend-axis-toggle { display: flex; justify-content: center; margin-bottom: 12px; --el-color-primary: var(--pt-primary); }
 .point-detail-card { margin-top: 12px; padding: 12px 16px; background: linear-gradient(135deg, #e3f2fd, #f3e5f5); border-radius: 12px; border: 1px solid rgba(66, 165, 245, 0.2); }
 .point-detail__header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

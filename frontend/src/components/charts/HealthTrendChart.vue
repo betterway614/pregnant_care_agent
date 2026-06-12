@@ -47,6 +47,7 @@ function axisMin(val: any) { return Math.floor(val.min * 0.9) }
 function axisMax(val: any) { return Math.ceil(val.max * 1.1) }
 
 const METRIC_COLORS: Record<string, string> = {
+  // 健康趋势指标
   weight: '#8B5CF6',
   systolic: '#EF4444',
   diastolic: '#F97316',
@@ -57,6 +58,17 @@ const METRIC_COLORS: Record<string, string> = {
   sleep_hours: '#6366F1',
   steps: '#F59E0B',
   emotion_score: '#8B5CF6',
+  // 化验指标
+  hemoglobin_g_L: '#DC2626',
+  alt: '#EA580C',
+  ast: '#F59E0B',
+  creatinine: '#10B981',
+  albumin: '#8B5CF6',
+  uric_acid: '#06B6D4',
+  wbc: '#EC4899',
+  platelet: '#6366F1',
+  hct: '#F472B6',
+  bilirubin_total: '#84CC16',
 }
 
 const BP_METRICS = ['systolic', 'diastolic']
@@ -89,11 +101,24 @@ function buildOption() {
   if (!sList.length) return {}
 
   const metricCodes = sList.map(s => s.metric)
-  const isBP = BP_METRICS.every(m => metricCodes.includes(m))
-  const isSugar = SUGAR_METRICS.every(m => metricCodes.includes(m))
 
-  if (isBP || isSugar) return buildComboOption(sList, isBP)
-  return buildSingleOption(sList)
+  // ── 检测配对组 ──
+  // 血压对：当收缩压和舒张压同时存在时，配对为 combo
+  const hasBP = BP_METRICS.every(m => metricCodes.includes(m))
+  // 血糖对：当空腹血糖和餐后血糖同时存在时，配对为 combo
+  const hasSugar = SUGAR_METRICS.every(m => metricCodes.includes(m))
+
+  // 只有配对指标时，使用 combo chart
+  const nonBPMetrics = sList.filter(s => !BP_METRICS.includes(s.metric) && !SUGAR_METRICS.includes(s.metric))
+  const onlyComboMetrics = nonBPMetrics.length === 0
+
+  if (onlyComboMetrics) {
+    if (hasBP) return buildComboOption(sList, true)
+    if (hasSugar) return buildComboOption(sList, false)
+  }
+
+  // 有混合指标时，使用智能分组多轴模式
+  return buildMixedOption(sList, hasBP, hasSugar)
 }
 
 function buildComboOption(sList: TrendSeries[], isBP: boolean) {
@@ -149,7 +174,7 @@ function buildComboOption(sList: TrendSeries[], isBP: boolean) {
   }
 }
 
-function buildSingleOption(sList: TrendSeries[]) {
+function buildMixedOption(sList: TrendSeries[], hasBP: boolean, hasSugar: boolean) {
   if (sList.length === 1) {
     const s = sList[0]
     const xAxisData = getAxisData(s)

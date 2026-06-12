@@ -41,11 +41,12 @@
       <h4 class="bio-panel__title">
         <el-icon><TrendCharts /></el-icon> 健康趋势
       </h4>
-      <div class="metric-controls">
-        <el-checkbox-group v-model="selectedMetrics" size="small" @change="loadHealthTrends">
-          <el-checkbox v-for="m in metricOptions" :key="m.value" :value="m.value">{{ m.label }}</el-checkbox>
-        </el-checkbox-group>
-      </div>
+      <MetricCategorySelector
+        v-model="selectedMetrics"
+        :categories="['vital_signs', 'blood_sugar', 'daily_tracking', 'fetal']"
+        :role="role"
+        @update:model-value="loadHealthTrends"
+      />
       <HealthTrendChart
         v-if="trendsData?.series?.length"
         :series="trendsData.series"
@@ -95,16 +96,18 @@ import { User, TrendCharts, DataAnalysis } from '@element-plus/icons-vue'
 import { pregnantApi } from '@/api/endpoints'
 import type { HealthTrendResponse, LabTrendItem, LabTrendResponse } from '@/types'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
+import MetricCategorySelector from '@/components/charts/MetricCategorySelector.vue'
 import MiniSpark from '@/components/charts/MiniSpark.vue'
-import { METRIC_OPTIONS } from '@/utils/labelMaps'
 
 const props = withDefaults(defineProps<{
   pregnantId: string
   showTrends?: boolean
   showLab?: boolean
+  role?: 'pregnant' | 'nurse' | 'doctor'
 }>(), {
   showTrends: true,
   showLab: true,
+  role: 'pregnant',
 })
 
 const loading = ref(false)
@@ -118,8 +121,9 @@ const basicInfo = ref({
 // 健康趋势
 const trendsLoading = ref(false)
 const trendsData = ref<HealthTrendResponse | null>(null)
-const selectedMetrics = ref(['systolic', 'diastolic', 'weight'])
-const metricOptions = METRIC_OPTIONS
+const selectedMetrics = ref(props.role === 'pregnant'
+  ? ['weight', 'systolic', 'diastolic']
+  : ['systolic', 'diastolic', 'weight', 'blood_sugar_fasting'])
 
 // 生化指标
 const labLoaded = ref(false)
