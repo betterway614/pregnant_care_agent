@@ -142,6 +142,14 @@ def get_pregnant_list(
 
     # 若 has_alert=True，只返回有活跃预警的孕妇（内存过滤，数据量小）
     result = []
+
+    # Batch check FGR image bindings for the current page
+    try:
+        from fgr_compete.image_registry import load_patient_map
+        image_map = load_patient_map()
+    except Exception:
+        image_map = {}
+
     for p in patients:
         ac = alert_counts.get(p.pregnant_id, 0)
         if has_alert and ac == 0:
@@ -160,6 +168,7 @@ def get_pregnant_list(
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "active_alert_count": ac,
             "latest_followup_date": lfu.isoformat() if lfu else None,
+            "has_fgr_image": p.pregnant_id in image_map,
         })
 
     return {"total": total, "page": page, "page_size": page_size, "data": result}

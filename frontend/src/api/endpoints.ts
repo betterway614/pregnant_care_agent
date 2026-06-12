@@ -107,6 +107,11 @@ export const fgrApi = {
   // 获取患者绑定的超声图信息
   patientImages: (pregnantId: string) =>
     client.get<PatientImageInfo>(`/fgr/patient-images/${pregnantId}`),
+  // 批量获取所有映射患者的图片绑定状态，可选过滤指定ID
+  patientImagesAll: (pregnantIds?: string) =>
+    client.get<{ data: PatientImageInfo[] }>('/fgr/patient-images', {
+      params: { pregnant_ids: pregnantIds },
+    }),
   // 获取超声原图 Blob URL (通过 fetch + Authorization header 安全加载)
   loadImageBlobUrl: async (pregnantId: string): Promise<string | null> => {
     try {

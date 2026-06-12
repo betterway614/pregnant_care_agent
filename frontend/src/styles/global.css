@@ -339,6 +339,23 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--success);
 }
 
+.risk-badge--high {
+  background: var(--danger-light);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.risk-badge--medium {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.risk-badge--unassessed {
+  background: var(--border-light);
+  color: var(--text-light);
+  border: 1px dashed var(--text-muted);
+}
+
 @keyframes pulse-danger {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }

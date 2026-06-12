@@ -13,6 +13,7 @@ export interface Pregnant {
   risk_tags: string[]
   avatar_url?: string
   created_at?: string
+  has_fgr_image?: boolean  // from dashboard/pregnant
 }
 
 // 主页响应（对应后端 PregnantHomeData）

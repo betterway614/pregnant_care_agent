@@ -4,7 +4,7 @@ import random
 import time
 import uuid as uuid_lib
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -231,12 +231,55 @@ def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> list[dict]:
 # ==================== API 端点 ====================
 
 
+@router.get("/patient-images")
+def get_all_patient_images(
+    pregnant_ids: str | None = Query(None, description="Comma-separated pregnant IDs to filter; omit for all mapped"),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """Batch: return image binding status for all mapped patients (or filtered subset).
+
+    When pregnant_ids is provided, only those IDs are returned.
+    IDs not found in the map return has_image=False.
+    NOTE: Must be defined BEFORE /patient-images/{{pregnant_id}} to avoid route shadowing.
+    """
+    try:
+        from fgr_compete.image_registry import load_patient_map
+    except ImportError:
+        return {"data": []}
+
+    mapping = load_patient_map()
+
+    if pregnant_ids:
+        ids = [pid.strip() for pid in pregnant_ids.split(",") if pid.strip()]
+    else:
+        ids = list(mapping.keys())
+
+    result = []
+    for pid in ids:
+        entry = mapping.get(pid)
+        if entry:
+            result.append({
+                "pregnant_id": pid,
+                "has_image": True,
+                "image_url": f"/api/v1/fgr/image/{pid}",
+                "display_name": entry.get("display_name", ""),
+            })
+        else:
+            result.append({
+                "pregnant_id": pid,
+                "has_image": False,
+                "image_url": "",
+                "display_name": "",
+            })
+
+    return {"data": result}
+
+
 @router.get("/patient-images/{pregnant_id}", response_model=PatientImageResponse)
 def get_patient_images(pregnant_id: str, current_user: TokenPayload = Depends(get_current_user)):
     """获取患者绑定的超声图像信息（前端展示用）"""
     images = _get_patient_images(pregnant_id)
     if not images:
-        # 无图片的返回空信息
         return PatientImageResponse(
             pregnant_id=pregnant_id,
             has_image=False,

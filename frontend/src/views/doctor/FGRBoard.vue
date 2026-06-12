@@ -474,37 +474,48 @@ const riskColors: Record<string, string> = {
   low: '#2E7D32',
 }
 
-/** 仅有 FGR 预警记录的孕妇（排除无 FGR 评估的孕妇） */
-const fgrPatients = computed(() =>
-  pregnant.value.filter((p) =>
-    alertList.value.some((a) => a.pregnant_id === p.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr'))
-  )
+/** FGR 看板展示所有孕妇（支持上传图片 + 分析） */
+const fgrPatients = computed(() => pregnant.value)
+
+/** 已评估的孕妇（有 FGR 预警记录） */
+const assessedPatients = computed(() =>
+  pregnant.value.filter((p) => hasAlertForPatient(p))
 )
 
 const distributionCards = computed(() => {
-  const total = fgrPatients.value.length
-  const highCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'high').length
-  const mediumCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'medium').length
-  const lowCount = fgrPatients.value.filter((p) => getLatestFgrLevel(p) === 'low').length
+  const total = pregnant.value.length
+  const withImage = pregnant.value.filter((p) => hasImage(p.pregnant_id)).length
+  const assessed = assessedPatients.value
+  const highCount = assessed.filter((p) => getLatestFgrLevel(p) === 'high').length
+  const mediumCount = assessed.filter((p) => getLatestFgrLevel(p) === 'medium').length
+  const lowCount = assessed.filter((p) => getLatestFgrLevel(p) === 'low').length
 
   return [
-    { icon: 'User', value: total, label: 'FGR评估孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: '有FGR评估记录' },
-    { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${total ? ((highCount / total) * 100).toFixed(0) : 0}%` },
-    { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${total ? ((mediumCount / total) * 100).toFixed(0) : 0}%` },
-    { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${total ? ((lowCount / total) * 100).toFixed(0) : 0}%` },
+    { icon: 'User', value: total, label: '全部孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: `${withImage} 已绑定影像 · ${assessed.length} 已评估` },
+    { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${assessed.length ? ((highCount / assessed.length) * 100).toFixed(0) : 0}%` },
+    { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${assessed.length ? ((mediumCount / assessed.length) * 100).toFixed(0) : 0}%` },
+    { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${assessed.length ? ((lowCount / assessed.length) * 100).toFixed(0) : 0}%` },
   ]
 })
 
+/** 是否有 FGR 预警 */
+function hasAlertForPatient(p: Pregnant): boolean {
+  return alertList.value.some(
+    (a) => a.pregnant_id === p.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr')
+  )
+}
+
 function getLatestFgrLevel(pregnant: Pregnant): string {
+  if (!hasAlertForPatient(pregnant)) return 'unassessed'
   const fgrAlerts = alertList.value
     .filter((a) => a.pregnant_id === pregnant.pregnant_id && a.trigger_source?.toLowerCase().includes('fgr'))
-  if (!fgrAlerts.length) return 'low'
+  if (!fgrAlerts.length) return 'unassessed'
   const latest = fgrAlerts.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0]
   return mapLevelToFgr(latest.level)
 }
 
 function mapLevelToFgr(level: string): string {
-  const map: Record<string, string> = { RED: 'high', ORANGE: 'medium', YELLOW: 'low', GREEN: 'low', high: 'high', medium: 'medium', low: 'low' }
+  const map: Record<string, string> = { RED: 'high', ORANGE: 'medium', YELLOW: 'low', GREEN: 'low', high: 'high', medium: 'medium', low: 'low', unassessed: 'unassessed' }
   return map[level] || 'low'
 }
 
@@ -611,17 +622,22 @@ function handleRowClick(row: Pregnant) {
   previewImage(row)
 }
 
-/** 加载所有患者图片状态 */
+/** 批量加载所有孕妇的图片绑定状态 */
 async function loadPatientImages() {
   const ids = pregnant.value.map((p) => p.pregnant_id)
-  const results = await Promise.allSettled(
-    ids.map((id) => fgrApi.patientImages(id))
-  )
-  results.forEach((r, i) => {
-    if (r.status === 'fulfilled' && r.value?.data) {
-      patientImageMap[ids[i]] = r.value.data
+  if (!ids.length) return
+
+  try {
+    const res = await fgrApi.patientImagesAll(ids.join(','))
+    const items = res.data?.data || []
+    for (const item of items) {
+      if (item.has_image) {
+        patientImageMap[item.pregnant_id] = item
+      }
     }
-  })
+  } catch (err) {
+    console.error('加载患者图片绑定状态失败:', err)
+  }
 }
 
 /** 加载数据 */

@@ -24,6 +24,7 @@ const labelMap: Record<string, string> = {
   medium: '中风险',
   low: '低风险',
   critical: '极高风险',
+  unassessed: '待评估',
 }
 
 const label = computed(() => labelMap[props.level] || props.level)
