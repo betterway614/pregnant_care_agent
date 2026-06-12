@@ -165,8 +165,7 @@
                   {{
                     fu.status === 'confirmed' ? '已确认' :
                     fu.status === 'completed' ? '已完成' :
-                    fu.status === 'in_progress' ? '进行中' :
-                    '未填写'
+                    '进行中'
                   }}
                 </el-tag>
               </div>

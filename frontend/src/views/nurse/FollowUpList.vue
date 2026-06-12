@@ -23,8 +23,7 @@
     <div class="search-bar">
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
-        <el-option label="未填写" value="draft" />
-        <el-option label="进行中" value="in_progress" />
+        <el-option label="进行中" value="draft,in_progress" />
         <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
         <el-option label="已归档" value="archived" />
@@ -524,7 +523,7 @@ const editFormAnswers = ref<Array<{ key: string; value: string }>>([])
 const drawerTitle = computed(() => {
   if (!reviewRecord.value) return '随访详情'
   const s = reviewRecord.value.status
-  if (s === 'draft') return '随访草稿（等待孕妇填写）'
+  if (s === 'draft') return '随访草稿'
   if (s === 'in_progress' || s === 'completed') return '随访审核'
   return '随访记录详情'
 })
@@ -608,7 +607,7 @@ function statusLabel(status: string): string {
     confirmed: '已确认',
     completed: '已完成',
     in_progress: '进行中',
-    draft: '未填写',
+    draft: '进行中',
   }
   return map[status] || status
 }
