@@ -18,7 +18,7 @@ class TTSService:
 
     模式（后端处理的两种模式）：
     - cloud: DashScope CosyVoice API
-    - local: edge-tts（微软 Edge TTS，免费高质量中文）
+    - local: CosyVoice2 本地服务 / edge-tts（由 tts_local_backend 配置决定）
 
     注意: browser 模式由前端 SpeechSynthesis 处理，不经过此服务。
     """
@@ -55,7 +55,7 @@ class TTSService:
             return await self._synthesize_cloud(text)
 
         if mode == "local":
-            return await self._synthesize_local(text)
+            return await self._synthesize_local(text, role)
 
         logger.warning("[TTS] 未知模式 '{}', 降级为 browser", mode)
         return None
@@ -123,13 +123,47 @@ class TTSService:
             logger.error("[TTS] cloud 调用失败: {}", e)
             return None
 
-    # ---- local: edge-tts ----
+    # ---- local: CosyVoice / edge-tts ----
 
-    async def _synthesize_local(self, text: str) -> Optional[bytes]:
+    async def _synthesize_local(self, text: str, role: str = "pregnant") -> Optional[bytes]:
+        # 根据 tts_local_backend 分发到具体后端
+        if settings.tts_local_backend == "cosyvoice":
+            return await self._synthesize_cosyvoice(text, role)
+        else:
+            return await self._synthesize_edge_tts(text)
+
+    async def _synthesize_cosyvoice(self, text: str, role: str = "pregnant") -> Optional[bytes]:
+        """通过 CosyVoice2 本地服务合成语音"""
+        from .tts_backends import CosyVoiceLocalBackend
+
+        # 角色 -> 说话人映射（可在 .env 中按角色配置不同音色）
+        speaker_map = {
+            "pregnant": getattr(settings, "tts_local_cosyvoice_speaker_pregnant", None) or settings.tts_local_cosyvoice_speaker,
+            "nurse": getattr(settings, "tts_local_cosyvoice_speaker_nurse", None) or settings.tts_local_cosyvoice_speaker,
+            "doctor": getattr(settings, "tts_local_cosyvoice_speaker_doctor", None) or settings.tts_local_cosyvoice_speaker,
+        }
+        speaker = speaker_map.get(role, settings.tts_local_cosyvoice_speaker)
+
+        backend = CosyVoiceLocalBackend(
+            base_url=settings.tts_local_cosyvoice_url,
+            speaker=speaker,
+            timeout=settings.tts_local_cosyvoice_timeout,
+        )
+        try:
+            result = await backend.synthesize(text)
+            if result:
+                logger.info("[TTS] CosyVoice 合成成功: {}bytes, role={}, speaker={}", len(result), role, speaker)
+            return result
+        except Exception as e:
+            logger.error("[TTS] CosyVoice 合成失败: {}", e)
+            return None
+
+    async def _synthesize_edge_tts(self, text: str) -> Optional[bytes]:
+        """通过 Edge-TTS 合成语音（旧版本地后端）"""
         try:
             import edge_tts
         except ImportError:
-            logger.error("[TTS] local 模式需要安装 edge-tts: pip install edge-tts")
+            logger.error("[TTS] local/edge 模式需要安装 edge-tts: pip install edge-tts")
             return None
 
         try:
@@ -143,13 +177,13 @@ class TTSService:
 
             result = audio_data.getvalue()
             if result:
-                logger.info("[TTS] local 合成成功: {}bytes", len(result))
+                logger.info("[TTS] edge-tts 合成成功: {}bytes", len(result))
                 return result
 
-            logger.warning("[TTS] local 合成结果为空")
+            logger.warning("[TTS] edge-tts 合成结果为空")
             return None
         except Exception as e:
-            logger.error("[TTS] local 合成失败: {}", e)
+            logger.error("[TTS] edge-tts 合成失败: {}", e)
             return None
 
 

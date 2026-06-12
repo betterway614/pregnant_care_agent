@@ -245,7 +245,7 @@ const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioR
 })
 
 // ---- TTS 播报 ----
-const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'doctor' })
+const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ mode: 'backend', role: 'doctor' })
 const ttsSpeakingId = ref<string | null>(null)
 const autoPlayTTS = ref(false)
 const isMuted = ref(false)

@@ -97,17 +97,7 @@
       </div>
     </div>
 
-    <!-- 工具调用步骤指示器 -->
-    <transition name="slide-up">
-      <div v-if="currentToolStep" class="nurse-chat__tool-indicator">
-        <div class="tool-indicator__icon">
-          <el-icon :size="14"><Loading /></el-icon>
-        </div>
-        <span class="tool-indicator__text">{{ currentToolStep }}</span>
-      </div>
-    </transition>
-
-    <!-- 已完成的工具步骤 -->
+    <!-- 已完成的工具步骤（自动消失） -->
     <transition name="fade">
       <div v-if="completedToolSteps.length > 0" class="nurse-chat__tool-steps">
         <div
@@ -115,7 +105,7 @@
           :key="idx"
           class="tool-step"
         >
-          <el-icon :size="12" class="tool-step__check"><Check /></el-icon>
+          <el-icon :size="12" class="tool-step__check"><CircleCheck /></el-icon>
           <span class="tool-step__text">{{ step }}</span>
         </div>
       </div>
@@ -170,7 +160,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, Loading, Microphone, VideoPlay, VideoPause, Mute, Document } from '@element-plus/icons-vue'
+import { Promotion, CircleCheck, Microphone, VideoPlay, VideoPause, Mute, Document } from '@element-plus/icons-vue'
 import { nurseAiApi, chatApi, feedbackApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
@@ -203,8 +193,8 @@ const isStreaming = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
 
 // 工具调用状态
-const currentToolStep = ref<string | null>(null)
 const completedToolSteps = ref<string[]>([])
+let toolStepsDismissTimer: ReturnType<typeof setTimeout> | null = null
 
 // 会话 ID：在同一次对话中保持一致，让后端 Agent 能管理多轮上下文
 let currentSessionId: string | null = null
@@ -227,7 +217,7 @@ function startStreamSafetyTimer(assistantMsg: ChatMsg) {
       assistantMsg.thinking = false
     }
     isStreaming.value = false
-    currentToolStep.value = null
+    completedToolSteps.value = []
     activeAbortController?.abort()
     activeAbortController = null
   }, STREAM_SAFETY_TIMEOUT_MS)
@@ -237,6 +227,21 @@ function clearStreamSafetyTimer() {
   if (streamSafetyTimer) {
     clearTimeout(streamSafetyTimer)
     streamSafetyTimer = null
+  }
+}
+
+/** 自动隐藏已完成工具步骤（8 秒后） */
+function dismissToolStepsAfterDelay() {
+  clearToolStepsDismissTimer()
+  toolStepsDismissTimer = setTimeout(() => {
+    completedToolSteps.value = []
+  }, 8000)
+}
+
+function clearToolStepsDismissTimer() {
+  if (toolStepsDismissTimer) {
+    clearTimeout(toolStepsDismissTimer)
+    toolStepsDismissTimer = null
   }
 }
 
@@ -251,7 +256,7 @@ const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioR
 })
 
 // ---- TTS 播报 ----
-const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ role: 'nurse' })
+const { isSpeaking, speak, stop: stopTTS, cleanForTTS } = useTTS({ mode: 'backend', role: 'nurse' })
 const ttsSpeakingId = ref<string | null>(null)
 const autoPlayTTS = ref(false)
 const isMuted = ref(false)
@@ -358,6 +363,7 @@ onUnmounted(() => {
   activeAbortController?.abort()
   activeAbortController = null
   clearStreamSafetyTimer()
+  clearToolStepsDismissTimer()
 })
 
 function playAudio(msg: ChatMsg) {
@@ -429,13 +435,11 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
       {
         onThinking(message: string) {
           assistantMsg.thinkingMessage = message
-          currentToolStep.value = message
           scrollToBottom()
         },
         onChunk(chunk: string) {
           assistantMsg.content += chunk
           assistantMsg.thinking = false
-          currentToolStep.value = null
           scrollToBottom()
         },
         onDone(metadata: any) {
@@ -444,7 +448,7 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
-          currentToolStep.value = null
+          dismissToolStepsAfterDelay()
           isStreaming.value = false
           // 保存后端返回的 session_id，后续消息复用
           if (metadata?.session_id) currentSessionId = metadata.session_id
@@ -461,7 +465,7 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           assistantMsg.content = '抱歉，语音处理失败，请重试或使用文字输入。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
-          currentToolStep.value = null
+          completedToolSteps.value = []
           isStreaming.value = false
         },
       },
@@ -474,7 +478,7 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
     }
     assistantMsg.loading = false
     assistantMsg.thinking = false
-    currentToolStep.value = null
+    completedToolSteps.value = []
     isStreaming.value = false
   } finally {
     activeAbortController = null
@@ -494,8 +498,8 @@ async function handleSend() {
   if (!text || isStreaming.value) return
 
   inputText.value = ''
-  currentToolStep.value = null
   completedToolSteps.value = []
+  clearToolStepsDismissTimer()
 
   // 添加用户消息
   messages.value.push({ id: genId(), role: 'user', content: text })
@@ -532,13 +536,11 @@ async function handleSend() {
       {
         onThinking(message: string) {
           assistantMsg.thinkingMessage = message
-          currentToolStep.value = message
           scrollToBottom()
         },
         onChunk(chunk: string) {
           assistantMsg.content += chunk
           assistantMsg.thinking = false
-          currentToolStep.value = null
           scrollToBottom()
         },
         onDone(metadata: any) {
@@ -547,7 +549,7 @@ async function handleSend() {
           assistantMsg.thinking = false
           assistantMsg.toolSteps = metadata?.tool_steps || []
           completedToolSteps.value = metadata?.tool_steps || []
-          currentToolStep.value = null
+          dismissToolStepsAfterDelay()
           isStreaming.value = false
           // 保存后端返回的 session_id，后续消息复用
           if (metadata?.session_id) currentSessionId = metadata.session_id
@@ -559,7 +561,7 @@ async function handleSend() {
           assistantMsg.content = '抱歉，小护暂时无法回复。请稍后再试。'
           assistantMsg.loading = false
           assistantMsg.thinking = false
-          currentToolStep.value = null
+          completedToolSteps.value = []
           isStreaming.value = false
         },
       },
@@ -572,7 +574,7 @@ async function handleSend() {
     }
     assistantMsg.loading = false
     assistantMsg.thinking = false
-    currentToolStep.value = null
+    completedToolSteps.value = []
     isStreaming.value = false
   } finally {
     activeAbortController = null
@@ -741,32 +743,9 @@ onMounted(() => {
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* 工具调用指示器 */
-.nurse-chat__tool-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  margin: 0 16px;
-  background: rgba(46, 125, 50, 0.08);
-  border-radius: 10px;
-  border: 1px solid rgba(46, 125, 50, 0.15);
-}
-
-.tool-indicator__icon {
-  color: #2E7D32;
-  animation: spin 1s linear infinite;
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.tool-indicator__text {
-  font-size: 12px;
-  color: #2E7D32;
-  font-weight: 500;
 }
 
 /* 已完成的工具步骤 */

@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # CosyVoice2 本地服务配置
     tts_local_cosyvoice_url: str = "http://127.0.0.1:9880"
     tts_local_cosyvoice_speaker: str = "中文女"
+    # 角色专属说话人（空则回退到 tts_local_cosyvoice_speaker）
+    tts_local_cosyvoice_speaker_pregnant: str = ""
+    tts_local_cosyvoice_speaker_nurse: str = ""
+    tts_local_cosyvoice_speaker_doctor: str = ""
     tts_local_cosyvoice_timeout: float = 30.0
 
     # FGR配置
