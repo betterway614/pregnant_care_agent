@@ -1,8 +1,10 @@
 """孕记服务 — 以周为单位生成温馨的孕期日记
 
-从 DailyHealthSummary 表中汇总每周健康数据，生成带有情感温度的中文叙事，
-帮助准妈妈回顾每一段孕期旅程。
+从 HealthDataPoint 表（主数据源）和 DailyHealthSummary 表（补充/fallback）汇总每周健康数据，
+生成带有情感温度的中文叙事，帮助准妈妈回顾每一段孕期旅程。
+支持 LLM 个性化叙事 + 模板兜底，以及 PregnancyDiaryEntry 数据库持久化缓存。
 """
+import asyncio
 from datetime import datetime, timedelta, date
 from typing import Optional, List
 
@@ -11,7 +13,10 @@ from sqlalchemy import func
 from pydantic import BaseModel
 from loguru import logger
 
-from ..models import DailyHealthSummary, HealthDataPoint, Pregnant, Alert
+from ..models import (
+    DailyHealthSummary, HealthDataPoint, Pregnant, Alert,
+    PregnancyDiaryEntry,
+)
 from ..utils.timezone import beijing_now
 
 
@@ -72,13 +77,42 @@ def _mood_emoji(avg_mood: Optional[float]) -> str:
 class PregnancyDiaryService:
     """孕记服务：按周汇总健康数据，生成温暖的孕期叙事"""
 
+    # 当前周缓存有效期（小时）
+    CURRENT_WEEK_CACHE_HOURS = 24
+
     def generate_weekly_diary(
         self,
         db: Session,
         pregnant_id: str,
         weeks: int = 4,
+        use_cache: bool = True,
+        regenerate: bool = False,
     ) -> DiaryResponse:
-        """生成最近 N 周的孕记
+        """生成最近 N 周的孕记（同步版，供调度器和测试使用）
+
+        Args:
+            db: 数据库会话
+            pregnant_id: 孕妇 ID
+            weeks: 回溯周数，默认 4 周
+            use_cache: 是否使用已持久化的日记条目
+            regenerate: 是否强制重新生成
+
+        Returns:
+            DiaryResponse 包含每周摘要
+        """
+        return asyncio.run(self.generate_weekly_diary_async(
+            db, pregnant_id, weeks, use_cache, regenerate
+        ))
+
+    async def generate_weekly_diary_async(
+        self,
+        db: Session,
+        pregnant_id: str,
+        weeks: int = 4,
+        use_cache: bool = True,
+        regenerate: bool = False,
+    ) -> DiaryResponse:
+        """生成最近 N 周的孕记（async 版，供 API 路由使用）
 
         Args:
             db: 数据库会话
@@ -88,7 +122,8 @@ class PregnancyDiaryService:
         Returns:
             DiaryResponse 包含每周摘要
         """
-        logger.info("生成孕记: pregnant_id={}, 回溯 {} 周", pregnant_id, weeks)
+        logger.info("生成孕记: pregnant_id={}, 回溯 {} 周, cache={}, regen={}",
+                    pregnant_id, weeks, use_cache, regenerate)
 
         # 获取孕妇信息，用于推算当前孕周
         pregnant = db.query(Pregnant).filter(
@@ -107,40 +142,34 @@ class PregnancyDiaryService:
             if week_num < 1:
                 break
 
-            # 本周日期范围：周一 ~ 周日（或今天）
             week_end = today - timedelta(days=i * 7)
             week_start = week_end - timedelta(days=6)
             date_range = f"{week_start.strftime('%m月%d日')} ~ {week_end.strftime('%m月%d日')}"
 
-            # 查询该周的 DailyHealthSummary 记录
-            summaries = db.query(DailyHealthSummary).filter(
-                DailyHealthSummary.pregnant_id == pregnant_id,
-                DailyHealthSummary.date >= week_start,
-                DailyHealthSummary.date <= week_end,
-            ).order_by(DailyHealthSummary.date.asc()).all()
+            entry = None
 
-            # 查询该周的 HealthDataPoint（心率/睡眠/步数等 DailyHealthSummary 未涵盖的指标）
-            extra_points = db.query(HealthDataPoint).filter(
-                HealthDataPoint.pregnant_id == pregnant_id,
-                HealthDataPoint.metric_code.in_(["heart_rate", "sleep_hours", "steps"]),
-                HealthDataPoint.recorded_at >= datetime.combine(week_start, datetime.min.time()),
-                HealthDataPoint.recorded_at <= datetime.combine(week_end, datetime.max.time()),
-            ).order_by(HealthDataPoint.recorded_at.asc()).all()
+            # -- 缓存检查 --
+            if use_cache and not regenerate:
+                entry = self._load_cached_entry(
+                    db, pregnant_id, week_num, week_end,
+                )
 
-            # 该周是否有预警
-            has_abnormal = db.query(Alert).filter(
-                Alert.pregnant_id == pregnant_id,
-                Alert.created_at >= datetime.combine(week_start, datetime.min.time()),
-                Alert.created_at <= datetime.combine(week_end, datetime.max.time()),
-            ).count() > 0
+            # -- 强制重新生成时忽略缓存 --
+            if regenerate:
+                entry = None
 
-            entry = self._build_week_entry(
-                week_num=week_num,
-                date_range=date_range,
-                summaries=summaries,
-                extra_points=extra_points,
-                has_abnormal=has_abnormal,
-            )
+            # -- 实时生成 --
+            if entry is None:
+                entry = await self._generate_single_week(
+                    db, pregnant_id, week_num, week_start, week_end, date_range,
+                )
+                # 持久化（仅当有健康数据时）
+                if entry and entry.weight_summary is not None:
+                    self._persist_entry(
+                        db, pregnant_id, week_num, week_start, week_end,
+                        entry, entry._narrative_source if hasattr(entry, '_narrative_source') else 'template',
+                    )
+
             entries.append(entry)
 
         logger.info("孕记生成完成: pregnant_id={}, 共 {} 周", pregnant_id, len(entries))
@@ -164,17 +193,30 @@ class PregnancyDiaryService:
             return delta.days // 7
         return 0
 
+    @staticmethod
+    def _group_points(points: List[HealthDataPoint]) -> dict:
+        """将 HealthDataPoint 列表按 metric_code 分组为值列表"""
+        groups: dict = {}
+        for p in points:
+            groups.setdefault(p.metric_code, []).append(p.value)
+        return groups
+
     def _build_week_entry(
         self,
         week_num: int,
         date_range: str,
+        health_points: List[HealthDataPoint],
         summaries: List[DailyHealthSummary],
-        extra_points: List[HealthDataPoint],
         has_abnormal: bool,
     ) -> DiaryWeekSummary:
-        """汇总一周数据，构建 DiaryWeekSummary"""
+        """汇总一周数据，构建 DiaryWeekSummary
 
-        if not summaries and not extra_points:
+        优先从 HealthDataPoint 聚合所有指标；
+        当 HealthDataPoint 某指标无数据时，回退到 DailyHealthSummary。
+        """
+        g = self._group_points(health_points)
+
+        if not health_points and not summaries:
             return DiaryWeekSummary(
                 week=week_num,
                 date_range=date_range,
@@ -201,7 +243,7 @@ class PregnancyDiaryService:
             )
 
         # -- 体重 --
-        weights = [s.weight for s in summaries if s.weight is not None]
+        weights = g.get("weight") or [s.weight for s in summaries if s.weight is not None]
         weight_summary = None
         weight_delta = None
         if weights:
@@ -211,11 +253,9 @@ class PregnancyDiaryService:
                 weight_delta = weights[-1] - weights[0]
 
         # -- 血压 --
-        bp_pairs = [
-            (s.systolic, s.diastolic)
-            for s in summaries
-            if s.systolic is not None and s.diastolic is not None
-        ]
+        sys_vals = g.get("systolic") or [s.systolic for s in summaries if s.systolic is not None]
+        dia_vals = g.get("diastolic") or [s.diastolic for s in summaries if s.diastolic is not None]
+        bp_pairs = list(zip(sys_vals, dia_vals)) if sys_vals and dia_vals else []
         bp_summary = None
         avg_bp = None
         if bp_pairs:
@@ -225,7 +265,7 @@ class PregnancyDiaryService:
             bp_summary = f"平均 {avg_sys:.0f}/{avg_dia:.0f} mmHg，记录 {len(bp_pairs)} 次"
 
         # -- 胎动 --
-        fetal_values = [
+        fetal_values = g.get("fetal_movement") or [
             s.fetal_movement_avg for s in summaries
             if s.fetal_movement_avg is not None
         ]
@@ -236,7 +276,7 @@ class PregnancyDiaryService:
             fetal_summary = f"平均 {avg_fetal:.1f} 次/小时，记录 {len(fetal_values)} 次"
 
         # -- 情绪 --
-        mood_values = [
+        mood_values = g.get("emotion_score") or [
             s.mood_score for s in summaries if s.mood_score is not None
         ]
         mood_summary = None
@@ -247,11 +287,11 @@ class PregnancyDiaryService:
             mood_summary = f"本周心情整体{mood_desc}，记录 {len(mood_values)} 次"
 
         # -- 血糖 --
-        bs_fasting_vals = [
+        bs_fasting_vals = g.get("blood_sugar_fasting") or [
             s.blood_sugar_fasting for s in summaries
             if s.blood_sugar_fasting is not None
         ]
-        bs_postprandial_vals = [
+        bs_postprandial_vals = g.get("blood_sugar_postprandial") or [
             s.blood_sugar_postprandial for s in summaries
             if s.blood_sugar_postprandial is not None
         ]
@@ -267,10 +307,10 @@ class PregnancyDiaryService:
                 parts.append(f"餐后平均 {avg_post:.1f} mmol/L（{len(bs_postprandial_vals)}次）")
             blood_sugar_summary = "；".join(parts)
 
-        # -- 心率 / 睡眠 / 步数（来自 HealthDataPoint） --
-        hr_values = [p.value for p in extra_points if p.metric_code == "heart_rate"]
-        sleep_values = [p.value for p in extra_points if p.metric_code == "sleep_hours"]
-        steps_values = [p.value for p in extra_points if p.metric_code == "steps"]
+        # -- 心率 / 睡眠 / 步数 --
+        hr_values = g.get("heart_rate", [])
+        sleep_values = g.get("sleep_hours", [])
+        steps_values = g.get("steps", [])
 
         heart_rate_summary = None
         avg_heart_rate = None
@@ -290,8 +330,9 @@ class PregnancyDiaryService:
             steps_summary = f"日均 {avg_steps:.0f} 步，记录 {len(steps_values)} 次"
 
         # -- 亮点 --
+        record_days = len(set(p.recorded_at.date() for p in health_points)) if health_points else len(summaries)
         highlights = self._collect_highlights(
-            summaries, weight_delta, avg_bp, avg_fetal, has_abnormal,
+            record_days, weight_delta, avg_bp, avg_fetal, has_abnormal,
             avg_blood_sugar_fasting=avg_blood_sugar_fasting,
             avg_heart_rate=avg_heart_rate,
             avg_sleep=avg_sleep,
@@ -340,7 +381,7 @@ class PregnancyDiaryService:
 
     @staticmethod
     def _collect_highlights(
-        summaries: List[DailyHealthSummary],
+        record_days: int,
         weight_delta: Optional[float],
         avg_bp: Optional[tuple],
         avg_fetal: Optional[float],
@@ -352,7 +393,6 @@ class PregnancyDiaryService:
         """收集本周亮点与提醒"""
         highlights: List[str] = []
 
-        record_days = len(summaries)
         if record_days >= 5:
             highlights.append(f"坚持记录了 {record_days} 天，非常棒！")
 

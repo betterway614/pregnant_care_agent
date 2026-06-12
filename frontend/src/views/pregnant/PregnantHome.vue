@@ -277,7 +277,11 @@
             </div>
 
             <h3 class="section-title mt-4">专家建议</h3>
-            <div v-if="!recommend" class="recommend-skeleton glass-card">
+            <div v-if="recommendError" class="recommend-error glass-card" style="padding: 16px; border-radius: 16px; text-align: center;">
+              <p style="color: #E74C3C; margin-bottom: 8px; font-size: 13px;">加载失败，请稍后重试</p>
+              <el-button size="small" @click="retryRecommend">重新加载</el-button>
+            </div>
+            <div v-else-if="!recommend" class="recommend-skeleton glass-card">
               <div class="skeleton-line" v-for="i in 3" :key="i"></div>
             </div>
             <el-collapse v-else class="soft-collapse glass-card" style="padding: 12px 16px; border-radius: 16px;">
@@ -324,6 +328,7 @@ const router = useRouter()
 const loading = ref(true)
 const homeData = ref<any>(null)
 const recommend = ref<any>(null)
+const recommendError = ref(false)
 const currentTab = ref('assistant')
 const pendingFollowUps = ref<any[]>([])
 const expandedNotice = ref<string | null>(null)
@@ -612,6 +617,28 @@ async function fetchDailyTaskStatus() {
   } catch (e) { console.warn('[Home] fetchDailyTaskStatus failed:', e) }
 }
 
+async function fetchRecommend(pregnantId: string, retries = 2) {
+  recommendError.value = false
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await recommendApi.get(pregnantId)
+      recommend.value = res.data
+      return
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))  // 指数退避: 1s, 2s
+      }
+    }
+  }
+  recommendError.value = true
+  console.warn('[Recommend] 所有重试均失败, pregnantId:', pregnantId)
+}
+
+function retryRecommend() {
+  const pid = localStorage.getItem('currentPregnantId') || ''
+  if (pid) fetchRecommend(pid)
+}
+
 async function fetchData() {
   loading.value = true
   try {
@@ -621,7 +648,7 @@ async function fetchData() {
       if (homeRes) homeData.value = homeRes.data
       
       loading.value = false
-      recommendApi.get(pid).then((res) => { recommend.value = res.data }).catch(() => {})
+      fetchRecommend(pid)
       return
     }
   } finally {
@@ -1003,16 +1030,17 @@ onActivated(() => {
 .task-arrow { color: var(--c-slate-400); font-size: 14px; flex-shrink: 0; }
 
 /* ========== 6. 健康趋势 ========== */
-.trend-list { 
-  display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 12px;
-  -webkit-overflow-scrolling: touch;
+.trend-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 8px;
 }
-.trend-list::-webkit-scrollbar { display: none; }
 .trend-card {
-  min-width: 220px; border-radius: 20px; padding: 16px; flex-shrink: 0;
+  border-radius: 14px; padding: 12px;
   box-shadow: 0 4px 16px rgba(148, 163, 184, 0.08);
   border: 1px solid rgba(255,255,255,0.8);
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column; gap: 6px;
 }
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1027,11 +1055,17 @@ onActivated(() => {
 .empty-cta:active { transform: scale(0.96); }
 .trend-card.is-warning { background: linear-gradient(135deg, rgba(255,247,237,0.9), rgba(255,255,255,0.7)) !important; border-color: rgba(251,146,60,0.3); }
 
-.trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.trend-title-wrap { display: flex; align-items: center; gap: 8px; }
+/* 奇数卡片最后一张跨满整行 */
+.trend-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.trend-header { display: flex; justify-content: space-between; align-items: center; }
+.trend-title-wrap { display: flex; align-items: center; gap: 6px; }
 .trend-icon-wrap {
-  width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
   background: var(--c-bg); color: var(--c-slate-600);
+  font-size: 14px;
 }
 .icon-weight { color: var(--c-rose); background: var(--c-rose-light); }
 .icon-systolic, .icon-diastolic { color: var(--c-sky); background: var(--c-sky-light); }
@@ -1042,16 +1076,16 @@ onActivated(() => {
 .icon-steps { color: var(--c-emerald); background: rgba(52,211,153,0.15); }
 .icon-emotion_score { color: var(--c-indigo); background: rgba(129,140,248,0.15); }
 
-.trend-name { font-size: 14px; font-weight: 600; color: var(--c-slate-600); }
-.trend-status { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+.trend-name { font-size: 12px; font-weight: 600; color: var(--c-slate-600); }
+.trend-status { font-size: 10px; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
 .status-ok { background: rgba(52,211,153,0.15); color: var(--c-emerald); }
 .status-warn { background: rgba(251,146,60,0.15); color: var(--c-orange); }
 
-.trend-body { display: flex; align-items: baseline; gap: 4px; }
-.trend-value { font-size: 26px; font-weight: 700; color: var(--c-slate-800); font-family: 'Nunito Sans', sans-serif; }
-.trend-unit { font-size: 13px; font-weight: 500; color: var(--c-slate-400); }
+.trend-body { display: flex; align-items: baseline; gap: 3px; }
+.trend-value { font-size: 20px; font-weight: 700; color: var(--c-slate-800); font-family: 'Nunito Sans', sans-serif; }
+.trend-unit { font-size: 11px; font-weight: 500; color: var(--c-slate-400); }
 
-.trend-summary { font-size: 13px; color: var(--c-slate-500); line-height: 1.4; }
+.trend-summary { font-size: 11px; color: var(--c-slate-500); line-height: 1.3; }
 
 /* ========== 7. 科普与变化 ========== */
 .change-cards-scroll {

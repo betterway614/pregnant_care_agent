@@ -382,7 +382,7 @@ class TestBatchFollowupService:
 class TestPregnancyDiaryService:
     """孕期日记 - generate_weekly_diary"""
 
-    def _make_db_for_diary(self, pregnant, summaries_per_week=None):
+    def _make_db_for_diary(self, pregnant, summaries_per_week=None, health_points_per_week=None):
         """构造 mock db 以匹配 PregnancyDiaryService.generate_weekly_diary"""
         db = MagicMock()
 
@@ -393,21 +393,21 @@ class TestPregnancyDiaryService:
 
         queries = [pregnant_query]
         for _ in range(4):
+            # query(HealthDataPoint).filter(...).order_by(...).all() -> [] (主数据源)
+            hpq = MagicMock()
+            hpq.filter.return_value = hpq
+            hpq.order_by.return_value = hpq
+            hpq.all.return_value = health_points_per_week or []
             # query(DailyHealthSummary).filter(...).order_by(...).all() -> []
             sq = MagicMock()
             sq.filter.return_value = sq
             sq.order_by.return_value = sq
             sq.all.return_value = summaries_per_week or []
-            # query(HealthDataPoint).filter(...).order_by(...).all() -> []
-            hpq = MagicMock()
-            hpq.filter.return_value = hpq
-            hpq.order_by.return_value = hpq
-            hpq.all.return_value = []
             # query(Alert).filter(...).count() -> 0
             aq = MagicMock()
             aq.filter.return_value = aq
             aq.count.return_value = 0
-            queries.extend([sq, hpq, aq])
+            queries.extend([hpq, sq, aq])
 
         db.query.side_effect = queries
         return db

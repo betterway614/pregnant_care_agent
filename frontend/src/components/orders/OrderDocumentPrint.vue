@@ -123,7 +123,8 @@ const sourceLabel = computed(() => {
 
 .doc-info__row {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px 24px;
   font-size: 13px;
 }
 
@@ -161,8 +162,10 @@ const sourceLabel = computed(() => {
 .doc-signature {
   margin-top: 24px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-end;
+  gap: 12px;
 }
 
 .doc-signature__box {
@@ -192,6 +195,90 @@ const sourceLabel = computed(() => {
   color: #999;
   padding-top: 12px;
   border-top: 1px solid #eee;
+}
+
+/* ========== 移动端响应式适配 ========== */
+@media (max-width: 768px) {
+  .order-print {
+    max-width: 100%;
+  }
+
+  .order-doc {
+    padding: 16px 14px;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+
+  .doc-header {
+    margin-bottom: 12px;
+  }
+
+  .doc-header__brand {
+    font-size: 11px;
+  }
+
+  .doc-header__title {
+    font-size: 20px;
+    letter-spacing: 4px;
+  }
+
+  .doc-info {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+  }
+
+  .doc-info__row {
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .doc-section {
+    margin-bottom: 12px;
+  }
+
+  .doc-section__title {
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+
+  .doc-section__content {
+    font-size: 15px;
+    line-height: 1.9;
+    padding: 6px 0;
+    /* 长文本自动换行，避免溢出 */
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .doc-warning {
+    font-size: 12px;
+    line-height: 2;
+    margin: 12px 0;
+    padding: 8px 4px;
+  }
+
+  .doc-signature {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 20px;
+    gap: 14px;
+  }
+
+  .doc-signature__img {
+    max-width: 120px;
+    max-height: 40px;
+  }
+
+  .doc-footer {
+    margin-top: 20px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
 }
 
 /* 打印样式 */

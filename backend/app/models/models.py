@@ -372,6 +372,25 @@ class ToolCallDetail(Base):
     )
 
 
+class PregnancyDiaryEntry(Base):
+    """孕期日记持久化条目 — 每人每周一条，存储完整 DiaryWeekSummary"""
+    __tablename__ = "pregnancy_diary_entries"
+
+    id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
+    week_number = Column(Integer, nullable=False, comment="孕周编号")
+    week_start_date = Column(Date, nullable=False, comment="该周起始日期")
+    week_end_date = Column(Date, nullable=False, comment="该周结束日期")
+    entry_data = Column(JSON, nullable=False, comment="完整 DiaryWeekSummary 序列化")
+    narrative_source = Column(String(16), default="template", comment="llm / template")
+    created_at = Column(DateTime, default=beijing_now)
+    updated_at = Column(DateTime, default=beijing_now, onupdate=beijing_now)
+
+    __table_args__ = (
+        Index('idx_diary_pregnant_week', 'pregnant_id', 'week_number', unique=True),
+    )
+
+
 class ResourceAlert(Base):
     """资源预警记录 - 记录系统资源异常和预警"""
     __tablename__ = "resource_alerts"

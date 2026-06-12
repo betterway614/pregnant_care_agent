@@ -1,5 +1,5 @@
 <template>
-  <div class="metric-category-selector">
+  <div class="metric-category-selector" :style="cssVars">
     <!-- 分类标签栏 -->
     <div class="category-tabs">
       <button
@@ -36,12 +36,8 @@
           @change="(val: boolean) => toggleMetric(metric, val)"
         />
       </div>
-
       <!-- 配对组提示 -->
-      <div
-        v-if="currentCategory.comboGroups?.length"
-        class="combo-hint"
-      >
+      <div v-if="currentCategory.comboGroups?.length" class="combo-hint">
         {{ currentCategory.comboGroups.map(g => g.name).join('、') }}已配对显示
       </div>
     </div>
@@ -50,10 +46,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import {
-  getAllCategories,
-  type IndicatorCategory,
-} from '@/utils/labelMaps'
+import { getAllCategories, type IndicatorCategory } from '@/utils/labelMaps'
 import { trendName, labLabel } from '@/utils/labelMaps'
 
 const props = withDefaults(defineProps<{
@@ -72,6 +65,24 @@ const emit = defineEmits<{
   'update:modelValue': [value: string[]]
 }>()
 
+// ── 角色色板 ──
+const ROLE_PALETTE: Record<string, { active: string; hover: string; bg: string; activeBg: string; border: string; dark: string }> = {
+  pregnant:  { active: '#FB7185', hover: '#FFF1F2', bg: '#FDF2F4', activeBg: '#FFF5F5', border: '#FEE2E2', dark: '#F43F5E' },
+  nurse:     { active: '#6366F1', hover: '#EEF2FF', bg: '#EEF2FF', activeBg: '#F5F3FF', border: '#E0E7FF', dark: '#4F46E5' },
+  doctor:    { active: '#10B981', hover: '#ECFDF5', bg: '#ECFDF5', activeBg: '#F0FDF4', border: '#D1FAE5', dark: '#059669' },
+}
+
+const palette = computed(() => ROLE_PALETTE[props.role] || ROLE_PALETTE.pregnant)
+
+const cssVars = computed(() => ({
+  '--cat-active': palette.value.active,
+  '--cat-hover': palette.value.hover,
+  '--cat-bg': palette.value.bg,
+  '--cat-active-bg': palette.value.activeBg,
+  '--cat-border': palette.value.border,
+  '--cat-dark': palette.value.dark,
+}))
+
 const activeCategory = ref(props.categories[0])
 
 const visibleCategories = computed(() => {
@@ -82,8 +93,6 @@ const visibleCategories = computed(() => {
 const currentCategory = computed(() =>
   visibleCategories.value.find(c => c.key === activeCategory.value)
 )
-
-const selectedMetrics = computed(() => props.modelValue)
 
 function isSelected(metric: string): boolean {
   return props.modelValue.includes(metric)
@@ -112,13 +121,10 @@ function toggleAll(cat: IndicatorCategory) {
   }
 }
 
-/** 切换分类时自动全选该分类下的所有指标 */
 function switchToCategory(catKey: string) {
   activeCategory.value = catKey
   const cat = visibleCategories.value.find(c => c.key === catKey)
-  if (cat) {
-    emit('update:modelValue', [...cat.metrics])
-  }
+  if (cat) emit('update:modelValue', [...cat.metrics])
 }
 
 function getLabel(metric: string): string {
@@ -128,10 +134,6 @@ function getLabel(metric: string): string {
 
 <style scoped>
 .metric-category-selector {
-  --cat-active: #FB7185;
-  --cat-hover: #FFF1F2;
-  --cat-bg: #FDF2F4;
-  --cat-active-bg: #FFF5F5;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -141,7 +143,7 @@ function getLabel(metric: string): string {
   gap: 4px;
   padding: 8px 12px 0;
   background: var(--cat-bg);
-  border-bottom: 1px solid #FEE2E2;
+  border-bottom: 1px solid var(--cat-border);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -172,13 +174,13 @@ function getLabel(metric: string): string {
 .cat-count {
   font-size: 11px;
   color: #909399;
-  background: #FEE2E2;
+  background: var(--cat-border);
   padding: 1px 6px;
   border-radius: 10px;
 }
 .cat-tab.active .cat-count {
-  background: #FECACA;
   color: var(--cat-active);
+  opacity: .85;
 }
 
 .category-metrics {
@@ -208,7 +210,7 @@ function getLabel(metric: string): string {
   color: #E6A23C;
 }
 
-/* Element Plus 复选框 — 覆盖为粉色 */
+/* Element Plus 复选框 — 角色色系 */
 .metric-checkboxes :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
   background-color: var(--cat-active) !important;
   border-color: var(--cat-active) !important;
@@ -228,7 +230,7 @@ function getLabel(metric: string): string {
   font-weight: 500;
 }
 
-/* 全选/取消按钮 — 粉色主题 */
+/* 全选/取消按钮 */
 .toggle-all-btn {
   font-size: 12px;
   padding: 4px 12px;
@@ -238,14 +240,12 @@ function getLabel(metric: string): string {
   background: transparent;
   transition: all .2s;
 }
-.toggle-all-btn:hover {
-  background: var(--cat-hover);
-}
+.toggle-all-btn:hover { background: var(--cat-hover); }
 .toggle-all-btn.is-deselect {
   background: var(--cat-active);
   color: #fff;
 }
 .toggle-all-btn.is-deselect:hover {
-  background: #F43F5E;
+  background: var(--cat-dark);
 }
 </style>

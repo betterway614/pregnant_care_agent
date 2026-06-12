@@ -193,6 +193,13 @@ class Settings(BaseSettings):
     followup_zombie_inprogress_timeout_days: int = 7  # in_progress 状态超时天数
     followup_no_data_alert_days: int = 14  # 无数据上报多少天后触发随访
 
+    # 日记定时调度
+    diary_scheduler_enabled: bool = True        # 是否启用日记自动生成
+    diary_scheduler_day_of_week: str = "sun"    # 每周几生成（mon/tue/.../sun）
+    diary_scheduler_hour: int = 22              # 生成时间（北京时间，0-23）
+    diary_scheduler_minute: int = 0             # 生成分钟
+    diary_llm_enabled: bool = True              # 是否使用 LLM（False 则强制模板）
+
     model_config = {"env_file": _env_path, "env_file_encoding": "utf-8"}
 
 

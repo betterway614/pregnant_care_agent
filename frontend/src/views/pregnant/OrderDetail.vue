@@ -115,17 +115,23 @@ async function handleAcknowledge() {
 <style scoped>
 .order-detail-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f5f5f5;
-  padding-bottom: 32px;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
 }
 
 .nav-bar {
   padding: 8px 16px;
+  padding-top: calc(8px + env(safe-area-inset-top));
   background: #fff;
   border-bottom: 1px solid #eee;
   position: sticky;
   top: 0;
   z-index: 10;
+  display: flex;
+  align-items: center;
 }
 
 .loading-state,
@@ -159,5 +165,65 @@ async function handleAcknowledge() {
   background: #fff;
   padding: 16px;
   border-radius: 12px;
+}
+
+/* ========== 移动端响应式优化 ========== */
+@media (max-width: 768px) {
+  .order-detail-page {
+    background: #fff;
+  }
+
+  .nav-bar {
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .loading-state,
+  .empty-state {
+    min-height: 50vh;
+    gap: 16px;
+  }
+
+  .loading-state p,
+  .empty-state p {
+    font-size: 15px;
+    color: #94A3B8;
+  }
+
+  .acknowledge-bar {
+    margin: 0;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid #f0f0f0;
+    /* 固定在底部，确保不被键盘或滚动影响 */
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+  }
+
+  .acknowledge-action {
+    width: 100%;
+  }
+
+  .acknowledge-action :deep(.el-button) {
+    width: 100%;
+    height: 48px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    /* 确保足够的触控面积 */
+    min-height: 48px;
+  }
+
+  .acknowledged-info {
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    gap: 6px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+  }
 }
 </style>

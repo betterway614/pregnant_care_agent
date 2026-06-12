@@ -51,16 +51,10 @@
             <div class="chart-controls">
               <MetricCategorySelector
                 v-model="selectedMetrics"
-                :categories="['vital_signs', 'blood_sugar', 'daily_tracking', 'fetal']"
+                :categories="['vital_signs', 'blood_sugar', 'daily_tracking', 'fetal', 'lab_tests']"
                 role="nurse"
                 @update:model-value="loadTrendData"
               />
-              <div class="chart-controls__row" style="margin-top: 8px">
-                <span class="chart-controls__label">生化指标</span>
-                <el-checkbox-group v-model="selectedLabMetrics" @change="loadTrendData" size="small">
-                  <el-checkbox v-for="m in labMetricOptions" :key="m.value" :value="m.value">{{ m.label }}</el-checkbox>
-                </el-checkbox-group>
-              </div>
               <el-radio-group v-model="axisMode" size="small" @change="loadTrendData" style="margin-left: 12px">
                 <el-radio-button value="date">日期</el-radio-button>
                 <el-radio-button value="gestational_week">孕周</el-radio-button>
@@ -135,12 +129,11 @@ const pregnantInfo = ref<Pregnant | null>(null)
 const followUpRecords = ref<FollowUpHistoryRecord[]>([])
 const selectedFollowUpId = ref<string | null>(null)
 const selectedMetrics = ref(['systolic', 'diastolic', 'weight'])
-const selectedLabMetrics = ref<string[]>([])
 const axisMode = ref<'date' | 'gestational_week'>('date')
 const trendSeries = ref<TrendSeries[]>([])
 const chartRef = ref()
 
-const labMetricOptions = LAB_METRIC_OPTIONS
+const LAB_METRIC_KEYS = new Set(LAB_METRIC_OPTIONS.map(m => m.value))
 
 async function loadPregnantInfo() {
   try {
@@ -157,17 +150,20 @@ async function loadFollowUpHistory() {
 }
 
 async function loadTrendData() {
-  if (!pregnantId.value || (!selectedMetrics.value.length && !selectedLabMetrics.value.length)) {
+  if (!pregnantId.value || !selectedMetrics.value.length) {
     trendSeries.value = []
     return
   }
   const allSeries: TrendSeries[] = []
 
+  const healthMetrics = selectedMetrics.value.filter(m => !LAB_METRIC_KEYS.has(m))
+  const labMetrics = selectedMetrics.value.filter(m => LAB_METRIC_KEYS.has(m))
+
   // 加载基础健康趋势
-  if (selectedMetrics.value.length) {
+  if (healthMetrics.length) {
     try {
       const res = await pregnantApi.getHealthTrends(pregnantId.value, {
-        metrics: selectedMetrics.value.join(','),
+        metrics: healthMetrics.join(','),
         axis_mode: axisMode.value,
       })
       allSeries.push(...(res.data.series || []))
@@ -175,12 +171,12 @@ async function loadTrendData() {
   }
 
   // 加载生化指标趋势
-  if (selectedLabMetrics.value.length) {
+  if (labMetrics.length) {
     try {
       const labRes = await pregnantApi.getLabTrends(pregnantId.value, 50)
       const labItems: LabTrendItem[] = labRes.data.items || []
       for (const item of labItems) {
-        if (!selectedLabMetrics.value.includes(item.lab_key)) continue
+        if (!labMetrics.includes(item.lab_key)) continue
         if (item.is_qualitative) continue  // 定性指标不绘图
         const meta = LAB_METRIC_META[item.lab_key]
         if (!meta) continue
