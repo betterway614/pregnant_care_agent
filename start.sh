@@ -291,6 +291,27 @@ stop_all() {
     fi
 }
 
+# 仅停止前后端应用服务（保留基础设施和 AI 服务）
+stop_app() {
+    log_step "停止应用服务 (Backend + Frontend)..."
+    for name in backend frontend; do
+        for suffix in real.pid pid; do
+            local pf="${PID_DIR}/${name}.${suffix}"
+            [ -f "${pf}" ] && graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
+        done
+    done
+    log_info "应用服务已停止"
+}
+
+# 仅重启前后端（不影响 AI 服务和数据库）
+reload_app() {
+    stop_app
+    sleep 1
+    start_backend  || return 1
+    start_frontend || return 1
+    show_status
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 服务状态 & 仪表盘
 # ══════════════════════════════════════════════════════════════════════════════
@@ -682,7 +703,8 @@ show_help() {
   start          启动所有服务 (默认)
   stop           停止所有服务
   status         查看服务状态 (PID + CPU/MEM/运行时长)
-  restart        重启所有服务
+  restart        重启所有服务 (含 AI)
+  reload         仅重启前后端 (不影响 AI/数据库)
   logs           打开独立终端实时查看各服务日志
   monitor        启动后台监控守护进程 (watchdog)
   monitor-stop   停止监控守护进程
@@ -709,6 +731,7 @@ show_help() {
   bash start.sh --init-db                # 初始化数据库后启动
   bash start.sh --init-db --ingest       # 初始化 + 知识库入库
   bash start.sh stop                     # 停止所有服务
+  bash start.sh reload                   # 仅重启前后端
   bash start.sh monitor                  # 启动后台监控
   bash start.sh monitor --auto-restart   # 启动监控 + 自动重启
   bash start.sh dashboard                # 实时仪表盘
@@ -725,7 +748,7 @@ main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            start|stop|status|restart|logs|monitor|monitor-stop|monitor-status|dashboard)
+            start|stop|status|restart|reload|logs|monitor|monitor-stop|monitor-status|dashboard)
                 cmd="$1"; shift ;;
             --no-ai)       skip_ai=true; shift ;;
             --auto-restart) auto_restart=true; shift ;;
@@ -749,6 +772,7 @@ main() {
         monitor-status)  show_monitor_status; exit 0 ;;
         dashboard)       live_dashboard "${dashboard_interval}"; exit 0 ;;
         restart)         stop_all; sleep 2 ;;
+        reload)          reload_app; exit 0 ;;
         start)           ;;
     esac
 
