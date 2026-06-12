@@ -1056,44 +1056,65 @@ def cleanup_audit_logs(
 
 
 import os as _os
+import signal as _signal
 import subprocess as _subprocess
 import threading as _threading
 import time as _time
 
-_START_SCRIPT = _os.path.normpath(
-    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))),
-                  "start.sh")
+_BACKEND_DIR = _os.path.normpath(
+    _os.path.join(_os.path.dirname(__file__), "..", "..")
 )
 
 
 @router.post("/system/restart")
 def restart_system(user: TokenPayload = Depends(get_current_user)):
-    """重启整个服务（复用项目 start.sh restart）
+    """重启后端服务（仅重启 Python 进程以加载新的 .env 配置）
 
-    响应返回后，子进程会在 1 秒延迟后执行 start.sh restart，
-    完全复用脚本中的 stop_all → start 流程。
+    不影响 frontend / Docker / AI 推理服务。
+    响应返回后，子进程会在 1 秒延迟后：
+      1. 发送 SIGTERM 给当前后端进程
+      2. 等待端口释放
+      3. 启动新的 python run.py
     """
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
-    if not _os.path.isfile(_START_SCRIPT):
-        raise HTTPException(
-            status_code=500,
-            detail=f"启动脚本不存在: {_START_SCRIPT}",
-        )
-
-    script_dir = _os.path.dirname(_START_SCRIPT)
+    current_pid = _os.getpid()
+    port = int(_os.environ.get("PORT", "9999"))
 
     def _do_restart() -> None:
         _time.sleep(1.0)  # 确保 HTTP 响应已发出
+
+        # 1) 优雅终止当前进程
+        try:
+            _os.kill(current_pid, _signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+        # 2) 等待端口释放
+        _time.sleep(2.0)
+        deadline = _time.time() + 15
+        while _time.time() < deadline:
+            try:
+                import socket
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1)
+                s.connect(("127.0.0.1", port))
+                s.close()
+                _time.sleep(0.5)
+            except (ConnectionRefusedError, OSError):
+                break
+
+        # 3) 启动新后端进程
         _subprocess.Popen(
-            ["bash", _START_SCRIPT, "restart"],
-            cwd=script_dir,
+            ["python", "run.py"],
+            cwd=_BACKEND_DIR,
             start_new_session=True,
             stdout=_subprocess.DEVNULL,
             stderr=_subprocess.DEVNULL,
+            env={**_os.environ, "PORT": str(port)},
         )
 
     _threading.Thread(target=_do_restart, daemon=True).start()
-    logger.info("已调度服务重启: %s restart", _START_SCRIPT)
-    return {"message": "服务正在重启中，请等待约 30 秒后刷新页面"}
+    logger.info("已调度后端重启 (PID: %s, 端口: %s)", current_pid, port)
+    return {"message": "后端服务正在重启，请等待约 10 秒后刷新页面"}
