@@ -208,6 +208,26 @@ function getLabel(metric: string): string {
   color: #E6A23C;
 }
 
+/* Element Plus 复选框 — 覆盖为粉色 */
+.metric-checkboxes :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--cat-active) !important;
+  border-color: var(--cat-active) !important;
+}
+.metric-checkboxes :deep(.el-checkbox__input.is-checked:hover .el-checkbox__inner) {
+  border-color: var(--cat-active) !important;
+}
+.metric-checkboxes :deep(.el-checkbox__input.is-focus .el-checkbox__inner) {
+  border-color: var(--cat-active) !important;
+}
+.metric-checkboxes :deep(.el-checkbox__label) {
+  font-size: 13px;
+  color: #4a4a4a;
+}
+.metric-checkboxes :deep(.el-checkbox.is-checked .el-checkbox__label) {
+  color: var(--cat-active);
+  font-weight: 500;
+}
+
 /* 全选/取消按钮 — 粉色主题 */
 .toggle-all-btn {
   font-size: 12px;
