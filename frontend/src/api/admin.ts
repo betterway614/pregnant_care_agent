@@ -147,6 +147,10 @@ export const adminApi = {
 
   testApiConnection: (mode: 'local' | 'cloud' | 'asr' | 'tts' | 'embedding', provider?: string) =>
     client.post<ApiTestResult>('/admin/api-config/test', { mode, provider }),
+
+  // ── 系统管理 ──
+  restartSystem: () =>
+    client.post<{ message: string }>('/admin/system/restart'),
 }
 
 // ── 资源监控 API ──

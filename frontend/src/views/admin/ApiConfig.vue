@@ -239,7 +239,7 @@
           <span class="form-tip">Ollama 服务的基础地址</span>
         </el-form-item>
         <el-form-item label="兼容 API 地址">
-          <el-input v-model="config.local_base_url" placeholder="留空则自动使用 Ollama 地址" @change="markDirty">
+          <el-input v-model="config.local_base_url" :placeholder="`留空则自动使用 ${config.ollama_host}`" @change="markDirty">
             <template #prepend><el-icon><Connection /></el-icon></template>
           </el-input>
           <span class="form-tip">vLLM / SGLang / llama-server 等 OpenAI 兼容服务地址（优先级高于 Ollama）</span>
@@ -399,7 +399,7 @@
     </el-card>
 
     <!-- 保存按钮 -->
-    <div class="save-bar">
+    <div v-if="!saveMessage" class="save-bar">
       <el-button @click="resetConfig" :disabled="!isDirty">
         <el-icon><RefreshLeft /></el-icon>
         重置
@@ -408,6 +408,23 @@
         <el-icon><Check /></el-icon>
         保存配置
       </el-button>
+    </div>
+
+    <!-- 保存成功 → 提示重启 -->
+    <div v-if="saveMessage" class="save-bar save-bar--restart">
+      <div class="save-message">
+        <el-icon color="#f59e0b" :size="18"><WarningFilled /></el-icon>
+        <span>{{ saveMessage }}</span>
+      </div>
+      <div class="save-bar__actions">
+        <el-button @click="dismissSaveMessage">
+          稍后重启
+        </el-button>
+        <el-button type="warning" :loading="restarting" @click="restartSystem">
+          <el-icon><Refresh /></el-icon>
+          重启服务
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
@@ -418,7 +435,7 @@ import { ElMessage } from 'element-plus'
 import {
   Cloudy, Monitor, Connection, DataBoard, CircleCheck,
   RefreshLeft, Check, Cpu, User, FirstAidKit, Van, Refresh,
-  Microphone, Headset, Document,
+  Microphone, Headset, Document, WarningFilled,
 } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/admin'
 import client from '@/api/client'
@@ -472,6 +489,8 @@ const saving = ref(false)
 const testing = ref(false)
 const checkingServices = ref(false)
 const testResult = ref<ApiTestResult | null>(null)
+const saveMessage = ref('')
+const restarting = ref(false)
 
 // 本地服务状态
 const localServices = reactive([
@@ -574,13 +593,38 @@ async function saveConfig() {
       ;(config.value as any)[modeKey] = rc.mode
       ;(config.value as any)[modelKey] = rc.model
     }
-    await adminApi.updateApiConfig(config.value as any)
-    ElMessage.success('配置已保存')
+    const res = await adminApi.updateApiConfig(config.value as any)
+    // 展示后端返回的提示消息（含重启提醒）
+    saveMessage.value = res.data?.message || '配置已保存，部分配置重启后生效'
     isDirty.value = false
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+function dismissSaveMessage() {
+  saveMessage.value = ''
+}
+
+async function restartSystem() {
+  restarting.value = true
+  try {
+    const res = await adminApi.restartSystem()
+    ElMessage.success(res.data?.message || '重启指令已发送')
+    // 倒计时后自动刷新
+    let countdown = 15
+    const timer = setInterval(() => {
+      countdown--
+      if (countdown <= 0) {
+        clearInterval(timer)
+        window.location.reload()
+      }
+    }, 1000)
+  } catch (err: any) {
+    restarting.value = false
+    ElMessage.error(err.response?.data?.detail || '重启请求失败，请手动执行 bash start.sh restart')
   }
 }
 
@@ -722,4 +766,8 @@ onMounted(() => {
 
 /* 保存栏 */
 .save-bar { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 0; position: sticky; bottom: 0; background: #f1f5f9; z-index: 10; }
+/* 重启提示栏 */
+.save-bar--restart { justify-content: space-between; align-items: center; flex-wrap: wrap; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 14px 20px; margin-top: 8px; }
+.save-message { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #92400e; font-weight: 500; }
+.save-bar__actions { display: flex; gap: 10px; flex-shrink: 0; }
 </style>

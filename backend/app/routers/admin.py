@@ -765,7 +765,7 @@ def get_api_config(user: TokenPayload = Depends(get_current_user)):
 
     return {
         "llm_mode": settings.llm_mode,
-        "local_base_url": settings.local_base_url or settings.ollama_host,
+        "local_base_url": settings.local_base_url,
         "ollama_host": settings.ollama_host,
         "local_model": settings.local_model,
         "cloud_provider": current_provider,
@@ -895,17 +895,13 @@ def update_api_config(
         if not env_key:
             continue
 
+        # 跳过脱敏后的 API Key（含 ****），避免用脱敏值覆盖真实密钥
+        if isinstance(value, str) and "****" in value:
+            continue
+
         # 更新内存中的 settings
         if hasattr(settings, env_key.lower()):
             setattr(settings, env_key.lower(), value)
-        elif field == "cloud_api_key":
-            settings.llm_api_key = value
-        elif field == "cloud_base_url":
-            settings.llm_base_url = value
-        elif field == "cloud_model":
-            settings.llm_model = value
-        elif field == "cloud_vision_model":
-            settings.llm_vision_model = value
 
         # 更新 .env 文件
         new_line = f'{env_key}="{value}"\n'
@@ -919,7 +915,7 @@ def update_api_config(
     if changed_keys:
         with open(env_path, "w", encoding="utf-8") as f:
             f.writelines(env_lines)
-        logger.info("API 配置已更新: {}", ", ".join(changed_keys))
+        logger.info("API 配置已更新: %s", ", ".join(changed_keys))
 
     return {
         "message": "配置已保存，部分配置重启后生效",
@@ -1057,3 +1053,47 @@ def cleanup_audit_logs(
     except Exception:
         db.rollback()
         raise HTTPException(500, "清理审计日志失败")
+
+
+import os as _os
+import subprocess as _subprocess
+import threading as _threading
+import time as _time
+
+_START_SCRIPT = _os.path.normpath(
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))),
+                  "start.sh")
+)
+
+
+@router.post("/system/restart")
+def restart_system(user: TokenPayload = Depends(get_current_user)):
+    """重启整个服务（复用项目 start.sh restart）
+
+    响应返回后，子进程会在 1 秒延迟后执行 start.sh restart，
+    完全复用脚本中的 stop_all → start 流程。
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    if not _os.path.isfile(_START_SCRIPT):
+        raise HTTPException(
+            status_code=500,
+            detail=f"启动脚本不存在: {_START_SCRIPT}",
+        )
+
+    script_dir = _os.path.dirname(_START_SCRIPT)
+
+    def _do_restart() -> None:
+        _time.sleep(1.0)  # 确保 HTTP 响应已发出
+        _subprocess.Popen(
+            ["bash", _START_SCRIPT, "restart"],
+            cwd=script_dir,
+            start_new_session=True,
+            stdout=_subprocess.DEVNULL,
+            stderr=_subprocess.DEVNULL,
+        )
+
+    _threading.Thread(target=_do_restart, daemon=True).start()
+    logger.info("已调度服务重启: %s restart", _START_SCRIPT)
+    return {"message": "服务正在重启中，请等待约 30 秒后刷新页面"}
