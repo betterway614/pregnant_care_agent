@@ -20,6 +20,7 @@ from loguru import logger
 
 # 医生端工具调用 → 用户友好的中文描述
 DOCTOR_TOOL_THINKING_MAP: dict[str, str] = {
+    "agno_list_patients": "正在查询孕妇列表...",
     "agno_analyze_patient_comprehensive": "正在综合分析患者数据...",
     "agno_generate_medical_order": "正在生成医嘱草稿...",
     "agno_handle_issue": "正在处理协作问题...",

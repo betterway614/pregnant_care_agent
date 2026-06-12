@@ -37,6 +37,7 @@ NURSE_TOOLS = [
 # ==================== 医生端 Agent 工具集 ====================
 
 DOCTOR_TOOLS = [
+    agno_list_patients, agno_query_patient_data,
     agno_analyze_patient_comprehensive, agno_generate_medical_order,
     agno_handle_issue, agno_query_clinical_guideline,
     agno_analyze_health_trends, agno_evaluate_vital_rules,
@@ -74,7 +75,7 @@ DOCTOR_TOOL_GROUPS: dict[str, list] = {
     "analyze": [agno_analyze_patient_comprehensive, agno_analyze_health_trends, agno_evaluate_vital_rules, agno_query_clinical_guideline],
     "order": [agno_generate_medical_order, agno_analyze_patient_comprehensive],
     "issue": [agno_handle_issue, agno_analyze_patient_comprehensive],
-    "chat": [agno_analyze_health_trends, agno_evaluate_vital_rules],
+    "chat": [agno_list_patients, agno_query_patient_data, agno_analyze_health_trends, agno_evaluate_vital_rules, agno_query_clinical_guideline],
 }
 
 

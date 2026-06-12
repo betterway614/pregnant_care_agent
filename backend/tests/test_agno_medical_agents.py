@@ -285,7 +285,7 @@ def test_nurse_variant_tool_count_and_limit(variant_name, getter, expected_tools
     ("analyze", "get_doctor_analyze_agent", 4, 5),
     ("order", "get_doctor_order_agent", 2, 2),
     ("issue", "get_doctor_issue_agent", 2, 2),
-    ("chat", "get_doctor_chat_variant_agent", 2, 3),
+    ("chat", "get_doctor_chat_variant_agent", 5, 3),
 ])
 def test_doctor_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
     """验证医生变体工具数量和 limit"""

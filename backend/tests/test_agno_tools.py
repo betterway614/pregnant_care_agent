@@ -294,7 +294,7 @@ def test_doctor_tool_groups_tool_count():
     assert len(DOCTOR_TOOL_GROUPS["analyze"]) == 4
     assert len(DOCTOR_TOOL_GROUPS["order"]) == 2
     assert len(DOCTOR_TOOL_GROUPS["issue"]) == 2
-    assert len(DOCTOR_TOOL_GROUPS["chat"]) == 2
+    assert len(DOCTOR_TOOL_GROUPS["chat"]) == 5
 
 
 @pytest.mark.parametrize("intent,expected_variant", [

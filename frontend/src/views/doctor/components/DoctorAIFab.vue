@@ -30,14 +30,12 @@
           <div v-show="activeTab === 'analysis'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
             <ToolActionBar
               v-model:patient-id="aiPatientId"
-              v-model:active-section="activeAnalysisSection"
               :patients="pregnantList"
               role="doctor"
               :loading="aiLoading"
               action-label="开始分析"
               patient-placeholder="选择孕妇进行分析"
               show-risk-tags
-              :section-options="analysisSectionChips"
               @action="runAiAnalysis"
             >
               <template #extra>
@@ -175,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Close, MagicStick, Bell } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
@@ -206,14 +204,9 @@ const aiQuery = ref('')
 const aiLoading = ref(false)
 const aiResult = ref<any>(null)
 const pregnantList = ref<Pregnant[]>([])
-const activeAnalysisSection = ref('')
 const analysisResultRef = ref<HTMLElement | null>(null)
 const issueFilter = ref('pending')
 const allIssues = ref<any[]>([])
-
-const analysisSectionChips = computed(() =>
-  DOCTOR_ANALYSIS_SECTIONS.map(s => ({ value: s.key, label: s.label, icon: s.icon })),
-)
 
 const firstSectionKey = computed(() => {
   if (!aiResult.value) return ''
@@ -225,14 +218,6 @@ const firstSectionKey = computed(() => {
 })
 
 const filteredIssues = computed(() => allIssues.value)
-
-watch(activeAnalysisSection, (key) => {
-  if (!key) return
-  const section = DOCTOR_ANALYSIS_SECTIONS.find(s => s.key === key)
-  if (section?.scrollTarget) {
-    document.getElementById(section.scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-})
 
 function togglePanel() {
   panelVisible.value = !panelVisible.value

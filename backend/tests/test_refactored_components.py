@@ -251,7 +251,7 @@ class TestToolsSplit:
     def test_doctor_tools_count(self):
         """DOCTOR_TOOLS 应包含医生工具"""
         from app.core.agno_tools import DOCTOR_TOOLS
-        assert len(DOCTOR_TOOLS) == 6
+        assert len(DOCTOR_TOOLS) == 8
 
     def test_tools_importable_from_facade(self):
         """所有工具应可从 agno_tools 门面模块导入"""
