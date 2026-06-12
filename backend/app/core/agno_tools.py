@@ -26,7 +26,7 @@ from .tools import (
     # 规则引擎
     agno_evaluate_vital_rules,
     # 护士
-    agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor,
+    agno_list_patients, agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor,
     # 医生
     agno_analyze_patient_comprehensive, agno_generate_medical_order,
     agno_handle_issue, agno_query_clinical_guideline,
@@ -59,7 +59,7 @@ __all__ = [
     "agno_save_health_data", "agno_get_patient_context",
     "agno_should_ask_weight", "agno_should_ask_bp",
     "agno_analyze_health_trends", "agno_get_epds_result",
-    "agno_query_patient_data", "agno_create_followup_record", "agno_report_issue_to_doctor",
+    "agno_list_patients", "agno_query_patient_data", "agno_create_followup_record", "agno_report_issue_to_doctor",
     "agno_analyze_patient_comprehensive", "agno_generate_medical_order",
     "agno_handle_issue", "agno_query_clinical_guideline",
     "set_nlu_context", "get_nlu_context", "pop_nlu_context", "cleanup_expired_nlu_context",

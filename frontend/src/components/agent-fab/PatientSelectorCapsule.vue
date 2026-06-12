@@ -60,6 +60,6 @@ defineEmits<{
 }
 
 .patient-selector-capsule--nurse :deep(.el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2);
 }
 </style>

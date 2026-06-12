@@ -139,7 +139,7 @@ function getChipStyle(opt: ChipOption) {
 
 .capsule-chip-group--nurse .capsule-chip--readonly {
   background: var(--nurse-accent-bg);
-  border-color: rgba(99, 102, 241, 0.2);
+  border-color: rgba(46, 125, 50, 0.2);
   color: var(--nurse-accent);
 }
 

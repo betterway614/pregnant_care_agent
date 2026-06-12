@@ -267,7 +267,7 @@ def test_all_agents_have_nonempty_instructions(factory_name):
     ("analyze", "get_nurse_analyze_agent", 3, 4),
     ("followup", "get_nurse_followup_agent", 2, 2),
     ("report", "get_nurse_report_agent", 2, 2),
-    ("chat", "get_nurse_chat_variant_agent", 2, 3),
+    ("chat", "get_nurse_chat_variant_agent", 3, 3),
 ])
 def test_nurse_variant_tool_count_and_limit(variant_name, getter, expected_tools, expected_limit):
     """验证护士变体工具数量和 limit"""

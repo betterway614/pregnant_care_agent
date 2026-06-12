@@ -30,13 +30,11 @@
           <div v-show="activeTab === 'analysis'" class="agent-fab-panel__pane agent-fab-panel__pane--scroll">
             <ToolActionBar
               v-model:patient-id="aiPatientId"
-              v-model:active-section="activeAnalysisSection"
               :patients="pregnantList"
               role="nurse"
               :loading="aiLoading"
               action-label="开始分析"
               patient-placeholder="选择孕妇进行分析"
-              :section-options="analysisSectionChips"
               @action="runAiAnalysis"
             />
 
@@ -122,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Close, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
@@ -147,7 +145,6 @@ const aiPatientId = ref('')
 const aiLoading = ref(false)
 const aiResult = ref<any>(null)
 const pregnantList = ref<Pregnant[]>([])
-const activeAnalysisSection = ref('')
 const reportLoading = ref(false)
 const reportSuccess = ref(false)
 const reportForm = ref<ReportFormData>({
@@ -157,10 +154,6 @@ const reportForm = ref<ReportFormData>({
   description: '',
 })
 
-const analysisSectionChips = computed(() =>
-  NURSE_ANALYSIS_SECTIONS.map(s => ({ value: s.key, label: s.label, icon: s.icon })),
-)
-
 const firstSectionKey = computed(() => {
   if (!aiResult.value) return ''
   for (const s of NURSE_ANALYSIS_SECTIONS) {
@@ -168,14 +161,6 @@ const firstSectionKey = computed(() => {
     if (Array.isArray(val) ? val.length : val) return s.key
   }
   return ''
-})
-
-watch(activeAnalysisSection, (key) => {
-  if (!key) return
-  const section = NURSE_ANALYSIS_SECTIONS.find(s => s.key === key)
-  if (section?.scrollTarget) {
-    document.getElementById(section.scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
 })
 
 function togglePanel() {
@@ -332,7 +317,7 @@ onMounted(loadPatientList)
   padding: 6px 14px;
   border-radius: var(--capsule-radius);
   background: var(--nurse-accent-bg);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(46, 125, 50, 0.2);
   font-size: 12px;
   font-weight: 600;
   color: var(--nurse-accent);

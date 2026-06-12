@@ -195,8 +195,8 @@
 .nurse-chat__text img { max-width: 100%; border-radius: 10px; margin: 6px 0; }
 .nurse-chat__text del,
 .nurse-chat__text s { color: #94A3B8; }
-.nurse-chat__text input[type="checkbox"] { margin-right: 6px; accent-color: #6366f1; }
-.nurse-chat__text a { color: #6366f1; text-decoration: underline; text-underline-offset: 2px; }
+.nurse-chat__text input[type="checkbox"] { margin-right: 6px; accent-color: #2E7D32; }
+.nurse-chat__text a { color: #2E7D32; text-decoration: underline; text-underline-offset: 2px; }
 
 /* 医生聊天 */
 .doctor-chat__text h1,

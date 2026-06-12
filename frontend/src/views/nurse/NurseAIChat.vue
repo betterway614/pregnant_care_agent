@@ -651,17 +651,17 @@ onMounted(() => {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 2px 8px rgba(92, 107, 192, 0.08);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.08);
   color: #1e293b;
   border-radius: 4px 16px 16px 16px;
 }
 
 /* 用户气泡 */
 .nurse-chat__bubble--user {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #66BB6A 0%, #2E7D32 100%);
   color: white;
   border-radius: 16px 4px 16px 16px;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 2px 12px rgba(46, 125, 50, 0.25);
 }
 
 .nurse-chat__text :deep(p) { margin: 0 0 8px; }
@@ -671,7 +671,7 @@ onMounted(() => {
 .nurse-chat__text :deep(ol) { padding-left: 18px; margin: 4px 0; }
 .nurse-chat__text :deep(li) { margin: 2px 0; }
 .nurse-chat__text :deep(code) {
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(46, 125, 50, 0.1);
   padding: 1px 4px;
   border-radius: 4px;
   font-size: 12px;
@@ -688,7 +688,7 @@ onMounted(() => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #818cf8, #6366f1);
+  background: linear-gradient(135deg, #66BB6A, #2E7D32);
   animation: pulse-ring 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   position: relative;
 }
@@ -698,7 +698,7 @@ onMounted(() => {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 2px solid rgba(99, 102, 241, 0.3);
+  border: 2px solid rgba(46, 125, 50, 0.3);
   animation: pulse-ripple 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
@@ -715,7 +715,7 @@ onMounted(() => {
 .thinking-text {
   font-size: 13px;
   font-weight: 500;
-  color: #6366f1;
+  color: #2E7D32;
 }
 
 /* 加载动画 */
@@ -729,7 +729,7 @@ onMounted(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #a5b4fc;
+  background: #A5D6A7;
   animation: dotBounce 1.4s infinite ease-in-out both;
 }
 
@@ -748,13 +748,13 @@ onMounted(() => {
   gap: 8px;
   padding: 8px 16px;
   margin: 0 16px;
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(46, 125, 50, 0.08);
   border-radius: 10px;
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(46, 125, 50, 0.15);
 }
 
 .tool-indicator__icon {
-  color: #6366f1;
+  color: #2E7D32;
   animation: spin 1s linear infinite;
 }
 
@@ -765,7 +765,7 @@ onMounted(() => {
 
 .tool-indicator__text {
   font-size: 12px;
-  color: #6366f1;
+  color: #2E7D32;
   font-weight: 500;
 }
 
@@ -821,8 +821,8 @@ onMounted(() => {
 }
 
 .nurse-chat__input :deep(.el-textarea__inner:focus) {
-  border-color: #818cf8;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  border-color: #66BB6A;
+  box-shadow: 0 0 0 3px rgba(102, 187, 106, 0.15);
 }
 
 .send-btn {
@@ -841,14 +841,14 @@ onMounted(() => {
 }
 
 .send-btn--active {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #66BB6A 0%, #2E7D32 100%);
   color: white;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
 }
 
 .send-btn--active:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
 }
 
 .send-btn--active:active {
@@ -899,12 +899,12 @@ onMounted(() => {
 }
 
 .mic-btn--active {
-  background: linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%);
-  color: #6366f1;
+  background: linear-gradient(135deg, #A5D6A7 0%, #66BB6A 100%);
+  color: #2E7D32;
 }
 
 .mic-btn--active:hover {
-  background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%);
+  background: linear-gradient(135deg, #66BB6A 0%, #2E7D32 100%);
   color: white;
 }
 
@@ -917,7 +917,7 @@ onMounted(() => {
 .nurse-chat__record-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(99, 102, 241, 0.95);
+  background: rgba(46, 125, 50, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1012,8 +1012,8 @@ onMounted(() => {
 }
 
 .msg-action-btn--active {
-  color: #6366f1;
-  background: #eef2ff;
+  color: #2E7D32;
+  background: #E8F5E9;
 }
 
 /* ---- 音频消息气泡 ---- */
@@ -1029,7 +1029,7 @@ onMounted(() => {
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #66BB6A 0%, #2E7D32 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -1053,7 +1053,7 @@ onMounted(() => {
 .audio-bar {
   width: 3px;
   height: 100%;
-  background: #a5b4fc;
+  background: #A5D6A7;
   border-radius: 2px;
   animation: audioWave 1.2s ease-in-out infinite;
 }
@@ -1111,13 +1111,13 @@ onMounted(() => {
 }
 
 .toolbar-action-btn:hover {
-  background: rgba(99, 102, 241, 0.08);
-  color: #6366f1;
+  background: rgba(46, 125, 50, 0.08);
+  color: #2E7D32;
 }
 
 .toolbar-action-btn--active {
-  color: #6366f1;
-  background: #eef2ff;
+  color: #2E7D32;
+  background: #E8F5E9;
 }
 
 /* ---- 音频消息包装器 ---- */
@@ -1145,8 +1145,8 @@ onMounted(() => {
 }
 
 .audio-transcribe-btn:hover {
-  background: rgba(99, 102, 241, 0.15);
-  color: #6366f1;
+  background: rgba(46, 125, 50, 0.15);
+  color: #2E7D32;
 }
 
 .audio-transcribe-btn:active {
@@ -1177,7 +1177,7 @@ onMounted(() => {
   width: 12px;
   height: 12px;
   border: 2px solid #cbd5e1;
-  border-top-color: #6366f1;
+  border-top-color: #66BB6A;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

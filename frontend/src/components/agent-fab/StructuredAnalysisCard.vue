@@ -172,7 +172,7 @@ defineProps<{
 }
 
 .structured-card--nurse .reasoning-step__num {
-  background: linear-gradient(135deg, #818cf8, #6366f1);
+  background: linear-gradient(135deg, #66BB6A, #2E7D32);
   color: #fff;
 }
 

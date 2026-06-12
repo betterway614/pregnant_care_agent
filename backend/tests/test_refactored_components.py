@@ -315,7 +315,7 @@ class TestToolsSplit:
     def test_nurse_tools_count(self):
         """NURSE_TOOLS 应包含护士工具"""
         from app.core.agno_tools import NURSE_TOOLS
-        assert len(NURSE_TOOLS) == 5
+        assert len(NURSE_TOOLS) == 6
 
     def test_doctor_tools_count(self):
         """DOCTOR_TOOLS 应包含医生工具"""

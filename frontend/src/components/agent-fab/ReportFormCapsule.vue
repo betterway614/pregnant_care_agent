@@ -164,7 +164,7 @@ function updateField<K extends keyof ReportFormData>(key: K, value: ReportFormDa
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.25);
   transition: opacity var(--transition-fast);
 }
 

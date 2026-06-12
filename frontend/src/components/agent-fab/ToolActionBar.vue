@@ -110,7 +110,7 @@ const actionIcon = computed(() => props.actionIconName === 'document' ? Document
 
 .tool-action-bar--nurse .tool-action-bar__action {
   background: var(--nurse-accent-gradient);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.25);
 }
 
 .tool-action-bar__action:hover:not(:disabled) {

@@ -24,6 +24,7 @@ from loguru import logger
 
 # 护士端工具调用 → 用户友好的中文描述
 NURSE_TOOL_THINKING_MAP: dict[str, str] = {
+    "agno_list_patients": "正在查询孕妇列表...",
     "agno_query_patient_data": "正在查询患者数据...",
     "agno_analyze_patient_comprehensive": "正在综合分析患者情况...",
     "agno_create_followup_record": "正在创建随访记录...",

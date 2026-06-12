@@ -494,8 +494,8 @@ onUnmounted(() => {
 
 /* LLM 分析区块 */
 .llm-analysis {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(168, 85, 247, 0.04));
-  border: 1px solid rgba(99, 102, 241, 0.12);
+  background: linear-gradient(135deg, rgba(46, 125, 50, 0.04), rgba(102, 187, 106, 0.04));
+  border: 1px solid rgba(46, 125, 50, 0.12);
   border-radius: var(--radius-sm);
   padding: 16px;
 }

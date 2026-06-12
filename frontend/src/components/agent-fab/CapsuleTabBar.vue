@@ -85,7 +85,7 @@ defineEmits<{
 .capsule-tab-bar--nurse .capsule-tab-bar__item--active {
   background: var(--nurse-accent-gradient);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {

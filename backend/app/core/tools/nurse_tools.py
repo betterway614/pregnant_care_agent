@@ -106,6 +106,35 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
 
 
 @tool
+async def agno_list_patients(run_context: RunContext | None = None) -> dict:
+    """查询系统中所有孕妇的基本信息列表。
+    当护士需要查看当前管理的所有孕妇ID、姓名、孕周和风险标签时使用此工具。
+    不需要指定 pregnant_id，自动返回全部孕妇。异步安全。"""
+    def _list():
+        from ...database import SessionLocal
+        from ...models import Pregnant
+
+        db = SessionLocal()
+        try:
+            patients = db.query(Pregnant).all()
+            result = [
+                {
+                    "pregnant_id": p.pregnant_id,
+                    "display_name": p.display_name,
+                    "gestational_age_days": p.gestational_age_days or 0,
+                    "gestational_week": f"{(p.gestational_age_days or 0) // 7}+{(p.gestational_age_days or 0) % 7}",
+                    "risk_tags": p.risk_tags or [],
+                }
+                for p in patients
+            ]
+            return {"patients": result, "total": len(result)}
+        finally:
+            db.close()
+
+    return await asyncio.to_thread(_list)
+
+
+@tool
 async def agno_create_followup_record(
     pregnant_id: str = "", chief_complaint: str = "", summary: str = "",
     run_context: RunContext | None = None,

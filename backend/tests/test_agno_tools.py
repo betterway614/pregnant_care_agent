@@ -279,7 +279,7 @@ def test_nurse_tool_groups_tool_count():
     assert len(NURSE_TOOL_GROUPS["analyze"]) == 3
     assert len(NURSE_TOOL_GROUPS["followup"]) == 2
     assert len(NURSE_TOOL_GROUPS["report"]) == 2
-    assert len(NURSE_TOOL_GROUPS["chat"]) == 2
+    assert len(NURSE_TOOL_GROUPS["chat"]) == 3
 
 
 def test_doctor_tool_groups_exist():

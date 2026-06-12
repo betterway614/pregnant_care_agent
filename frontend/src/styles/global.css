@@ -88,10 +88,10 @@
   --doctor-accent-light: #34d399;
   --doctor-accent-bg: rgba(16, 185, 129, 0.08);
   --doctor-accent-gradient: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-  --nurse-accent: #6366f1;
-  --nurse-accent-light: #818cf8;
-  --nurse-accent-bg: rgba(99, 102, 241, 0.08);
-  --nurse-accent-gradient: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  --nurse-accent: #2E7D32;
+  --nurse-accent-light: #66BB6A;
+  --nurse-accent-bg: rgba(46, 125, 50, 0.08);
+  --nurse-accent-gradient: linear-gradient(135deg, #66BB6A 0%, #2E7D32 100%);
 
   /* FAB 面板统一尺寸 */
   --fab-panel-width: 400px;

@@ -12,7 +12,7 @@ from .health_data_tools import (
     agno_analyze_health_trends, agno_get_epds_result,
 )
 from .vital_rules_tools import agno_evaluate_vital_rules
-from .nurse_tools import agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor
+from .nurse_tools import agno_list_patients, agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor
 from .doctor_tools import (
     agno_analyze_patient_comprehensive, agno_generate_medical_order,
     agno_handle_issue, agno_query_clinical_guideline,
@@ -30,7 +30,7 @@ MEDICAL_TOOLS = [
 # ==================== 护士端 Agent 工具集 ====================
 
 NURSE_TOOLS = [
-    agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor,
+    agno_list_patients, agno_query_patient_data, agno_create_followup_record, agno_report_issue_to_doctor,
     agno_analyze_health_trends, agno_evaluate_vital_rules,
 ]
 
@@ -67,7 +67,7 @@ NURSE_TOOL_GROUPS: dict[str, list] = {
     "analyze": [agno_query_patient_data, agno_analyze_health_trends, agno_evaluate_vital_rules],
     "followup": [agno_create_followup_record, agno_query_patient_data],
     "report": [agno_report_issue_to_doctor, agno_query_patient_data],
-    "chat": [agno_query_patient_data, agno_analyze_health_trends],
+    "chat": [agno_list_patients, agno_query_patient_data, agno_analyze_health_trends],
 }
 
 DOCTOR_TOOL_GROUPS: dict[str, list] = {
