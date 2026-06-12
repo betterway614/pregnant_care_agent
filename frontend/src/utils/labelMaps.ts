@@ -215,7 +215,7 @@ const EXAM_LABEL_MAP: Record<string, string> = {
 }
 
 /** 生化指标字段中文映射 */
-const LAB_LABEL_MAP: Record<string, string> = {
+export const LAB_LABEL_MAP: Record<string, string> = {
   hemoglobin_g_L: '血红蛋白(g/L)',
   urine_protein: '尿蛋白',
   blood_sugar_fasting: '空腹血糖(mmol/L)',

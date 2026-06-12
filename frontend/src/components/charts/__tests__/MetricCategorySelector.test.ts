@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
   CATEGORIES, LAB_CATEGORY, getAllCategories,
   getCategory, getCategoryMetrics,
+  TREND_NAME_MAP, LAB_LABEL_MAP,
 } from '../../../utils/labelMaps'
 import type { IndicatorCategory } from '../../../utils/labelMaps'
 
@@ -227,6 +228,44 @@ describe('MetricCategorySelector 状态逻辑', () => {
       const result = switchToCategory(state, 'blood_sugar')
       // 应该是血糖的两个指标，不包含之前的生命体征指标
       expect(result).toEqual(['blood_sugar_fasting', 'blood_sugar_postprandial'])
+    })
+  })
+
+  describe('getLabel — 中英文映射', () => {
+    function getLabel(metric: string): string {
+      const t = TREND_NAME_MAP[metric]
+      if (t) return t
+      const l = LAB_LABEL_MAP[metric]
+      if (l) return l
+      return metric
+    }
+
+    it('体重应返回中文 体重', () => {
+      expect(getLabel('weight')).toBe('体重')
+    })
+
+    it('ALT 应返回中文而非 alt', () => {
+      const label = getLabel('alt')
+      expect(label).not.toBe('alt')
+      expect(label).toContain('谷丙转氨酶')
+    })
+
+    it('血红蛋白应返回中文而非 hemoglobin_g_L', () => {
+      const label = getLabel('hemoglobin_g_L')
+      expect(label).not.toBe('hemoglobin_g_L')
+      expect(label).toContain('血红蛋白')
+    })
+
+    it('所有 10 个化验指标应返回中文名', () => {
+      for (const m of LAB_CATEGORY.metrics) {
+        const label = getLabel(m)
+        expect(label).not.toBe(m)
+        expect(label.length).toBeGreaterThan(1)
+      }
+    })
+
+    it('未知指标返回原始 key', () => {
+      expect(getLabel('unknown_xyz')).toBe('unknown_xyz')
     })
   })
 

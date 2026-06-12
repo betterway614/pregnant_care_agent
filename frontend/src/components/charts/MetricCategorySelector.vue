@@ -46,8 +46,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { getAllCategories, type IndicatorCategory } from '@/utils/labelMaps'
-import { trendName, labLabel } from '@/utils/labelMaps'
+import { getAllCategories, type IndicatorCategory, TREND_NAME_MAP, LAB_LABEL_MAP } from '@/utils/labelMaps'
 
 const props = withDefaults(defineProps<{
   modelValue: string[]
@@ -128,7 +127,12 @@ function switchToCategory(catKey: string) {
 }
 
 function getLabel(metric: string): string {
-  return trendName(metric) || labLabel(metric) || metric
+  // trendName 对化验指标会返回英文 key，需显式判断后再走 labLabel
+  const t = TREND_NAME_MAP[metric]
+  if (t) return t
+  const l = LAB_LABEL_MAP[metric]
+  if (l) return l
+  return metric
 }
 </script>
 
