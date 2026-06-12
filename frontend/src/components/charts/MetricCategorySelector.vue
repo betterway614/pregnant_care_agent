@@ -6,9 +6,8 @@
         v-for="cat in visibleCategories"
         :key="cat.key"
         :class="['cat-tab', { active: activeCategory === cat.key }]"
-        @click="activeCategory = cat.key"
+        @click="switchToCategory(cat.key)"
       >
-        <span class="cat-icon">{{ cat.icon }}</span>
         <span class="cat-name">{{ cat.name }}</span>
         <span class="cat-count">{{ selectedInCategory(cat).length }}/{{ cat.metrics.length }}</span>
       </button>
@@ -20,8 +19,7 @@
         <span class="cat-desc">{{ currentCategory.description }}</span>
         <el-button
           size="small"
-          text
-          type="primary"
+          :class="['toggle-all-btn', { 'is-deselect': isAllSelected(currentCategory) }]"
           @click="toggleAll(currentCategory)"
         >
           {{ isAllSelected(currentCategory) ? '取消全选' : '全选' }}
@@ -44,23 +42,8 @@
         v-if="currentCategory.comboGroups?.length"
         class="combo-hint"
       >
-        💡 {{ currentCategory.comboGroups.map(g => g.name).join('、') }}已配对显示
+        {{ currentCategory.comboGroups.map(g => g.name).join('、') }}已配对显示
       </div>
-    </div>
-
-    <!-- 已选指标摘要 -->
-    <div class="selected-summary" v-if="selectedMetrics.length">
-      <span class="summary-label">已选 {{ selectedMetrics.length }} 项：</span>
-      <el-tag
-        v-for="m in selectedMetrics"
-        :key="m"
-        size="small"
-        :color="getMetricColor(m)"
-        closable
-        @close="toggleMetric(m, false)"
-      >
-        {{ getLabel(m) }}
-      </el-tag>
     </div>
   </div>
 </template>
@@ -68,15 +51,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import {
-  CATEGORIES, LAB_CATEGORY, getAllCategories,
+  getAllCategories,
   type IndicatorCategory,
 } from '@/utils/labelMaps'
 import { trendName, labLabel } from '@/utils/labelMaps'
 
 const props = withDefaults(defineProps<{
-  modelValue: string[]             // 已选的 metric codes
-  categories?: ('vital_signs' | 'blood_sugar' | 'daily_tracking' | 'fetal' | 'lab_tests')[]  // 允许的分类
-  disabledMetrics?: string[]       // 禁用的指标（如已配对管理的）
+  modelValue: string[]
+  categories?: ('vital_signs' | 'blood_sugar' | 'daily_tracking' | 'fetal' | 'lab_tests')[]
+  disabledMetrics?: string[]
   role?: 'pregnant' | 'nurse' | 'doctor'
 }>(), {
   modelValue: () => [],
@@ -91,27 +74,23 @@ const emit = defineEmits<{
 
 const activeCategory = ref(props.categories[0])
 
-// 可见的分类（按 props.categories 过滤）
 const visibleCategories = computed(() => {
   const all = getAllCategories()
   return all.filter(c => props.categories.includes(c.key as any))
 })
 
-// 当前激活的分类
 const currentCategory = computed(() =>
   visibleCategories.value.find(c => c.key === activeCategory.value)
 )
 
-// 选中的指标
 const selectedMetrics = computed(() => props.modelValue)
 
 function isSelected(metric: string): boolean {
   return props.modelValue.includes(metric)
 }
 
-function selectedInCategory(cat: IndicatorCategory): number[] {
-  // bug compatibility: return number[]
-  return cat.metrics.filter(m => props.modelValue.includes(m)) as any
+function selectedInCategory(cat: IndicatorCategory): string[] {
+  return cat.metrics.filter(m => props.modelValue.includes(m))
 }
 
 function isAllSelected(cat: IndicatorCategory): boolean {
@@ -127,39 +106,32 @@ function toggleMetric(metric: string, checked: boolean) {
 
 function toggleAll(cat: IndicatorCategory) {
   if (isAllSelected(cat)) {
-    // 取消全选
     emit('update:modelValue', props.modelValue.filter(m => !cat.metrics.includes(m)))
   } else {
-    // 全选
     emit('update:modelValue', [...new Set([...props.modelValue, ...cat.metrics])])
   }
 }
 
+/** 切换分类时自动全选该分类下的所有指标 */
+function switchToCategory(catKey: string) {
+  activeCategory.value = catKey
+  const cat = visibleCategories.value.find(c => c.key === catKey)
+  if (cat) {
+    emit('update:modelValue', [...cat.metrics])
+  }
+}
+
 function getLabel(metric: string): string {
-  // 尝试从健康指标和化验指标中查找
   return trendName(metric) || labLabel(metric) || metric
-}
-
-const METRIC_COLORS_MAP: Record<string, string> = {
-  weight: '#8B5CF6', systolic: '#EF4444', diastolic: '#F97316',
-  blood_sugar_fasting: '#EC4899', blood_sugar_postprandial: '#F472B6',
-  fetal_movement: '#06B6D4', heart_rate: '#10B981',
-  sleep_hours: '#6366F1', steps: '#F59E0B', emotion_score: '#8B5CF6',
-  hemoglobin_g_L: '#EF4444', alt: '#F97316', ast: '#F59E0B',
-  creatinine: '#10B981', uric_acid: '#06B6D4', albumin: '#8B5CF6',
-  wbc: '#EC4899', platelet: '#6366F1', hct: '#F472B6', bilirubin_total: '#84CC16',
-}
-
-function getMetricColor(metric: string): string {
-  return METRIC_COLORS_MAP[metric] || '#909399'
 }
 </script>
 
 <style scoped>
 .metric-category-selector {
-  --cat-active: #409EFF;
-  --cat-hover: #ECF5FF;
-  --cat-bg: #F5F7FA;
+  --cat-active: #FB7185;
+  --cat-hover: #FFF1F2;
+  --cat-bg: #FDF2F4;
+  --cat-active-bg: #FFF5F5;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -169,7 +141,7 @@ function getMetricColor(metric: string): string {
   gap: 4px;
   padding: 8px 12px 0;
   background: var(--cat-bg);
-  border-bottom: 1px solid #E4E7ED;
+  border-bottom: 1px solid #FEE2E2;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -197,22 +169,21 @@ function getMetricColor(metric: string): string {
   border-bottom-color: var(--cat-active);
   font-weight: 600;
 }
-.cat-icon { font-size: 16px; }
 .cat-count {
   font-size: 11px;
   color: #909399;
-  background: #F2F6FC;
+  background: #FEE2E2;
   padding: 1px 6px;
   border-radius: 10px;
 }
 .cat-tab.active .cat-count {
-  background: #ECF5FF;
+  background: #FECACA;
   color: var(--cat-active);
 }
 
 .category-metrics {
   padding: 12px 16px;
-  background: #fff;
+  background: var(--cat-active-bg);
 }
 .cat-header {
   display: flex;
@@ -237,18 +208,24 @@ function getMetricColor(metric: string): string {
   color: #E6A23C;
 }
 
-.selected-summary {
-  padding: 8px 16px 12px;
-  background: #fff;
-  border-top: 1px solid #EBEEF5;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+/* 全选/取消按钮 — 粉色主题 */
+.toggle-all-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--cat-active);
+  color: var(--cat-active);
+  background: transparent;
+  transition: all .2s;
 }
-.summary-label {
-  font-size: 11px;
-  color: #909399;
-  margin-right: 4px;
+.toggle-all-btn:hover {
+  background: var(--cat-hover);
+}
+.toggle-all-btn.is-deselect {
+  background: var(--cat-active);
+  color: #fff;
+}
+.toggle-all-btn.is-deselect:hover {
+  background: #F43F5E;
 }
 </style>

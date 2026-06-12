@@ -1588,8 +1588,7 @@ onMounted(async () => {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   grid-template-columns: 100%;
-  height: 100vh;
-  height: 100dvh; /* 动态视口高度，正确处理移动端浏览器导航栏 */
+  height: 100%;
   position: relative;
   overflow: hidden;
   font-family: 'Nunito Sans', 'PingFang SC', sans-serif;

@@ -398,11 +398,16 @@ class TestPregnancyDiaryService:
             sq.filter.return_value = sq
             sq.order_by.return_value = sq
             sq.all.return_value = summaries_per_week or []
+            # query(HealthDataPoint).filter(...).order_by(...).all() -> []
+            hpq = MagicMock()
+            hpq.filter.return_value = hpq
+            hpq.order_by.return_value = hpq
+            hpq.all.return_value = []
             # query(Alert).filter(...).count() -> 0
             aq = MagicMock()
             aq.filter.return_value = aq
             aq.count.return_value = 0
-            queries.extend([sq, aq])
+            queries.extend([sq, hpq, aq])
 
         db.query.side_effect = queries
         return db
@@ -440,7 +445,7 @@ class TestPregnancyDiaryService:
     def test_narrative_is_chinese_string(self):
         """AI 叙述是中文字符串"""
         svc = PregnancyDiaryService()
-        narrative = svc._generate_narrative(28, 0.5, (120, 80), 4.0, False)
+        narrative = svc._generate_narrative(28, 0.5, (120, 80), 4.0, has_abnormal=False)
         assert isinstance(narrative, str)
         assert len(narrative) > 0
         assert any('一' <= c <= '鿿' for c in narrative)
@@ -448,7 +453,7 @@ class TestPregnancyDiaryService:
     def test_narrative_handles_abnormal(self):
         """异常数据时叙述应包含关注提示"""
         svc = PregnancyDiaryService()
-        narrative = svc._generate_narrative(32, 3.0, (145, 95), 2.0, True)
+        narrative = svc._generate_narrative(32, 3.0, (145, 95), 2.0, has_abnormal=True)
         assert isinstance(narrative, str)
         assert len(narrative) > 0
 

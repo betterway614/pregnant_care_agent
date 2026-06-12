@@ -11,7 +11,7 @@ from sqlalchemy import func
 from pydantic import BaseModel
 from loguru import logger
 
-from ..models import DailyHealthSummary, Pregnant, Alert
+from ..models import DailyHealthSummary, HealthDataPoint, Pregnant, Alert
 from ..utils.timezone import beijing_now
 
 
@@ -27,6 +27,10 @@ class DiaryWeekSummary(BaseModel):
     bp_summary: Optional[str] = None
     fetal_movement_summary: Optional[str] = None
     mood_summary: Optional[str] = None
+    blood_sugar_summary: Optional[str] = None
+    heart_rate_summary: Optional[str] = None
+    sleep_summary: Optional[str] = None
+    steps_summary: Optional[str] = None
     highlights: List[str] = []
     ai_narrative: str = ""
     mood_emoji: str = ""
@@ -115,6 +119,14 @@ class PregnancyDiaryService:
                 DailyHealthSummary.date <= week_end,
             ).order_by(DailyHealthSummary.date.asc()).all()
 
+            # 查询该周的 HealthDataPoint（心率/睡眠/步数等 DailyHealthSummary 未涵盖的指标）
+            extra_points = db.query(HealthDataPoint).filter(
+                HealthDataPoint.pregnant_id == pregnant_id,
+                HealthDataPoint.metric_code.in_(["heart_rate", "sleep_hours", "steps"]),
+                HealthDataPoint.recorded_at >= datetime.combine(week_start, datetime.min.time()),
+                HealthDataPoint.recorded_at <= datetime.combine(week_end, datetime.max.time()),
+            ).order_by(HealthDataPoint.recorded_at.asc()).all()
+
             # 该周是否有预警
             has_abnormal = db.query(Alert).filter(
                 Alert.pregnant_id == pregnant_id,
@@ -126,6 +138,7 @@ class PregnancyDiaryService:
                 week_num=week_num,
                 date_range=date_range,
                 summaries=summaries,
+                extra_points=extra_points,
                 has_abnormal=has_abnormal,
             )
             entries.append(entry)
@@ -156,11 +169,12 @@ class PregnancyDiaryService:
         week_num: int,
         date_range: str,
         summaries: List[DailyHealthSummary],
+        extra_points: List[HealthDataPoint],
         has_abnormal: bool,
     ) -> DiaryWeekSummary:
         """汇总一周数据，构建 DiaryWeekSummary"""
 
-        if not summaries:
+        if not summaries and not extra_points:
             return DiaryWeekSummary(
                 week=week_num,
                 date_range=date_range,
@@ -168,12 +182,19 @@ class PregnancyDiaryService:
                 bp_summary="本周暂无血压记录",
                 fetal_movement_summary="本周暂无胎动记录",
                 mood_summary="本周暂无情绪记录",
+                blood_sugar_summary="本周暂无血糖记录",
+                heart_rate_summary="本周暂无心率记录",
+                sleep_summary="本周暂无睡眠记录",
+                steps_summary="本周暂无步数记录",
                 highlights=[],
                 ai_narrative=self._generate_narrative(
                     week=week_num,
                     weight_delta=None,
                     avg_bp=None,
                     avg_fetal=None,
+                    avg_blood_sugar_fasting=None,
+                    avg_heart_rate=None,
+                    avg_sleep=None,
                     has_abnormal=has_abnormal,
                 ),
                 mood_emoji="📝",
@@ -225,9 +246,55 @@ class PregnancyDiaryService:
             mood_desc = self._mood_text(avg_mood)
             mood_summary = f"本周心情整体{mood_desc}，记录 {len(mood_values)} 次"
 
+        # -- 血糖 --
+        bs_fasting_vals = [
+            s.blood_sugar_fasting for s in summaries
+            if s.blood_sugar_fasting is not None
+        ]
+        bs_postprandial_vals = [
+            s.blood_sugar_postprandial for s in summaries
+            if s.blood_sugar_postprandial is not None
+        ]
+        blood_sugar_summary = None
+        avg_blood_sugar_fasting = None
+        if bs_fasting_vals or bs_postprandial_vals:
+            parts = []
+            if bs_fasting_vals:
+                avg_blood_sugar_fasting = sum(bs_fasting_vals) / len(bs_fasting_vals)
+                parts.append(f"空腹平均 {avg_blood_sugar_fasting:.1f} mmol/L（{len(bs_fasting_vals)}次）")
+            if bs_postprandial_vals:
+                avg_post = sum(bs_postprandial_vals) / len(bs_postprandial_vals)
+                parts.append(f"餐后平均 {avg_post:.1f} mmol/L（{len(bs_postprandial_vals)}次）")
+            blood_sugar_summary = "；".join(parts)
+
+        # -- 心率 / 睡眠 / 步数（来自 HealthDataPoint） --
+        hr_values = [p.value for p in extra_points if p.metric_code == "heart_rate"]
+        sleep_values = [p.value for p in extra_points if p.metric_code == "sleep_hours"]
+        steps_values = [p.value for p in extra_points if p.metric_code == "steps"]
+
+        heart_rate_summary = None
+        avg_heart_rate = None
+        if hr_values:
+            avg_heart_rate = sum(hr_values) / len(hr_values)
+            heart_rate_summary = f"平均心率 {avg_heart_rate:.0f} bpm，记录 {len(hr_values)} 次"
+
+        sleep_summary = None
+        avg_sleep = None
+        if sleep_values:
+            avg_sleep = sum(sleep_values) / len(sleep_values)
+            sleep_summary = f"平均睡眠 {avg_sleep:.1f} 小时，记录 {len(sleep_values)} 次"
+
+        steps_summary = None
+        if steps_values:
+            avg_steps = sum(steps_values) / len(steps_values)
+            steps_summary = f"日均 {avg_steps:.0f} 步，记录 {len(steps_values)} 次"
+
         # -- 亮点 --
         highlights = self._collect_highlights(
-            summaries, weight_delta, avg_bp, avg_fetal, has_abnormal
+            summaries, weight_delta, avg_bp, avg_fetal, has_abnormal,
+            avg_blood_sugar_fasting=avg_blood_sugar_fasting,
+            avg_heart_rate=avg_heart_rate,
+            avg_sleep=avg_sleep,
         )
 
         # -- 生成叙事 --
@@ -236,6 +303,9 @@ class PregnancyDiaryService:
             weight_delta=weight_delta,
             avg_bp=avg_bp,
             avg_fetal=avg_fetal,
+            avg_blood_sugar_fasting=avg_blood_sugar_fasting,
+            avg_heart_rate=avg_heart_rate,
+            avg_sleep=avg_sleep,
             has_abnormal=has_abnormal,
         )
 
@@ -246,6 +316,10 @@ class PregnancyDiaryService:
             bp_summary=bp_summary,
             fetal_movement_summary=fetal_summary,
             mood_summary=mood_summary,
+            blood_sugar_summary=blood_sugar_summary,
+            heart_rate_summary=heart_rate_summary,
+            sleep_summary=sleep_summary,
+            steps_summary=steps_summary,
             highlights=highlights,
             ai_narrative=narrative,
             mood_emoji=_mood_emoji(avg_mood),
@@ -271,6 +345,9 @@ class PregnancyDiaryService:
         avg_bp: Optional[tuple],
         avg_fetal: Optional[float],
         has_abnormal: bool,
+        avg_blood_sugar_fasting: Optional[float] = None,
+        avg_heart_rate: Optional[float] = None,
+        avg_sleep: Optional[float] = None,
     ) -> List[str]:
         """收集本周亮点与提醒"""
         highlights: List[str] = []
@@ -302,6 +379,26 @@ class PregnancyDiaryService:
             else:
                 highlights.append("胎动偏少，请密切关注")
 
+        if avg_blood_sugar_fasting is not None:
+            if 3.3 <= avg_blood_sugar_fasting <= 5.1:
+                highlights.append("空腹血糖正常，继续保持")
+            elif avg_blood_sugar_fasting > 5.1:
+                highlights.append("空腹血糖偏高，建议咨询医生调整饮食")
+            else:
+                highlights.append("空腹血糖偏低，注意及时补充营养")
+
+        if avg_heart_rate is not None:
+            if 60 <= avg_heart_rate <= 100:
+                highlights.append("心率正常，状态不错")
+            elif avg_heart_rate > 100:
+                highlights.append("心率偏快，注意休息和情绪调节")
+
+        if avg_sleep is not None:
+            if 7 <= avg_sleep <= 9:
+                highlights.append("睡眠充足，很好")
+            elif avg_sleep < 7:
+                highlights.append("睡眠略少，尽量早点休息哦")
+
         if has_abnormal:
             highlights.append("本周有健康预警，请及时查看并遵医嘱")
 
@@ -318,7 +415,10 @@ class PregnancyDiaryService:
         weight_delta: Optional[float],
         avg_bp: Optional[tuple],
         avg_fetal: Optional[float],
-        has_abnormal: bool,
+        avg_blood_sugar_fasting: Optional[float] = None,
+        avg_heart_rate: Optional[float] = None,
+        avg_sleep: Optional[float] = None,
+        has_abnormal: bool = False,
     ) -> str:
         """生成个性化的温暖中文叙事
 
@@ -327,6 +427,9 @@ class PregnancyDiaryService:
             weight_delta: 本周体重变化（末值-首值），None 表示无数据
             avg_bp: 平均血压 (收缩压, 舒张压)，None 表示无数据
             avg_fetal: 平均胎动次数/小时，None 表示无数据
+            avg_blood_sugar_fasting: 平均空腹血糖 mmol/L，None 表示无数据
+            avg_heart_rate: 平均心率 bpm，None 表示无数据
+            avg_sleep: 平均睡眠时长 小时，None 表示无数据
             has_abnormal: 本周是否有预警
 
         Returns:
@@ -407,6 +510,63 @@ class PregnancyDiaryService:
                     "但如果持续感觉不到胎动，请及时就医。"
                 )
 
+        # -- 血糖叙述 --
+        blood_sugar_text = ""
+        if avg_blood_sugar_fasting is not None:
+            if 3.3 <= avg_blood_sugar_fasting <= 5.1:
+                blood_sugar_text = (
+                    f"空腹血糖控制得很好（平均 {avg_blood_sugar_fasting:.1f} mmol/L），"
+                    "在正常范围内，继续保持这样的饮食习惯吧。"
+                )
+            elif avg_blood_sugar_fasting > 5.1:
+                blood_sugar_text = (
+                    f"空腹血糖略偏高（平均 {avg_blood_sugar_fasting:.1f} mmol/L），"
+                    "建议减少高糖食物摄入，适当增加散步，并遵医嘱监测。"
+                )
+            else:
+                blood_sugar_text = (
+                    f"空腹血糖偏低（平均 {avg_blood_sugar_fasting:.1f} mmol/L），"
+                    "注意按时进餐，随身备一些健康零食以防低血糖。"
+                )
+
+        # -- 心率叙述 --
+        heart_rate_text = ""
+        if avg_heart_rate is not None:
+            if 60 <= avg_heart_rate <= 100:
+                heart_rate_text = (
+                    f"心率很平稳（平均 {avg_heart_rate:.0f} bpm），"
+                    "说明身体状态不错，继续保持规律作息哦。"
+                )
+            elif avg_heart_rate > 100:
+                heart_rate_text = (
+                    f"心率稍快（平均 {avg_heart_rate:.0f} bpm），"
+                    "孕期心脏负担增加是正常的，但要注意休息，避免过度劳累。"
+                )
+            else:
+                heart_rate_text = (
+                    f"心率偏低（平均 {avg_heart_rate:.0f} bpm），"
+                    "如果没有不适可以不必担心，但建议下次产检时告知医生。"
+                )
+
+        # -- 睡眠叙述 --
+        sleep_text = ""
+        if avg_sleep is not None:
+            if 7 <= avg_sleep <= 9:
+                sleep_text = (
+                    f"睡眠很充足呢（平均每晚 {avg_sleep:.1f} 小时），"
+                    "好的睡眠是宝宝健康发育的重要保障。"
+                )
+            elif avg_sleep < 7:
+                sleep_text = (
+                    f"睡眠时间略少（平均每晚 {avg_sleep:.1f} 小时），"
+                    "孕期容易疲劳，尽量早点休息，午间也可以小憩一会儿。"
+                )
+            else:
+                sleep_text = (
+                    f"睡眠时间较多（平均每晚 {avg_sleep:.1f} 小时），"
+                    "充足的休息对身体很好，但白天也可以适当活动活动哦。"
+                )
+
         # -- 异常提醒 --
         abnormal_text = ""
         if has_abnormal:
@@ -424,11 +584,18 @@ class PregnancyDiaryService:
             parts.append(bp_text)
         if fetal_text:
             parts.append(fetal_text)
+        if blood_sugar_text:
+            parts.append(blood_sugar_text)
+        if heart_rate_text:
+            parts.append(heart_rate_text)
+        if sleep_text:
+            parts.append(sleep_text)
         if abnormal_text:
             parts.append(abnormal_text)
 
         # 如果所有数据都为空，给一段安慰的话
-        if not (weight_text or bp_text or fetal_text or abnormal_text):
+        if not (weight_text or bp_text or fetal_text or blood_sugar_text
+                or heart_rate_text or sleep_text or abnormal_text):
             parts.append(
                 "这周的健康记录还不太完整，"
                 "记得每天花几分钟记录一下身体状况，"

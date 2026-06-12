@@ -4,7 +4,10 @@
     <div class="diary-nav">
       <el-page-header @back="$router.back()">
         <template #content>
-          <span class="diary-nav-title">📔 孕期日记</span>
+          <span class="diary-nav-title">
+            <el-icon :size="18" style="vertical-align: middle; margin-right: 4px;"><Notebook /></el-icon>
+            孕期日记
+          </span>
         </template>
       </el-page-header>
     </div>
@@ -17,7 +20,9 @@
 
     <!-- 空状态 -->
     <div v-else-if="!entries.length" class="diary-empty">
-      <div class="diary-empty-icon">📔</div>
+      <div class="diary-empty-icon">
+        <el-icon :size="64" color="#FB7185"><Notebook /></el-icon>
+      </div>
       <p class="diary-empty-title">还没有日记哦</p>
       <p class="diary-empty-desc">记录你的健康数据，我会帮你生成温馨的孕期周记</p>
       <button class="diary-empty-btn" @click="$router.push('/pregnant/tools/health-record')">去记录数据</button>
@@ -28,7 +33,10 @@
       <!-- 头部信息 -->
       <div class="diary-hero">
         <div class="diary-hero-week">孕 {{ currentWeek }} 周</div>
-        <div class="diary-hero-desc">这是属于你和宝宝的专属记忆 ✨</div>
+        <div class="diary-hero-desc">
+          这是属于你和宝宝的专属记忆
+          <el-icon :size="14" style="vertical-align: middle;"><MagicStick /></el-icon>
+        </div>
       </div>
 
       <!-- 周记列表 -->
@@ -39,8 +47,8 @@
           class="diary-entry"
         >
           <!-- 时间线节点 -->
-          <div class="timeline-dot" :class="entry.mood_emoji === '😟' ? 'dot-warn' : 'dot-normal'">
-            <span class="timeline-emoji">{{ entry.mood_emoji || '📝' }}</span>
+          <div class="timeline-dot" :class="isMoodWarn(entry.mood_emoji) ? 'dot-warn' : 'dot-normal'">
+            <span class="timeline-icon" v-html="getMoodIconSvg(entry.mood_emoji)"></span>
           </div>
 
           <!-- 卡片内容 -->
@@ -58,20 +66,36 @@
             <!-- 健康摘要 -->
             <div class="diary-metrics">
               <div class="metric-item" v-if="entry.weight_summary">
-                <span class="metric-icon">⚖️</span>
+                <el-icon class="metric-icon" :size="16"><ScaleToOriginal /></el-icon>
                 <span class="metric-text">{{ entry.weight_summary }}</span>
               </div>
               <div class="metric-item" v-if="entry.bp_summary">
-                <span class="metric-icon">💓</span>
+                <span class="metric-icon" v-html="HEART_SVG"></span>
                 <span class="metric-text">{{ entry.bp_summary }}</span>
               </div>
               <div class="metric-item" v-if="entry.fetal_movement_summary">
-                <span class="metric-icon">👣</span>
+                <span class="metric-icon" v-html="FOOTPRINTS_SVG"></span>
                 <span class="metric-text">{{ entry.fetal_movement_summary }}</span>
               </div>
               <div class="metric-item" v-if="entry.mood_summary">
-                <span class="metric-icon">😊</span>
+                <span class="metric-icon" v-html="SMILE_SVG"></span>
                 <span class="metric-text">{{ entry.mood_summary }}</span>
+              </div>
+              <div class="metric-item" v-if="entry.blood_sugar_summary">
+                <span class="metric-icon" v-html="DROPLETS_SVG"></span>
+                <span class="metric-text">{{ entry.blood_sugar_summary }}</span>
+              </div>
+              <div class="metric-item" v-if="entry.heart_rate_summary">
+                <span class="metric-icon" v-html="HEARTBEAT_SVG"></span>
+                <span class="metric-text">{{ entry.heart_rate_summary }}</span>
+              </div>
+              <div class="metric-item" v-if="entry.sleep_summary">
+                <el-icon class="metric-icon" :size="16"><MoonNight /></el-icon>
+                <span class="metric-text">{{ entry.sleep_summary }}</span>
+              </div>
+              <div class="metric-item" v-if="entry.steps_summary">
+                <el-icon class="metric-icon" :size="16"><Odometer /></el-icon>
+                <span class="metric-text">{{ entry.steps_summary }}</span>
               </div>
             </div>
 
@@ -97,6 +121,15 @@
 import { ref, onMounted } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import { diaryApi } from '@/api/endpoints'
+import {
+  getMoodIconSvg,
+  isMoodWarn,
+  HEART_SVG,
+  FOOTPRINTS_SVG,
+  SMILE_SVG,
+  DROPLETS_SVG,
+  HEARTBEAT_SVG,
+} from '@/utils/diaryIcons'
 
 interface DiaryWeekSummary {
   week: number
@@ -105,6 +138,10 @@ interface DiaryWeekSummary {
   bp_summary?: string
   fetal_movement_summary?: string
   mood_summary?: string
+  blood_sugar_summary?: string
+  heart_rate_summary?: string
+  sleep_summary?: string
+  steps_summary?: string
   highlights: string[]
   ai_narrative: string
   mood_emoji: string
@@ -151,6 +188,8 @@ onMounted(() => { fetchDiary() })
 .diary-nav-title {
   font-size: 18px;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* 加载 */
@@ -174,7 +213,12 @@ onMounted(() => { fetchDiary() })
   padding: 32px;
   text-align: center;
 }
-.diary-empty-icon { font-size: 64px; margin-bottom: 16px; }
+.diary-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
 .diary-empty-title { font-size: 18px; font-weight: 600; color: #1E293B; margin-bottom: 8px; }
 .diary-empty-desc { font-size: 14px; color: #94A3B8; margin-bottom: 24px; }
 .diary-empty-btn {
@@ -237,9 +281,16 @@ onMounted(() => { fetchDiary() })
   z-index: 1;
   margin-top: 16px;
 }
-.dot-normal { background: #FDF2F8; border: 2px solid #FB7185; }
-.dot-warn { background: #FFF7ED; border: 2px solid #F59E0B; }
-.timeline-emoji { font-size: 16px; }
+.dot-normal { background: #FDF2F8; border: 2px solid #FB7185; color: #FB7185; }
+.dot-warn { background: #FFF7ED; border: 2px solid #F59E0B; color: #F59E0B; }
+.timeline-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.timeline-icon :deep(svg) { width: 100%; height: 100%; }
 
 /* 日记卡片 */
 .diary-card {
@@ -294,7 +345,16 @@ onMounted(() => { fetchDiary() })
   font-size: 13px;
   color: #64748B;
 }
-.metric-icon { font-size: 16px; }
+.metric-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #FB7185;
+}
+.metric-icon :deep(svg) { width: 100%; height: 100%; }
 
 /* 亮点标签 */
 .diary-highlights {

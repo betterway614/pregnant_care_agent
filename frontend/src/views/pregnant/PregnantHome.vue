@@ -268,7 +268,7 @@
 
             <!-- 孕期日记入口 -->
             <div class="diary-entry-card glass-card interactive-card" @click="router.push('/pregnant/diary')">
-              <div class="diary-entry-icon">📔</div>
+              <el-icon class="diary-entry-icon" :size="32" color="#FB7185"><Notebook /></el-icon>
               <div class="diary-entry-content">
                 <div class="diary-entry-title">查看孕期日记</div>
                 <div class="diary-entry-desc">AI 为你记录的每周孕期故事</div>
@@ -1099,7 +1099,7 @@ onActivated(() => {
   background: linear-gradient(135deg, rgba(253, 242, 248, 0.8), rgba(255, 255, 255, 0.7)) !important;
   border: 1px solid rgba(251, 113, 133, 0.2);
 }
-.diary-entry-icon { font-size: 32px; }
+.diary-entry-icon { flex-shrink: 0; }
 .diary-entry-content { flex: 1; }
 .diary-entry-title { font-size: 15px; font-weight: 600; color: var(--c-slate-800); margin-bottom: 2px; }
 .diary-entry-desc { font-size: 12px; color: var(--c-slate-400); }
