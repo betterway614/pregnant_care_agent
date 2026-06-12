@@ -104,6 +104,8 @@ followup_fsm = FollowUpStateMachine()
 
 # 注册所有合法转换
 followup_fsm.add(FollowUpStatus.DRAFT, FollowUpStatus.IN_PROGRESS, "start")
+followup_fsm.add(FollowUpStatus.DRAFT, FollowUpStatus.DRAFT, "edit")  # 护士编辑草稿
+followup_fsm.add(FollowUpStatus.IN_PROGRESS, FollowUpStatus.IN_PROGRESS, "edit")  # 护士编辑进行中记录
 followup_fsm.add(FollowUpStatus.IN_PROGRESS, FollowUpStatus.COMPLETED, "complete")
 followup_fsm.add(FollowUpStatus.COMPLETED, FollowUpStatus.CONFIRMED, "confirm")
 followup_fsm.add(FollowUpStatus.COMPLETED, FollowUpStatus.DRAFT, "reject")  # 驳回重做

@@ -23,7 +23,7 @@
     <div class="search-bar">
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
-        <el-option label="草稿" value="draft" />
+        <el-option label="未填写" value="draft" />
         <el-option label="进行中" value="in_progress" />
         <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
@@ -165,7 +165,7 @@
                   size="small"
                   @click.stop="openReviewDrawer(row)"
                 >
-                  编辑归档
+                  查看/编辑
                 </el-button>
                 <el-button
                   v-else
@@ -414,16 +414,15 @@
           </div>
         </div>
 
-        <!-- draft 状态：确认归档 -->
+        <!-- draft 状态：等待孕妇填写，不可确认归档 -->
         <div class="record-actions" v-if="reviewRecord.status === 'draft'">
-          <el-button
-            type="primary"
-            :loading="confirmLoading"
-            @click="doConfirmFromDrawer('confirmed')"
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="该随访尚未被孕妇填写，无法确认归档。"
             style="flex: 1"
-          >
-            确认归档
-          </el-button>
+          />
         </div>
 
         <!-- in_progress / completed 状态：审核通过 + 上报医生 -->
@@ -525,7 +524,7 @@ const editFormAnswers = ref<Array<{ key: string; value: string }>>([])
 const drawerTitle = computed(() => {
   if (!reviewRecord.value) return '随访详情'
   const s = reviewRecord.value.status
-  if (s === 'draft') return '随访编辑 → 确认归档'
+  if (s === 'draft') return '随访草稿（等待孕妇填写）'
   if (s === 'in_progress' || s === 'completed') return '随访审核'
   return '随访记录详情'
 })
@@ -609,7 +608,7 @@ function statusLabel(status: string): string {
     confirmed: '已确认',
     completed: '已完成',
     in_progress: '进行中',
-    draft: '草稿',
+    draft: '未填写',
   }
   return map[status] || status
 }

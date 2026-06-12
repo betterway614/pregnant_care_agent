@@ -397,8 +397,12 @@ async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: S
     if not record:
         raise HTTPException(404, "记录不存在")
 
-    # 状态校验：仅 draft/in_progress 状态允许修改
-    if record.status not in ("draft", "in_progress"):
+    # 状态机校验：仅 draft/in_progress 状态允许编辑
+    try:
+        current_status = FollowUpStatus(record.status)
+    except ValueError:
+        raise HTTPException(400, f"未知状态 '{record.status}'")
+    if not followup_fsm.can_transition(current_status, "edit"):
         raise HTTPException(400, f"当前状态 '{record.status}' 不允许修改，仅 'draft' 或 'in_progress' 状态可修改")
 
     if data.summary is not None:
@@ -564,8 +568,12 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
     if not record:
         raise HTTPException(404, "随访记录不存在")
 
-    # 状态校验：已完成/已确认/已归档的记录不允许再提交
-    if record.status in ("completed", "confirmed", "archived"):
+    # 状态机校验：已完成/已确认/已归档的记录不允许再提交
+    try:
+        current_status = FollowUpStatus(record.status)
+    except ValueError:
+        raise HTTPException(400, f"未知状态 '{record.status}'")
+    if not followup_fsm.can_transition(current_status, "start") and not followup_fsm.can_transition(current_status, "complete"):
         raise HTTPException(400, f"当前状态 '{record.status}' 不允许提交回答")
 
     # 合并已有数据
@@ -580,9 +588,13 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
         # 量化数据同时写入 HealthDataPoint
         _save_health_data_point(record.pregnant_id, key, value, db)
 
-    # 状态机转换
-    if record.status == "draft":
-        record.status = FOLLOWUP_STATUS_IN_PROGRESS
+    # 状态机转换: draft → in_progress（孕妇首次提交回答）
+    if record.status == FOLLOWUP_STATUS_DRAFT:
+        try:
+            followup_fsm.transition(current_status, "start")
+            record.status = FOLLOWUP_STATUS_IN_PROGRESS
+        except InvalidTransition as e:
+            raise HTTPException(400, f"状态转换不允许: {e}")
 
     record.self_reported_data = reported_data
     record.chief_complaint = chief_complaint
@@ -606,7 +618,12 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
 
     summary = None
     if all_answered and record.status == FOLLOWUP_STATUS_IN_PROGRESS:
-        record.status = FOLLOWUP_STATUS_COMPLETED
+        # 状态机转换: in_progress → completed（全部回答完毕）
+        try:
+            followup_fsm.transition(FollowUpStatus(record.status), "complete")
+            record.status = FOLLOWUP_STATUS_COMPLETED
+        except InvalidTransition as e:
+            raise HTTPException(400, f"状态转换不允许: {e}")
         patient_name = (pregnant.nickname or pregnant.display_name) if pregnant else ""
 
         # ===== 新增：自动触发预警评估 =====

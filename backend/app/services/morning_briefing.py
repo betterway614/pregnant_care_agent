@@ -203,41 +203,42 @@ class MorningBriefingService:
         pending_reviews: int,
         total_patients: int,
     ) -> list[str]:
-        """根据当前数据动态生成 AI 推荐"""
+        """根据当前数据动态生成 AI 推荐 — 聚焦具体患者和可执行动作"""
         recs: list[str] = []
 
-        if red_patients:
+        # 红色预警：逐人给出具体建议
+        for p in red_patients:
+            alert_msg = p.latest_alert_message or "预警"
+            # 截断过长的预警消息
+            if len(alert_msg) > 40:
+                alert_msg = alert_msg[:40] + "..."
             recs.append(
-                f"今日有 {len(red_patients)} 名红色预警患者，请优先安排面诊或电话随访。"
-            )
-            # 如果有多个红色预警，建议批量处理
-            if len(red_patients) >= 3:
-                recs.append(
-                    "红色预警患者较多，建议组织科室晨会讨论高危病例。"
-                )
-
-        if orange_patients:
-            recs.append(
-                f"今日有 {len(orange_patients)} 名橙色预警患者，建议上午完成评估。"
+                f"{p.display_name}（孕{p.gest_week}周）：{alert_msg}，建议优先安排面诊或电话随访。"
             )
 
-        if yellow_patients:
+        # 如果有多个红色预警，追加批量处理建议
+        if len(red_patients) >= 3:
             recs.append(
-                f"今日有 {len(yellow_patients)} 名黄色预警患者，可在随访时一并关注。"
+                "红色预警患者较多，建议组织科室晨会集中讨论高危病例。"
             )
 
-        if pending_reviews > 0:
+        # 待审核记录堆积时提醒（不在 stat cards 中重复简单计数）
+        if pending_reviews >= 5:
             recs.append(
-                f"有 {pending_reviews} 份随访记录待审核，请及时确认。"
+                f"待审核随访记录积压 {pending_reviews} 份，建议集中处理避免超时。"
             )
 
-        if today_followups > 0:
+        # 橙色患者：只在无红色患者时给出概括性建议
+        if not red_patients and orange_patients:
+            names = "、".join(p.display_name for p in orange_patients[:3])
+            suffix = "等" if len(orange_patients) > 3 else ""
             recs.append(
-                f"今日计划随访 {today_followups} 人次，请提前准备随访资料。"
+                f"橙色关注患者：{names}{suffix}，建议上午完成评估。"
             )
 
+        # 无任何预警
         if not red_patients and not orange_patients and not yellow_patients:
-            recs.append("今日暂无 PENDING 预警，可利用空闲时间整理历史档案。")
+            recs.append("今日无高危预警，可安排常规随访和档案整理工作。")
 
         return recs
 
@@ -252,18 +253,28 @@ class MorningBriefingService:
         today_followups: int,
         pending_reviews: int,
     ) -> str:
-        """生成简短摘要"""
-        total_alerts = red_count + orange_count + yellow_count
-        parts: list[str] = [
-            f"{today.isoformat()} 晨报：",
-            f"在管孕妇 {total_patients} 人，",
-            f"当前 PENDING 预警 {total_alerts} 条"
-            f"（红 {red_count} / 橙 {orange_count} / 黄 {yellow_count}），",
-            f"今日随访 {today_followups} 人次，",
-            f"待审核 {pending_reviews} 份。",
-        ]
-
+        """生成叙事性摘要 — 聚焦高危患者，避免与 stat cards 重复计数"""
         if red_count > 0:
-            parts.append(f"重点关注 {red_count} 名红色预警患者，建议优先处理。")
+            if red_count == 1:
+                return (
+                    f"早，今日有 1 名红色预警患者需重点关注，"
+                    f"建议优先安排面诊或电话随访。"
+                )
+            return (
+                f"早，今日有 {red_count} 名红色预警患者需重点关注，"
+                f"建议优先安排面诊或电话随访。"
+            )
 
-        return "".join(parts)
+        if orange_count > 0:
+            return (
+                f"早，今日无红色预警，有 {orange_count} 名橙色关注患者，"
+                f"可按计划开展常规随访。"
+            )
+
+        if yellow_count > 0:
+            return (
+                f"早，今日无高危预警，有 {yellow_count} 名黄色提醒患者，"
+                f"可在随访时一并关注。"
+            )
+
+        return "早，今日无待处理预警，可安排常规随访和档案整理。"

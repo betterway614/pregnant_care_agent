@@ -162,7 +162,12 @@
                   :type="fu.status === 'confirmed' ? 'success' : 'info'"
                   size="small"
                 >
-                  {{ fu.status === 'confirmed' ? '已确认' : '草稿' }}
+                  {{
+                    fu.status === 'confirmed' ? '已确认' :
+                    fu.status === 'completed' ? '已完成' :
+                    fu.status === 'in_progress' ? '进行中' :
+                    '未填写'
+                  }}
                 </el-tag>
               </div>
               <p class="followup-item__complaint">
@@ -190,12 +195,14 @@ import { useRouter } from 'vue-router'
 import { Refresh, Bell, Document, Sunny, ArrowDown, CircleCheck } from '@element-plus/icons-vue'
 import { dashboardApi, alertApi, followUpApi, nurseBriefingApi } from '@/api/endpoints'
 import { getNurseWebSocketClient } from '@/utils/websocket'
+import { useAppStore } from '@/stores/app'
 import { ElNotification } from 'element-plus'
 import type { DashboardStats, Alert, FollowUpRecord, Pregnant } from '@/types'
 import StatCard from '@/components/common/StatCard.vue'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
 const router = useRouter()
+const appStore = useAppStore()
 const loading = ref(false)
 const error = ref('')
 const stats = ref<DashboardStats>({
@@ -239,7 +246,7 @@ const REFRESH_INTERVAL = 120000 // 2分钟
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 /** WebSocket 客户端 */
-const nurseId = localStorage.getItem('nurse_id') || 'default_nurse'
+const nurseId = appStore.currentUserId || 'nurse'
 const wsClient = getNurseWebSocketClient(nurseId)
 
 /** 处理实时预警推送 */

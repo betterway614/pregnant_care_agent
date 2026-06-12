@@ -151,7 +151,7 @@ function statusLabel(status: string): string {
     confirmed: '已确认',
     completed: '已完成',
     in_progress: '进行中',
-    draft: '草稿',
+    draft: '未填写',
   }
   return map[status] || status
 }

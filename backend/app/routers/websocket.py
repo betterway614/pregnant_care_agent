@@ -33,6 +33,7 @@ async def websocket_alerts(websocket: WebSocket, doctor_id: str):
     用于接收实时预警推送
     """
     if not _verify_ws_token(websocket, expected_sub=doctor_id):
+        await websocket.accept()
         await websocket.close(code=4001, reason="认证失败")
         return
     await ws_manager.connect(websocket, doctor_id)
