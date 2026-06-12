@@ -320,7 +320,14 @@ async function fetchAlerts() {
     if (filterStatus.value) params.status = filterStatus.value
     if (filterPregnantId.value) params.pregnant_id = filterPregnantId.value
     const res = await alertApi.list(params)
-    alerts.value = res.data || []
+    // 过滤掉 FGR 医生专属预警（ALERT_DOCTOR），护士不应看到或操作
+    alerts.value = (res.data || []).filter((a: Alert) => {
+      if (a.trigger_source === 'FGR_ALGORITHM') {
+        const action = a.details?.action || ''
+        return action !== 'ALERT_DOCTOR'
+      }
+      return true
+    })
   } catch (err: any) {
     const msg = err.response?.data?.detail || err.message || '加载预警失败'
     error.value = msg

@@ -236,7 +236,9 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
         _append_history(alert, "supplement", source_role, alert.level, operator, review.reason)
     elif review.action == "nurse_confirm":
         source_role = "nurse"
-        alert.status = "CONFIRMED"
+        # 护士确认仅表示"已查看、情况属实"，不改变预警审核状态，
+        # 医生仍需进行最终审核决策；若直接设为 CONFIRMED 会导致
+        # 医生端 ReviewWorkbench 的审核/医嘱按钮被禁用。
         _append_history(alert, "nurse_confirm", source_role, alert.level, operator, review.reason)
     elif review.action == "nurse_dismiss":
         source_role = "nurse"

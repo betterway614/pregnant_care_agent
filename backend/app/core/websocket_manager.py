@@ -130,21 +130,54 @@ class WebSocketManager:
         action 为 'created' 时发送 NEW_ALERT 类型，
         其他 action（confirm/dismiss/escalate/downgrade 等）发送 ALERT_STATUS_CHANGE 类型，
         前端据此决定是递增还是刷新计数。
+
+        路由优先级（从上到下匹配，命中即返回）：
+        1. FGR 医生专属预警 → 仅医生
+        2. 护士操作通知 → 医护全员
+        3. 医生降级 → 仅护士
+        4. 按预警级别兜底
         """
         level = alert_data.get("level", "YELLOW")
         source_role = alert_data.get("source_role", "system")
         action = alert_data.get("action", "")
 
+        # ---- FGR 医生专属预警：仅推送给医生 ----
+        trigger_source = alert_data.get("trigger_source", "")
+        alert_details = alert_data.get("details", {})
+        if isinstance(alert_details, dict):
+            rule_action = alert_details.get("action", "")
+        else:
+            rule_action = ""
+        if trigger_source == "FGR_ALGORITHM" and rule_action == "ALERT_DOCTOR":
+            await self._broadcast_to_doctors_only(alert_data)
+            return
+
+        # ---- 护士操作后通知医生 ----
+        if source_role == "nurse" and action == "nurse_confirm":
+            # 护士确认后应通知医生端刷新审核列表
+            await self._broadcast_all(alert_data)
+            return
+
+        # ---- 医生降级：仅通知护士 ----
         if source_role == "doctor" and action == "downgrade":
             await self._broadcast_to_nurses_only(alert_data)
-        elif source_role == "nurse" and action == "nurse_escalate":
+            return
+
+        # ---- 护士升级：通知全员 ----
+        if source_role == "nurse" and action == "nurse_escalate":
             await self._broadcast_all(alert_data)
-        elif source_role == "nurse" and action == "nurse_appeal":
+            return
+
+        # ---- 护士复议：通知目标医生 + 全体护士 ----
+        if source_role == "nurse" and action == "nurse_appeal":
             target_doctor_id = alert_data.get("target_doctor_id")
             if target_doctor_id:
                 await self.send_alert_to_doctor(target_doctor_id, alert_data)
             await self._broadcast_to_nurses_only(alert_data)
-        elif level == "RED":
+            return
+
+        # ---- 兜底：按预警级别路由 ----
+        if level == "RED":
             await self._broadcast_all(alert_data)
         elif level in ("ORANGE", "YELLOW"):
             await self._broadcast_to_nurses_only(alert_data)
@@ -196,6 +229,21 @@ class WebSocketManager:
 
         for nurse_id in disconnected_nurses:
             self.disconnect_nurse(nurse_id)
+
+    async def _broadcast_to_doctors_only(self, alert_data: dict):
+        """仅广播给所有在线的医生"""
+        msg_type = self._resolve_message_type(alert_data)
+        payload = {"type": msg_type, "data": alert_data}
+
+        disconnected_doctors = []
+        for doctor_id, websocket in self.active_connections.items():
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                disconnected_doctors.append(doctor_id)
+
+        for doctor_id in disconnected_doctors:
+            self.disconnect(doctor_id)
 
     async def broadcast_to_nurses(self, alert_data: dict):
         """公开的护士广播方法（兼容旧调用）"""

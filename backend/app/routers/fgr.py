@@ -18,6 +18,7 @@ from ..services.segmentation_service import SegmentationError, get_segmentation_
 from ..services.alert_service import alert_service
 from ..utils.timezone import beijing_now
 from ..core.auth import get_current_user, TokenPayload
+from ..core.websocket_manager import ws_manager
 import numpy as np
 
 router = APIRouter(prefix="/api/v1/fgr", tags=["FGR评估"])
@@ -188,10 +189,13 @@ def _save_assessment(db: Session, pregnant_id: str, gestational_weeks: float,
     return assessment
 
 
-def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> None:
+def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> list[dict]:
+    """评估 FGR 规则并创建预警，返回用于 WebSocket 推送的 alert 数据列表"""
     rule_hits = rule_engine.evaluate_fgr_risk(result["risk_level"])
+    alerts_data: list[dict] = []
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     for hit in rule_hits:
-        alert_service.create_alert(
+        alert = alert_service.create_alert(
             db=db,
             pregnant_id=pregnant_id,
             rule_id=hit["rule_id"],
@@ -207,6 +211,21 @@ def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> None:
                 "created_at": beijing_now().isoformat(),
             },
         )
+        alerts_data.append({
+            "id": str(alert.id),
+            "pregnant_id": pregnant_id,
+            "patient_name": pregnant.display_name if pregnant else "",
+            "level": hit["level"],
+            "message": hit["message"],
+            "trigger_source": "FGR_ALGORITHM",
+            "status": alert.status,
+            "created_at": alert.created_at.isoformat() if alert.created_at else None,
+            "gestational_age_days": pregnant.gestational_age_days if pregnant else None,
+            "source_role": "system",
+            "action": "created",
+            "details": {"action": hit.get("action", "")},
+        })
+    return alerts_data
 
 
 # ==================== API 端点 ====================
@@ -260,11 +279,22 @@ async def assess_fgr(pregnant_id: str, req: FgrAssessRequest, db: Session = Depe
                      current_user: TokenPayload = Depends(get_current_user)):
     """FGR风险评估：前端无需上传图片，系统从 HIS 绑定数据中获取"""
     # 所有阻塞操作（DB + 模型推理）放到线程池，避免阻塞事件循环
-    return await run_in_threadpool(_assess_fgr_sync, pregnant_id, req, db)
+    response, alerts_data = await run_in_threadpool(_assess_fgr_sync, pregnant_id, req, db)
+    # 推送 FGR 预警给医生端
+    for alert_data in alerts_data:
+        try:
+            await ws_manager.route_alert(alert_data)
+        except Exception as e:
+            logger.warning(f"FGR评估 WebSocket 推送失败: {e}")
+    return response
 
 
 def _assess_fgr_sync(pregnant_id: str, req: FgrAssessRequest, db: Session):
-    """同步的 FGR 评估逻辑，在线程池中运行"""
+    """同步的 FGR 评估逻辑，在线程池中运行
+
+    Returns:
+        tuple: (FgrAssessResponse, list[dict] of alert push data)
+    """
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
@@ -283,10 +313,10 @@ def _assess_fgr_sync(pregnant_id: str, req: FgrAssessRequest, db: Session):
         result = _mock_fgr_assess(req.gestational_weeks)
 
     _save_assessment(db, pregnant_id, req.gestational_weeks, req.image_type, result)
-    _evaluate_rules(db, pregnant_id, result)
+    alerts_data = _evaluate_rules(db, pregnant_id, result)
     db.commit()
 
-    return FgrAssessResponse(**result, hardware=_get_fgr_hardware())
+    return FgrAssessResponse(**result, hardware=_get_fgr_hardware()), alerts_data
 
 
 @router.post("/upload/{pregnant_id}", response_model=FgrAssessResponse)
@@ -306,17 +336,28 @@ async def upload_and_assess(
         raise HTTPException(400, "上传图像不能为空")
 
     # 后续阻塞操作（DB + 分割 + 模型推理）放到线程池
-    return await run_in_threadpool(
+    response, alerts_data = await run_in_threadpool(
         _upload_assess_sync, pregnant_id, gestational_weeks, image_type,
         image_bytes, db,
     )
+    # 推送 FGR 预警给医生端
+    for alert_data in alerts_data:
+        try:
+            await ws_manager.route_alert(alert_data)
+        except Exception as e:
+            logger.warning(f"FGR上传评估 WebSocket 推送失败: {e}")
+    return response
 
 
 def _upload_assess_sync(
     pregnant_id: str, gestational_weeks: float, image_type: str,
     image_bytes: bytes, db: Session,
 ):
-    """同步的上传+分割+评估逻辑，在线程池中运行"""
+    """同步的上传+分割+评估逻辑，在线程池中运行
+
+    Returns:
+        tuple: (FgrAssessResponse, list[dict] of alert push data)
+    """
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
@@ -370,8 +411,10 @@ def _upload_assess_sync(
         result = _mock_fgr_assess(gestational_weeks)
 
     _save_assessment(db, pregnant_id, gestational_weeks, image_type, result)
-    _evaluate_rules(db, pregnant_id, result)
+    alerts_data = _evaluate_rules(db, pregnant_id, result)
     db.commit()
+
+    return FgrAssessResponse(**result, hardware=_get_fgr_hardware()), alerts_data
 
     return FgrAssessResponse(**result, hardware=_get_fgr_hardware())
 

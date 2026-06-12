@@ -765,7 +765,8 @@ function getAlertStatusText(status: string): string {
 
 /** 判断预警状态是否可操作 */
 function isStatusActionable(status: string): boolean {
-  return ['pending', 'escalated'].includes(status.toLowerCase())
+  // confirmed 也被视为可操作：允许医生在确认后仍能开医嘱或补充资料
+  return ['pending', 'escalated', 'confirmed'].includes(status.toLowerCase())
 }
 
 /** 需要在"相关数据"区域隐藏的字段（已有独立展示区域或为内部字段） */
@@ -1184,11 +1185,9 @@ function ruleStandardMessage(ruleId: string): string {
   return map[ruleId] || ''
 }
 
-/** WebSocket 预警回调（仅处理 RED 级别） */
+/** WebSocket 预警回调 */
 const handleNewAlert = (alert: Alert) => {
   console.log('审核工作台收到新预警:', alert)
-
-  if (alert.level !== 'RED') return
 
   // 添加到待处理列表
   pendingNewAlerts.value.push(alert)
@@ -1206,6 +1205,20 @@ const handleNewAlert = (alert: Alert) => {
   })
 }
 
+/** WebSocket 预警状态变更回调（护士操作后实时更新） */
+const handleAlertStatusChange = (alert: any) => {
+  console.log('审核工作台收到预警状态变更:', alert)
+  // 更新列表中对应预警
+  const idx = alertList.value.findIndex(a => a.id === alert.id)
+  if (idx >= 0) {
+    alertList.value[idx] = { ...alertList.value[idx], ...alert }
+  }
+  // 如果当前选中预警被更新，同步更新选中项
+  if (selectedAlert.value?.id === alert.id) {
+    selectedAlert.value = { ...selectedAlert.value, ...alert }
+  }
+}
+
 /** WebSocket 连接状态回调 */
 const handleStateChange = (state: string) => {
   wsConnected.value = state === 'OPEN'
@@ -1220,6 +1233,7 @@ function initWebSocket() {
 
   // 注册预警回调
   wsClient.value.onAlert(handleNewAlert)
+  wsClient.value.onAlertStatusChange(handleAlertStatusChange)
 
   // 注册连接状态回调
   wsClient.value.onStateChange(handleStateChange)
@@ -1280,6 +1294,7 @@ onUnmounted(() => {
   // 清理 WebSocket 连接
   if (wsClient.value) {
     wsClient.value.offAlert(handleNewAlert)
+    wsClient.value.offAlertStatusChange(handleAlertStatusChange)
     wsClient.value.offStateChange(handleStateChange)
     wsClient.value.disconnect()
   }

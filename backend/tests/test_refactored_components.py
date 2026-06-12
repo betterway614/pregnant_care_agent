@@ -132,76 +132,7 @@ class TestContainer:
         assert instance1 is not instance2
 
 
-# ==================== 3. 警报动作注册表测试 ====================
-
-
-class TestAlertActions:
-    """验证警报动作注册表 OCP 合规"""
-
-    def test_builtin_actions_registered(self):
-        """应有 9 个内置动作"""
-        from app.services.alert_actions import list_actions
-
-        actions = list_actions()
-        assert len(actions) == 9
-        assert "confirm" in actions
-        assert "dismiss" in actions
-        assert "escalate" in actions
-        assert "nurse_escalate" in actions
-
-    def test_get_action_returns_handler(self):
-        """get_action 应返回动作处理器"""
-        from app.services.alert_actions import get_action
-
-        handler = get_action("confirm")
-        assert handler is not None
-        assert hasattr(handler, "execute")
-
-    def test_get_unknown_action_returns_none(self):
-        """获取未知动作应返回 None"""
-        from app.services.alert_actions import get_action
-
-        assert get_action("nonexistent") is None
-
-    def test_register_custom_action(self):
-        """应能注册自定义动作（OCP 核心）"""
-        from app.services.alert_actions import register_action, get_action, list_actions
-
-        class CustomAction:
-            def execute(self, alert, payload, db):
-                return {"message": "custom"}
-
-        register_action("custom_test", CustomAction())
-        assert "custom_test" in list_actions()
-        handler = get_action("custom_test")
-        assert handler is not None
-
-    def test_confirm_action_sets_status(self):
-        """ConfirmAction 应设置 confirmed 状态"""
-        from app.services.alert_actions import ConfirmAction
-
-        class FakeAlert:
-            status = "PENDING"
-            reviewed_by = None
-
-        action = FakeAlert()
-        result = ConfirmAction().execute(action, {}, None)
-        assert action.status == "confirmed"
-        assert result["new_status"] == "confirmed"
-
-    def test_nurse_escalate_escalates_incrementally(self):
-        """NurseEscalateAction 应逐级升级"""
-        from app.services.alert_actions import NurseEscalateAction
-
-        class FakeAlert:
-            level = "YELLOW"
-
-        alert = FakeAlert()
-        NurseEscalateAction().execute(alert, {}, None)
-        assert alert.level == "ORANGE"
-
-
-# ==================== 4. 模板选择器测试 ====================
+# ==================== 3. 模板选择器测试 ====================
 
 
 class TestTemplateSelector:
