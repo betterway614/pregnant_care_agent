@@ -1,5 +1,4 @@
 """护士AI辅助 API"""
-import json
 import asyncio
 import time
 import uuid
@@ -520,20 +519,29 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
 
     from ..core.agno_medical_agents import get_nurse_chat_agent, NURSE_AGENT_VARIANT_MAP
     from ..core.agno_tools import resolve_nurse_tools_by_intent
-    from agno.agent import RunEvent
+    from ..core.agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 
     # 意图分类
-    intent_variant = "complex"
+    # 注意：chat/stream 端点必须使用无 output_schema 的 Agent，否则 agno 的
+    # RunEvent.run_content 不会触发，导致前端无法收到流式内容。
+    # analyze / followup / report / complex 等变体启用了 output_schema，仅适合非流式的
+    # /analyze 类端点；chat 端点只允许 "chat" 变体以保持流式输出。
+    _STREAMING_SAFE_VARIANTS = {"chat"}
+    intent_variant = "chat"
     intent_classification = None
     if message.strip():
         try:
             from ..core.nlu_engine import nlu_engine
             nlu_result = nlu_engine.parse(message.strip())
             intent_classification = nlu_result.intent
-            _, intent_variant = resolve_nurse_tools_by_intent({
+            _, resolved_variant = resolve_nurse_tools_by_intent({
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
             })
+            # 只有已知流式安全的变体才直接使用；其余（analyze/followup/report/complex）
+            # 均回退到 "chat" 变体，因为那些变体启用了 output_schema，会阻止 SSE 流式输出。
+            if resolved_variant in _STREAMING_SAFE_VARIANTS:
+                intent_variant = resolved_variant
         except Exception as e:
             logger.warning("护士端意图分类降级: %s", e)
 
@@ -550,62 +558,23 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     session_id = req.session_id or f"nurse_{pregnant_id[:8] if pregnant_id else 'anon'}_{uuid.uuid4().hex[:6]}"
 
     async def agno_event_generator():
-        t0 = time.time()
-        tool_steps: list[str] = []
-        run_response = None
-        content_streamed = False
-        yield {"event": "thinking", "data": "小护正在思考..."}
-        try:
-            async for chunk in agent.arun(
-                input=message,
-                stream=True,
-                stream_events=True,
-                user_id=pregnant_id or "anonymous",
-                session_id=session_id,
-            ):
-                event = chunk.event
-                if event == RunEvent.tool_call_started and chunk.tool is not None:
-                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                    thinking_msg = NURSE_TOOL_THINKING_MAP.get(
-                        tool_name, f"正在处理（{tool_name}）..."
-                    )
-                    yield {"event": "thinking", "data": thinking_msg}
-                elif event == RunEvent.tool_call_completed and chunk.tool is not None:
-                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                    step_desc = NURSE_TOOL_THINKING_MAP.get(tool_name, "")
-                    if step_desc and step_desc not in tool_steps:
-                        tool_steps.append(step_desc)
-                elif event == RunEvent.run_completed:
-                    run_response = chunk
-                elif event == RunEvent.run_content:
-                    if chunk.content and isinstance(chunk.content, str):
-                        content_streamed = True
-                        yield {"event": "chunk", "data": chunk.content}
-        except Exception as e:
-            from loguru import logger
-            logger.error("Nurse chat stream error: {}", e)
-            yield {"event": "error", "data": "服务内部错误，请稍后重试"}
-            yield {"event": "chunk", "data": "\n\n抱歉，AI服务暂时不可用，请稍后再试。"}
+        state = AgnoSseState()
+        config = AgnoSseConfig(
+            agent=agent,
+            input_text=message,
+            user_id=pregnant_id or "anonymous",
+            session_id=session_id,
+            thinking_map=NURSE_TOOL_THINKING_MAP,
+            initial_thinking="小护正在思考...",
+            error_log_message="Nurse chat stream error",
+            error_chunk_content="\n\n抱歉，AI服务暂时不可用，请稍后再试。",
+            done_source="NURSE_AI",
+        )
 
-        # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发
-        if not content_streamed and run_response is not None:
-            from ..core.agno_medical_agents import format_structured_output_to_markdown
-            fallback_text = format_structured_output_to_markdown(run_response.content)
-            if fallback_text:
-                yield {"event": "chunk", "data": fallback_text}
-
-        # 发送 done 事件
-        yield {
-            "event": "done",
-            "data": json.dumps({
-                "source": "NURSE_AI",
-                "session_id": session_id,
-                "tool_steps": tool_steps,
-            }),
-        }
+        async for event in agno_sse_event_generator(config, state):
+            yield event
 
         # 审计日志（后台异步写入，不阻塞响应）
-        elapsed_ms = int((time.time() - t0) * 1000)
         _bg_task = asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
             session_id=session_id,
@@ -614,8 +583,8 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             agent_variant=intent_variant,
             intent_classification=intent_classification,
             user_message=message,
-            run_response=run_response,
-            total_latency_ms=elapsed_ms,
+            run_response=state.run_response,
+            total_latency_ms=state.elapsed_ms,
         ))
         _bg_task.add_done_callback(_audit_tasks.discard)
         _audit_tasks.add(_bg_task)

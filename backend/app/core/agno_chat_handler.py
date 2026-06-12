@@ -18,8 +18,8 @@ import uuid
 from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any, Union
 
-from agno.agent import RunEvent
 from agno.media import Image as AgnoImage
+from .agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 from loguru import logger
 
 from ..schemas import ChatSendRequest, ChatResponse
@@ -435,73 +435,28 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     agent_factory = AGENT_VARIANT_MAP.get(intent_variant, get_main_agent)
     agent = agent_factory()
 
-    # 初始思考状态
-    yield {"event": "thinking", "data": "小安正在思考..."}
-
-    full_response = ""
-    tool_steps: list[str] = []
-    run_response = None
+    state = AgnoSseState()
+    config = AgnoSseConfig(
+        agent=agent,
+        input_text=agent_input,
+        user_id=req.pregnant_id,
+        session_id=session_id,
+        thinking_map=TOOL_THINKING_MAP,
+        initial_thinking="小安正在思考...",
+        error_log_message="Agno stream error",
+        error_chunk_content="\n\n抱歉，我遇到了问题，请稍后再试。",
+        done_source="AI_CARE",
+        images=agent_images,
+        done_extra={
+            "nlu_result": None,
+            "memory_updated": [],
+            "transcribed_text": transcribed_text,
+        },
+    )
 
     try:
-        try:
-            async for chunk in agent.arun(
-                input=agent_input,
-                images=agent_images,
-                stream=True,
-                stream_events=True,
-                user_id=req.pregnant_id,
-                session_id=session_id,
-            ):
-                event = chunk.event
-
-                if event == RunEvent.tool_call_started and chunk.tool is not None:
-                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                    thinking_msg = TOOL_THINKING_MAP.get(
-                        tool_name, f"正在处理（{tool_name}）..."
-                    )
-                    yield {"event": "thinking", "data": thinking_msg}
-
-                elif event == RunEvent.tool_call_completed and chunk.tool is not None:
-                    tool_name = getattr(chunk.tool, "tool_name", "") or ""
-                    step_desc = TOOL_THINKING_MAP.get(tool_name, "")
-                    if step_desc and step_desc not in tool_steps:
-                        tool_steps.append(step_desc)
-
-                elif event == RunEvent.run_content:
-                    if chunk.content and isinstance(chunk.content, str):
-                        full_response += chunk.content
-                        yield {"event": "chunk", "data": chunk.content}
-
-                elif event == RunEvent.run_completed:
-                    run_response = chunk
-
-            # 兜底：当 Agent 使用 output_schema 时，run_content 不会触发，
-            # 结构化输出需从 run_response.content 提取并发送到前端。
-            if not full_response and run_response is not None:
-                from .agno_medical_agents import format_structured_output_to_markdown
-                fallback_text = format_structured_output_to_markdown(run_response.content)
-                if fallback_text:
-                    yield {"event": "chunk", "data": fallback_text}
-
-        except Exception:
-            import traceback
-            logger.error("Agno stream error: {}", traceback.format_exc())
-            yield {"event": "chunk", "data": "\n\n抱歉，我遇到了问题，请稍后再试。"}
-
-        elapsed_ms = int((time.time() - start_time) * 1000)
-
-        # 先 yield done，避免审计日志写入阻塞 SSE 流式结束
-        yield {
-            "event": "done",
-            "data": json.dumps({
-                "session_id": session_id,
-                "source": "AI_CARE",
-                "nlu_result": None,
-                "memory_updated": [],
-                "tool_steps": tool_steps,
-                "transcribed_text": transcribed_text,
-            }),
-        }
+        async for event in agno_sse_event_generator(config, state):
+            yield event
 
         # 审计日志（后台异步写入，不阻塞 SSE 响应）
         import asyncio
@@ -514,8 +469,8 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             intent_classification=nlu_result.intent if nlu_result else None,
             user_message=req.message,
             nlu_detail=nlu_dict if nlu_result else None,
-            run_response=run_response,
-            total_latency_ms=elapsed_ms,
+            run_response=state.run_response,
+            total_latency_ms=state.elapsed_ms,
         ))
         _bg_audit_task.add_done_callback(_audit_tasks.discard)
         _audit_tasks.add(_bg_audit_task)
@@ -527,7 +482,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
                     session_id, req.pregnant_id, "user", req.message,
                 )
                 await conversation_store.async_save_single(
-                    session_id, req.pregnant_id, "assistant", full_response,
+                    session_id, req.pregnant_id, "assistant", state.full_response,
                 )
             except Exception:
                 logger.warning("流式对话持久化失败 session_id={}", session_id, exc_info=True)

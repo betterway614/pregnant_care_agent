@@ -360,17 +360,20 @@ async function _sseFetch(
       }
     },
     onclose() {
-      // 收到 done 后服务器正常关闭，禁止重连（防止 POST 重复触发 Agent）
-      if (doneReceived) {
-        throw new Error('SSE_DONE')
+      // 收到 done 后服务器正常关闭：不抛错，让 fetchEventSource 正常 resolve
+      // 未收到 done 的连接断开：抛出以触发 onerror，按网络错误处理
+      if (!doneReceived) {
+        throw new Error('SSE_UNEXPECTED_CLOSE')
       }
-      // 未收到 done 的连接断开：允许一次重连（fetchEventSource 默认行为）
+      // doneReceived === true: 正常结束，静默返回
     },
     onerror(err) {
-      if ((err as Error).message === 'HANDLED_NON_SSE' || (err as Error).message === 'SSE_DONE') {
+      // 非 SSE 响应（降级处理）：已手动读取 response body，无需重连
+      if ((err as Error).message === 'HANDLED_NON_SSE') {
         class FatalError extends Error { }
         throw new FatalError(String(err))
       }
+      // 其他错误（网络异常、服务端 5xx 等）：通知上层并终止
       callbacks.onError?.(err as Error)
       class FatalError extends Error { }
       throw new FatalError(String(err))
