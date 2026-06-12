@@ -218,6 +218,31 @@ def start_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ---------- 日记定时生成 job ----------
+    if settings.diary_scheduler_enabled:
+        from .diary_scheduler import _weekly_diary_job
+
+        diary_trigger = CronTrigger(
+            day_of_week=settings.diary_scheduler_day_of_week,
+            hour=settings.diary_scheduler_hour,
+            minute=settings.diary_scheduler_minute,
+            timezone="Asia/Shanghai",
+        )
+        _scheduler.add_job(
+            _weekly_diary_job,
+            trigger=diary_trigger,
+            id="weekly_diary_generation",
+            name="每周孕期日记自动生成",
+            misfire_grace_time=7200,
+            replace_existing=True,
+        )
+        logger.info(
+            "日记调度已注册: 每周{} {:02d}:{:02d} (北京时间)",
+            settings.diary_scheduler_day_of_week,
+            settings.diary_scheduler_hour,
+            settings.diary_scheduler_minute,
+        )
+
     _scheduler.start()
     logger.info(
         "随访调度器已启动: 每日 {:02d}:{:02d} (北京时间) 执行扫描 "

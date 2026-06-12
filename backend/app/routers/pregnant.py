@@ -457,12 +457,28 @@ def get_daily_task_status(pregnant_id: str, db: Session = Depends(get_db), user:
 
 
 @router.get("/{pregnant_id}/diary")
-def get_pregnancy_diary(pregnant_id: str, weeks: int = 4, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
-    """获取孕妇孕记 — 按周汇总健康数据的温暖叙事"""
+async def get_pregnancy_diary(
+    pregnant_id: str,
+    weeks: int = 4,
+    use_cache: bool = True,
+    regenerate: bool = False,
+    db: Session = Depends(get_db),
+    user: TokenPayload = Depends(get_current_user),
+):
+    """获取孕妇孕记 — 按周汇总健康数据的温暖叙事
+
+    Args:
+        weeks: 回溯周数，默认 4 周
+        use_cache: 是否使用已持久化的缓存日记（默认 True）
+        regenerate: 强制重新生成（默认 False）
+    """
     if user.role == "pregnant" and user.pregnant_id != pregnant_id:
         raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
     from ..services.pregnancy_diary import PregnancyDiaryService
 
     service = PregnancyDiaryService()
-    diary = service.generate_weekly_diary(db, pregnant_id, weeks=weeks)
+    diary = await service.generate_weekly_diary_async(
+        db, pregnant_id, weeks=weeks,
+        use_cache=use_cache, regenerate=regenerate,
+    )
     return diary.model_dump()

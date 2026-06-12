@@ -7,7 +7,7 @@
 - 三级联动预警链 (PregnantNotificationService)
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timedelta, date
 from uuid import uuid4
 
@@ -382,37 +382,49 @@ class TestBatchFollowupService:
 class TestPregnancyDiaryService:
     """孕期日记 - generate_weekly_diary"""
 
+    @staticmethod
+    def _mock_narrative_result():
+        """构造 mock NarrativeResult"""
+        from app.services.narrative_service import NarrativeResult
+        return NarrativeResult(narrative="测试叙事", highlights=[], source="template")
+
     def _make_db_for_diary(self, pregnant, summaries_per_week=None, health_points_per_week=None):
         """构造 mock db 以匹配 PregnancyDiaryService.generate_weekly_diary"""
+        from app.models import Pregnant, HealthDataPoint, DailyHealthSummary, Alert, PregnancyDiaryEntry
+
         db = MagicMock()
 
-        # query(Pregnant).filter(...).first() -> pregnant
-        pregnant_query = MagicMock()
-        pregnant_query.filter.return_value = pregnant_query  # filter 返回 self
-        pregnant_query.first.return_value = pregnant
+        # 构造各类查询的固定 mock
+        def _make_chain_mock(all_val=None, first_val=None, count_val=0):
+            m = MagicMock()
+            m.filter.return_value = m
+            m.order_by.return_value = m
+            m.all.return_value = all_val if all_val is not None else []
+            m.first.return_value = first_val
+            m.count.return_value = count_val
+            return m
 
-        queries = [pregnant_query]
-        for _ in range(4):
-            # query(HealthDataPoint).filter(...).order_by(...).all() -> [] (主数据源)
-            hpq = MagicMock()
-            hpq.filter.return_value = hpq
-            hpq.order_by.return_value = hpq
-            hpq.all.return_value = health_points_per_week or []
-            # query(DailyHealthSummary).filter(...).order_by(...).all() -> []
-            sq = MagicMock()
-            sq.filter.return_value = sq
-            sq.order_by.return_value = sq
-            sq.all.return_value = summaries_per_week or []
-            # query(Alert).filter(...).count() -> 0
-            aq = MagicMock()
-            aq.filter.return_value = aq
-            aq.count.return_value = 0
-            queries.extend([hpq, sq, aq])
+        # 用 callable side_effect 根据查询的 Model 类返回对应 mock
+        def query_router(model_cls):
+            if model_cls is Pregnant:
+                m = _make_chain_mock(first_val=pregnant)
+                return m
+            elif model_cls is PregnancyDiaryEntry:
+                return _make_chain_mock(first_val=None)  # 缓存未命中
+            elif model_cls is HealthDataPoint:
+                return _make_chain_mock(all_val=health_points_per_week or [])
+            elif model_cls is DailyHealthSummary:
+                return _make_chain_mock(all_val=summaries_per_week or [])
+            elif model_cls is Alert:
+                return _make_chain_mock(count_val=0)
+            else:
+                return _make_chain_mock()
 
-        db.query.side_effect = queries
+        db.query.side_effect = query_router
         return db
 
-    def test_returns_diary_response_structure(self):
+    @patch("app.services.pregnancy_diary.narrative_service")
+    def test_returns_diary_response_structure(self, mock_ns):
         """返回正确的数据结构"""
         pregnant = MagicMock()
         pregnant.pregnant_id = "P001"
@@ -421,6 +433,7 @@ class TestPregnancyDiaryService:
         pregnant.lmp_date = None
         pregnant.risk_tags = []
 
+        mock_ns.generate_narrative = MagicMock(side_effect=self._async_narrative)
         db = self._make_db_for_diary(pregnant)
         svc = PregnancyDiaryService()
         result = svc.generate_weekly_diary(db, "P001", weeks=2)
@@ -428,8 +441,10 @@ class TestPregnancyDiaryService:
         assert result.current_week == 30
         assert isinstance(result.entries, list)
 
-    def test_weeks_parameter_limits_entries(self):
+    @patch("app.services.pregnancy_diary.narrative_service")
+    def test_weeks_parameter_limits_entries(self, mock_ns):
         """weeks 参数限制返回条目数"""
+        mock_ns.generate_narrative = MagicMock(side_effect=self._async_narrative)
         pregnant = MagicMock()
         pregnant.pregnant_id = "P001"
         pregnant.display_name = "张小花"
@@ -473,7 +488,8 @@ class TestPregnancyDiaryService:
         assert isinstance(mood_emoji_fn(1.0), str)
         assert mood_emoji_fn(None) == "📝"
 
-    def test_no_pregnant_returns_empty(self):
+    @patch("app.services.pregnancy_diary.narrative_service")
+    def test_no_pregnant_returns_empty(self, mock_ns):
         """患者不存在时返回空条目"""
         db = MagicMock()
         query_mock = MagicMock()
@@ -484,6 +500,12 @@ class TestPregnancyDiaryService:
         svc = PregnancyDiaryService()
         result = svc.generate_weekly_diary(db, "P999", weeks=4)
         assert result.entries == []
+
+    @staticmethod
+    async def _async_narrative(*args, **kwargs):
+        """async mock for NarrativeService.generate_narrative"""
+        from app.services.narrative_service import NarrativeResult
+        return NarrativeResult(narrative="测试叙事", highlights=[], source="template")
 
 
 # ============================================================
@@ -707,7 +729,9 @@ class TestPregnancyDiaryEndpoint:
         mock_service = MagicMock()
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"pregnant_id": "P001", "current_week": 30, "entries": []}
-        mock_service.generate_weekly_diary.return_value = mock_result
+        # 路由现在调用 async generate_weekly_diary_async
+        async_mock = AsyncMock(return_value=mock_result)
+        mock_service.generate_weekly_diary_async = async_mock
 
         with patch.dict("sys.modules", {"app.services.pregnancy_diary": MagicMock(PregnancyDiaryService=MagicMock(return_value=mock_service))}):
             resp = test_client.get("/api/v1/pregnant/P001/diary")
@@ -721,7 +745,8 @@ class TestPregnancyDiaryEndpoint:
         mock_service = MagicMock()
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"pregnant_id": "P001", "current_week": 30, "entries": []}
-        mock_service.generate_weekly_diary.return_value = mock_result
+        async_mock = AsyncMock(return_value=mock_result)
+        mock_service.generate_weekly_diary_async = async_mock
 
         with patch.dict("sys.modules", {"app.services.pregnancy_diary": MagicMock(PregnancyDiaryService=MagicMock(return_value=mock_service))}):
             resp = test_client.get("/api/v1/pregnant/P001/diary?weeks=2")
