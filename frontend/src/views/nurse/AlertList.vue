@@ -64,7 +64,11 @@
               <RiskBadge :level="row.level" />
             </template>
           </el-table-column>
-          <el-table-column prop="trigger_source" label="触发规则" min-width="100" show-overflow-tooltip />
+          <el-table-column label="触发规则" min-width="100" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ triggerSourceLabel(row.trigger_source) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="message" label="预警消息" min-width="200" show-overflow-tooltip />
           <el-table-column label="处理状态" width="90" align="center">
             <template #default="{ row }">
@@ -142,11 +146,11 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">触发来源</span>
-            <span class="detail-value">{{ selectedAlert.trigger_source || '--' }}</span>
+            <span class="detail-value">{{ triggerSourceLabel(selectedAlert.trigger_source) }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">规则ID</span>
-            <span class="detail-value">{{ selectedAlert.rule_id || '--' }}</span>
+            <span class="detail-value">{{ ruleIdLabel(selectedAlert.rule_id) }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">孕周</span>
@@ -212,14 +216,20 @@ import { alertApi, dashboardApi } from '@/api/endpoints'
 import { getNurseWebSocketClient } from '@/utils/websocket'
 import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import type { Alert } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
 const router = useRouter()
+const route = useRoute()
 const appStore = useAppStore()
 const nurseId = ref(appStore.currentUserId || 'nurse')
 let wsClient: any = null
+
+/** WebSocket 预警回调（命名引用以便 offAlert 解绑） */
+function handleWsAlert() {
+  fetchAlerts()
+}
 
 const loading = ref(false)
 const error = ref('')
@@ -290,24 +300,76 @@ function formatTime(t?: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/** 筛选变化时重新加载 */
-function handleFilterChange() {
-  fetchAlerts()
+/** 触发来源中文映射 */
+function triggerSourceLabel(source?: string): string {
+  if (!source) return '--'
+  const map: Record<string, string> = {
+    RULE_ENGINE: '规则引擎',
+    FGR_ALGORITHM: 'FGR评估算法',
+    MANUAL: '手动创建',
+    AI_ANALYSIS: 'AI分析',
+    FOLLOWUP_COMPLETE: '随访完成触发',
+  }
+  return map[source] || source
 }
 
-/** 判断是否有原始数据（排除 llm_analysis） */
+/** 规则ID中文映射 */
+function ruleIdLabel(ruleId?: string): string {
+  if (!ruleId) return '--'
+  const map: Record<string, string> = {
+    RULE_BP_HIGH: '血压偏高规则',
+    RULE_BP_CRITICAL: '血压危急规则',
+    RULE_BLOOD_SUGAR_HIGH: '血糖偏高规则',
+    RULE_FETAL_DROP: '胎动减少规则',
+    RULE_FETAL_HEART: '胎心异常规则',
+    RULE_GDM: '妊娠糖尿病规则',
+    RULE_PRE_ECLAMPSIA: '子痫前期规则',
+    NURSE_AI_ALERT: '护士AI预警',
+    AGENT_TOOL_ALERT: '智能体工具预警',
+    MANUAL: '手动创建',
+  }
+  return map[ruleId] || ruleId.replace(/_/g, ' ')
+}
+
+/** 原始数据 key 中文映射 */
+const RAW_KEY_MAP: Record<string, string> = {
+  action: '处理动作',
+  metric: '指标',
+  value: '数值',
+  threshold: '阈值',
+  unit: '单位',
+  pregnant_id: '孕妇ID',
+  gestational_week: '孕周',
+  trigger_source: '触发来源',
+  rule_id: '规则ID',
+  bp_systolic: '收缩压',
+  bp_diastolic: '舒张压',
+  blood_sugar: '血糖',
+  fetal_movement: '胎动',
+  risk_level: '风险等级',
+  risk_score: '风险评分',
+  estimated_weight: '估计体重',
+  explanation: '说明',
+  recommendation: '建议',
+}
+
+/** 格式化原始数据（排除 llm_analysis，key 中文化） */
+function formatRawDetails(details: Record<string, any>): string {
+  const raw: Record<string, any> = {}
+  for (const [key, val] of Object.entries(details)) {
+    if (key === 'llm_analysis') continue
+    const label = RAW_KEY_MAP[key] || key
+    raw[label] = val
+  }
+  return JSON.stringify(raw, null, 2)
+}
+
+/** 是否有需要展示的原始数据（排除 llm_analysis 后仍有其他字段） */
 function hasRawDetails(details: Record<string, any> | undefined): boolean {
   if (!details) return false
   const raw = { ...details }
   delete raw.llm_analysis
   return Object.keys(raw).length > 0
-}
-
-/** 格式化原始数据（排除 llm_analysis） */
-function formatRawDetails(details: Record<string, any>): string {
-  const raw = { ...details }
-  delete raw.llm_analysis
-  return JSON.stringify(raw, null, 2)
 }
 
 /** 加载预警列表 */
@@ -387,20 +449,24 @@ async function handleReview(row: any, action: string) {
 }
 
 onMounted(() => {
+  // 从路由 query 读取预选孕妇筛选（从孕妇详情页跳转时传入）
+  const queryPregnantId = route.query.pregnant_id as string
+  if (queryPregnantId) {
+    filterPregnantId.value = queryPregnantId
+  }
   fetchAlerts()
   // 加载孕妇列表用于筛选
   dashboardApi.pregnant({ page_size: 100 }).then(res => {
     pregnantList.value = res.data?.data || []
   }).catch(() => {})
   wsClient = getNurseWebSocketClient(nurseId.value)
-  wsClient.onAlert(() => {
-    fetchAlerts()
-  })
+  wsClient.onAlert(handleWsAlert)
   wsClient.connect()
 })
 
 onUnmounted(() => {
   if (wsClient) {
+    wsClient.offAlert(handleWsAlert)
     wsClient.disconnect()
   }
 })
