@@ -2,6 +2,14 @@
 工具路由 — 意图到工具组的映射
 
 职责: 根据 NLU 意图选择合适的工具子集。
+
+关于 search_knowledge_base 工具:
+    知识检索工具由 Agno 框架在 Agent 创建时根据 search_knowledge=True 参数
+    自动注入 (参见 agno_agent.py 和 agno_medical_agents.py 中的 _build_agent /
+    _build_nurse_agent_variant / _build_doctor_agent_variant)。
+    该工具调用 knowledge.search() 执行 PgVector 向量/混合检索，
+    因此 TOOL_GROUPS 各分组中不需要（也不应该）显式包含此工具。
+    框架注入的工具名称为 'search_knowledge_base'，与系统提示词中的引用一致。
 """
 from __future__ import annotations
 
@@ -45,6 +53,8 @@ DOCTOR_TOOLS = [
 
 # ==================== 工具子集分组 ====================
 
+# 知识检索工具 search_knowledge_base 由 Agno 框架根据 search_knowledge=True 自动注入，不在此处显式列出
+
 TOOL_GROUPS: dict[str, list] = {
     "chat": [agno_check_emergency, agno_get_patient_context, agno_get_epds_result, agno_save_health_data],
     "record": [agno_get_nlu_result, agno_save_health_data, agno_evaluate_vital_rules, agno_get_patient_context],
@@ -64,12 +74,16 @@ INTENT_TO_GROUP: dict[str, str] = {
     "ask_knowledge": "qa", "ask_symptom": "qa", "ask_exam": "qa",
 }
 
+# 知识检索工具 search_knowledge_base 由 Agno 框架根据 search_knowledge=True 自动注入，不在此处显式列出
+
 NURSE_TOOL_GROUPS: dict[str, list] = {
     "analyze": [agno_query_patient_data, agno_analyze_health_trends, agno_evaluate_vital_rules],
     "followup": [agno_create_followup_record, agno_query_patient_data],
     "report": [agno_report_issue_to_doctor, agno_query_patient_data],
     "chat": [agno_list_patients, agno_query_patient_data, agno_analyze_health_trends],
 }
+
+# 知识检索工具 search_knowledge_base 由 Agno 框架根据 search_knowledge=True 自动注入，不在此处显式列出
 
 DOCTOR_TOOL_GROUPS: dict[str, list] = {
     "analyze": [agno_analyze_patient_comprehensive, agno_analyze_health_trends, agno_evaluate_vital_rules, agno_query_clinical_guideline],

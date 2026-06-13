@@ -52,7 +52,15 @@ def _create_pregnant_db():
 
 
 def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
-    """通用 Agent 构造器 — 所有变体共享 SqliteDb"""
+    """通用 Agent 构造器 — 所有变体共享 SqliteDb
+
+    知识检索机制:
+        search_knowledge=True 触发 Agno 框架自动注入 search_knowledge_base 工具，
+        该工具调用 knowledge.search() 执行 PgVector 向量/混合检索。
+        因此 tools 列表中不需要显式包含知识检索工具。
+        角色级过滤通过 knowledge_filters=_PREGNANT_KNOWLEDGE_FILTERS 控制，
+        仅返回 audience 为 'patient' 或 'all' 的知识条目。
+    """
     kwargs = dict(
         name=f"小安-{variant_name}",
         model=get_agno_model(role="pregnant"),

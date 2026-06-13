@@ -298,28 +298,65 @@ async def rag_ask(req: RAGAskRequest, user: TokenPayload = Depends(get_current_u
 
 @router.get("/rag/status")
 def rag_status(user: TokenPayload = Depends(get_current_user)):
-    if knowledge is None:
-        return {
-            "enabled": settings.rag_enabled,
-            "knowledge_status": "unavailable (pgvector not available)",
-            "rag_degraded": True,
-            "rag_degraded_reason": "knowledge instance is None — check DB_TYPE=postgres and pgvector",
-        }
-    try:
-        results = knowledge.search(query="test", max_results=1)
-        chunk_count = "available" if results else "empty"
-    except Exception:
-        chunk_count = "unavailable"
+    """获取 RAG 系统状态，包含实时健康监控结果
 
-    return {
+    返回:
+        - 配置信息 (search_type, embedding_model 等)
+        - knowledge 实例可用性 (实时检索测试)
+        - 健康监控状态 (后台定时探针的最新结果，含嵌入服务和 pgvector 的独立状态)
+        - 降级标志和原因
+    """
+    # ── 基础配置 ──
+    result = {
         "enabled": settings.rag_enabled,
         "search_type": settings.rag_search_type,
         "embedding_model": settings.embedding_model,
         "embedding_dimensions": settings.embedding_dimensions,
+        "embedding_api_url": settings.embedding_api_url,
         "max_results": settings.rag_max_results,
-        "knowledge_status": chunk_count,
+        "chunk_size": settings.rag_chunk_size,
+        "chunk_overlap": settings.rag_chunk_overlap,
         "vector_db": "pgvector",
+        "knowledge_table": settings.agno_knowledge_table,
     }
+
+    # ── knowledge 实例状态 ──
+    if knowledge is None:
+        result["knowledge_status"] = "unavailable (knowledge instance is None)"
+        result["rag_degraded"] = True
+        result["rag_degraded_reason"] = "knowledge instance is None — check DB_TYPE=postgres and pgvector"
+        result["health_monitor"] = None
+        return result
+
+    # ── 实时检索测试 ──
+    try:
+        search_results = knowledge.search(query="test", max_results=1)
+        result["knowledge_status"] = "available" if search_results else "empty (no chunks ingested)"
+    except Exception as e:
+        result["knowledge_status"] = f"unavailable (search failed: {str(e)[:200]})"
+
+    # ── 健康监控状态 (来自后台定时探针) ──
+    try:
+        from ..core.rag_health_monitor import get_health_status
+        health = get_health_status()
+        result["health_monitor"] = {
+            "embedding_service": health.get("embedding_service", "unknown"),
+            "pgvector": health.get("pgvector", "unknown"),
+            "last_check_time": health.get("last_check_time"),
+            "consecutive_failures": health.get("consecutive_failures", 0),
+            "degraded": health.get("degraded", False),
+            "degraded_reason": health.get("degraded_reason", ""),
+        }
+    except Exception:
+        result["health_monitor"] = None
+
+    # ── 综合降级状态 ──
+    from ..core.agno_knowledge import is_rag_degraded, get_rag_degraded_reason
+    result["rag_degraded"] = is_rag_degraded()
+    if result["rag_degraded"]:
+        result["rag_degraded_reason"] = get_rag_degraded_reason()
+
+    return result
 
 
 # ==================== 健康趋势分析 ====================

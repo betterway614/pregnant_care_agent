@@ -75,7 +75,13 @@ def _create_doctor_db():
 
 
 def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
-    """护士 Agent 通用构造器"""
+    """护士 Agent 通用构造器
+
+    知识检索机制:
+        search_knowledge=True 触发 Agno 框架自动注入 search_knowledge_base 工具。
+        角色级过滤通过 knowledge_filters=_NURSE_KNOWLEDGE_FILTERS 控制，
+        仅返回 audience 为 'nurse' 或 'all' 的知识条目。
+    """
     kwargs = dict(
         name=f"小护-{variant_name}",
         model=get_agno_model(role="nurse"),

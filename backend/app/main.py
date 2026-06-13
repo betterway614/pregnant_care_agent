@@ -399,6 +399,35 @@ async def lifespan(app: FastAPI):
     logger.info("  FGR后端: {}", settings.fgr_backend)
     logger.info("  数据库: {}:{}/{}", settings.db_host, settings.db_port, settings.db_name)
 
+    # ── RAG 依赖服务可达性检查 (不阻塞启动) ──
+    if settings.rag_enabled and settings.db_type == "postgres":
+        try:
+            import requests as _requests
+            # 从 embedding_api_url 推导 health 端点
+            _emb_base = settings.embedding_api_url.rstrip("/")
+            if _emb_base.endswith("/v1"):
+                _emb_health = _emb_base.rsplit("/v1", 1)[0] + "/health"
+            else:
+                _emb_health = _emb_base + "/health"
+            _resp = _requests.get(_emb_health, timeout=3)
+            if _resp.status_code == 200:
+                logger.info("  RAG 嵌入服务可达: {} ({}ms)", settings.embedding_api_url, round(_resp.elapsed.total_seconds() * 1000))
+            else:
+                logger.warning(
+                    "  RAG 嵌入服务异常 (HTTP {}): {}。启动命令: python embedding_server/server.py",
+                    _resp.status_code, _emb_health,
+                )
+        except Exception as _e:
+            logger.warning(
+                "  RAG 嵌入服务不可达 ({}): {}。请启动嵌入服务: python embedding_server/server.py",
+                type(_e).__name__, settings.embedding_api_url,
+            )
+    elif settings.rag_enabled and settings.db_type != "postgres":
+        logger.warning(
+            "  RAG 已降级: db_type={} 不支持 PgVector。请将 DB_TYPE 设为 postgres 并确保 pgvector 扩展已安装。",
+            settings.db_type,
+        )
+
     if settings.seed_data:
         try:
             from .scripts.seed_data import seed_all
@@ -425,8 +454,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("随访调度器启动失败: {}", e)
 
+    # 启动 RAG 健康监控 (定时探测 pgvector + 嵌入服务)
+    _rag_monitor = None
+    if settings.rag_enabled and settings.rag_health_check_interval_minutes > 0:
+        try:
+            from .core.rag_health_monitor import start_monitor
+            _rag_monitor = start_monitor(interval_minutes=settings.rag_health_check_interval_minutes)
+        except Exception as e:
+            logger.warning("RAG 健康监控启动失败: {}", e)
+
     yield
     # 应用关闭
+    # 停止 RAG 健康监控
+    if _rag_monitor is not None:
+        try:
+            from .core.rag_health_monitor import stop_monitor
+            stop_monitor()
+        except Exception as e:
+            logger.warning("RAG 健康监控停止失败: {}", e)
+
     if _scheduler is not None:
         try:
             stop_scheduler()

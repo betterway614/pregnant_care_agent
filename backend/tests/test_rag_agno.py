@@ -131,7 +131,7 @@ class TestRAGEndpoints:
                 assert result["vector_db"] == "pgvector"
 
     def test_rag_status_handles_search_failure(self):
-        """验证 /rag/status 在检索失败时返回 unavailable"""
+        """验证 /rag/status 在检索失败时返回 unavailable (含错误详情)"""
         from app.routers.chat import rag_status
         with patch("app.routers.chat.settings") as mock_settings:
             mock_settings.rag_enabled = True
@@ -144,7 +144,7 @@ class TestRAGEndpoints:
                 mock_knowledge.search.side_effect = Exception("DB connection failed")
 
                 result = rag_status()
-                assert result["knowledge_status"] == "unavailable"
+                assert result["knowledge_status"].startswith("unavailable")
 
     @pytest.mark.asyncio
     async def test_rag_ask_disabled_raises(self):
@@ -498,3 +498,384 @@ class TestIngestScript:
         md_files = [f for f in os.listdir(docs_dir) if f.endswith(".md")]
         # 至少应有 16 篇（6 原有 + 10 新增）
         assert len(md_files) >= 16, f"Expected >= 16 md files, found {len(md_files)}"
+
+
+# ==================== 临床指南兜底库测试 ====================
+
+
+class TestClinicalGuidelinesFallback:
+    """测试 clinical_guidelines_fallback.py 的指南解析与搜索"""
+
+    def test_all_topics_have_key_points(self):
+        """验证所有非别名条目都有实际临床内容"""
+        from app.core.tools.clinical_guidelines_fallback import CLINICAL_GUIDELINES
+
+        for key, entry in CLINICAL_GUIDELINES.items():
+            if entry.get("_alias_of"):
+                continue
+            assert len(entry["key_points"]) >= 3, (
+                f"Topic '{key}' should have >= 3 key points, got {len(entry.get('key_points', []))}"
+            )
+            assert entry["title"], f"Topic '{key}' missing title"
+            assert entry["source"], f"Topic '{key}' missing source"
+
+    def test_all_aliases_resolve_to_valid_targets(self):
+        """验证所有别名指向存在的条目"""
+        from app.core.tools.clinical_guidelines_fallback import CLINICAL_GUIDELINES
+
+        for key, entry in CLINICAL_GUIDELINES.items():
+            if entry.get("_alias_of"):
+                target = entry["_alias_of"]
+                assert target in CLINICAL_GUIDELINES, f"Alias '{key}' points to non-existent '{target}'"
+                target_entry = CLINICAL_GUIDELINES[target]
+                assert not target_entry.get("_alias_of") or target_entry.get("key_points"), (
+                    f"Alias '{key}' target '{target}' should be a primary entry with key_points"
+                )
+
+    @pytest.mark.parametrize("topic,expected_in_title", [
+        ("gdm", "GDM"),
+        ("preeclampsia", "子痫前期"),
+        ("medication", "用药安全"),
+        ("prenatal", "孕期保健"),
+        ("fetal_movement", "胎动监测"),
+        ("fgr", "FGR"),
+        ("lab", "实验室"),
+        ("labor", "分娩"),
+        ("postpartum", "产后恢复"),
+        ("newborn", "新生儿"),
+        ("vaccination", "疫苗"),
+        ("nutrition", "营养"),
+        ("exercise", "运动"),
+        ("mental_health", "心理"),
+        ("prenatal_diagnosis", "产前筛查"),
+        ("travel", "旅行"),
+    ])
+    def test_direct_match_english(self, topic, expected_in_title):
+        """验证英文关键词精确匹配"""
+        from app.core.tools.clinical_guidelines_fallback import resolve_guideline
+
+        result = resolve_guideline(topic)
+        assert result is not None, f"No match for topic '{topic}'"
+        assert expected_in_title in result["title"], (
+            f"Expected '{expected_in_title}' in title, got '{result['title']}'"
+        )
+
+    @pytest.mark.parametrize("topic,expected_in_title", [
+        ("糖尿病", "GDM"),
+        ("子痫", "子痫前期"),
+        ("高血压", "子痫前期"),
+        ("用药", "用药安全"),
+        ("产检", "孕期保健"),
+        ("孕期", "孕期保健"),
+        ("胎动", "胎动监测"),
+        ("化验", "实验室"),
+        ("分娩", "分娩"),
+        ("产后", "产后恢复"),
+        ("新生儿", "新生儿"),
+        ("疫苗", "疫苗"),
+        ("营养", "营养"),
+        ("运动", "运动"),
+        ("心理", "心理"),
+        ("筛查", "产前筛查"),
+        ("旅行", "旅行"),
+        ("实验室", "实验室"),
+    ])
+    def test_direct_match_chinese(self, topic, expected_in_title):
+        """验证中文关键词精确匹配（含别名解析）"""
+        from app.core.tools.clinical_guidelines_fallback import resolve_guideline
+
+        result = resolve_guideline(topic)
+        assert result is not None, f"No match for topic '{topic}'"
+        assert expected_in_title in result["title"], (
+            f"Expected '{expected_in_title}' in title, got '{result['title']}'"
+        )
+
+    def test_substring_match_works(self):
+        """验证子串匹配：topic 包含关键词时能匹配"""
+        from app.core.tools.clinical_guidelines_fallback import resolve_guideline
+
+        # "severe_preeclampsia" 包含 "preeclampsia"
+        result = resolve_guideline("severe_preeclampsia_with_complications")
+        assert result is not None
+        assert "子痫前期" in result["title"]
+
+    def test_unknown_topic_returns_none(self):
+        """验证未知主题返回 None"""
+        from app.core.tools.clinical_guidelines_fallback import resolve_guideline
+
+        assert resolve_guideline("") is None
+        assert resolve_guideline("xyz_nonexistent_topic_123") is None
+
+    def test_search_guidelines_returns_multiple(self):
+        """验证 search_guidelines 可返回多条结果"""
+        from app.core.tools.clinical_guidelines_fallback import search_guidelines
+
+        results = search_guidelines("怀孕期间高血压子痫前期用药", max_results=5)
+        assert len(results) >= 2, f"Should find >= 2 results, got {len(results)}"
+        titles = [r["title"] for r in results]
+        assert any("子痫前期" in t for t in titles)
+        assert any("用药" in t for t in titles)
+
+    def test_search_guidelines_respects_max_results(self):
+        """验证 search_guidelines 遵守 max_results 限制"""
+        from app.core.tools.clinical_guidelines_fallback import search_guidelines
+
+        results = search_guidelines("pregnancy", max_results=1)
+        assert len(results) <= 1
+
+    def test_search_guidelines_no_duplicates(self):
+        """验证 search_guidelines 不返回重复条目"""
+        from app.core.tools.clinical_guidelines_fallback import search_guidelines
+
+        results = search_guidelines("gdm diabetes medication pregnancy", max_results=10)
+        titles = [r["title"] for r in results]
+        assert len(titles) == len(set(titles)), f"Duplicate titles found: {titles}"
+
+    def test_every_primary_entry_has_references(self):
+        """验证所有主条目都标注了参考文档"""
+        from app.core.tools.clinical_guidelines_fallback import CLINICAL_GUIDELINES
+
+        for key, entry in CLINICAL_GUIDELINES.items():
+            if entry.get("_alias_of"):
+                continue
+            refs = entry.get("references", [])
+            assert len(refs) >= 1, f"Topic '{key}' should reference at least 1 knowledge doc"
+
+
+# ==================== 医生工具兜底路径测试 ====================
+
+
+class TestDoctorToolsFallbackPath:
+    """验证 agno_query_clinical_guideline 在 RAG 不可用时的兜底行为
+
+    注意: agno_query_clinical_guideline 被 @tool 装饰器包装为 agno.tools.function.Function 对象，
+    调用时需要访问 .entrypoint 属性获取底层函数。
+    """
+
+    def test_fallback_returns_expanded_guidelines(self):
+        """验证硬编码兜底路径返回完整的临床关键点（而非仅标题）"""
+        from app.core.tools.doctor_tools import agno_query_clinical_guideline
+
+        # 模拟 RAG 不可用: knowledge 为 None
+        with patch("app.core.agno_knowledge.knowledge", None):
+            result = agno_query_clinical_guideline.entrypoint(topic="gdm")
+
+        assert result["source"] == "hardcoded_fallback"
+        guidelines = result["guidelines"]
+        assert isinstance(guidelines, list)
+        assert len(guidelines) >= 1
+        # 不应只是标题 — 应包含完整的 key_points
+        gdm_text = guidelines[0]
+        assert "诊断标准" in gdm_text or "OGTT" in gdm_text or "血糖" in gdm_text
+        # 至少有实质性内容
+        assert len(gdm_text) > 100, f"Fallback content too short: {len(gdm_text)} chars"
+
+    def test_fallback_unknown_topic_returns_helpful_message(self):
+        """验证完全未知主题返回提示信息而非报错"""
+        from app.core.tools.doctor_tools import agno_query_clinical_guideline
+
+        with patch("app.core.agno_knowledge.knowledge", None):
+            result = agno_query_clinical_guideline.entrypoint(topic="xyz_nonexistent_abcdef")
+
+        assert result["source"] == "hardcoded_fallback"
+        assert len(result["guidelines"]) >= 1
+        # 应包含帮助提示
+        assert "未找到" in result["guidelines"][0] or "建议" in result["guidelines"][0]
+
+    def test_fallback_chinese_query_works(self):
+        """验证中文查询能正确解析兜底指南"""
+        from app.core.tools.doctor_tools import agno_query_clinical_guideline
+
+        with patch("app.core.agno_knowledge.knowledge", None):
+            result = agno_query_clinical_guideline.entrypoint(topic="妊娠期糖尿病饮食")
+
+        assert result["source"] == "hardcoded_fallback"
+        assert len(result["guidelines"]) >= 1
+
+    def test_rag_available_uses_knowledge_base(self):
+        """验证 RAG 可用时优先走知识库检索"""
+        from app.core.tools.doctor_tools import agno_query_clinical_guideline
+
+        mock_doc = MagicMock()
+        mock_doc.content = "孕期应补充叶酸0.4mg每天"
+
+        mock_knowledge = MagicMock()
+        mock_knowledge.search.return_value = [mock_doc]
+
+        with patch("app.core.agno_knowledge.knowledge", mock_knowledge):
+            result = agno_query_clinical_guideline.entrypoint(topic="prenatal")
+
+        assert result["source"] == "knowledge_base"
+        assert "叶酸" in result["guidelines"][0]
+
+
+# ==================== RAG 健康监控测试 ====================
+
+
+class TestRAGHealthMonitor:
+    """测试 rag_health_monitor.py 的健康探针逻辑"""
+
+    def test_health_status_initial_state(self):
+        """验证初始健康状态可读取"""
+        from app.core.rag_health_monitor import get_health_status
+
+        status = get_health_status()
+        assert "embedding_service" in status
+        assert "pgvector" in status
+        assert "last_check_time" in status
+        assert "degraded" in status
+        assert isinstance(status["consecutive_failures"], int)
+
+    def test_check_embedding_service_healthy(self):
+        """验证嵌入服务健康探针 — 正常响应"""
+        from app.core.rag_health_monitor import _check_embedding_service
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"model_loaded": True, "model_name": "BAAI/bge-m3", "device": "cuda"}
+
+        # _check_embedding_service 内部 import requests，需要 patch 全局 requests.get
+        with patch("requests.get", return_value=mock_response):
+            result = _check_embedding_service(timeout=1.0)
+
+        assert result["status"] == "healthy"
+        assert "bge-m3" in result["detail"]
+        assert result["latency_ms"] >= 0
+
+    def test_check_embedding_service_model_not_loaded(self):
+        """验证嵌入服务探针 — 模型未加载"""
+        from app.core.rag_health_monitor import _check_embedding_service
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"model_loaded": False}
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_embedding_service(timeout=1.0)
+
+        assert result["status"] == "unreachable"
+        assert "not loaded" in result["detail"]
+
+    def test_check_embedding_service_connection_refused(self):
+        """验证嵌入服务探针 — 连接被拒绝"""
+        from app.core.rag_health_monitor import _check_embedding_service
+        import requests as r
+
+        with patch("requests.get", side_effect=r.ConnectionError("Connection refused")):
+            result = _check_embedding_service(timeout=1.0)
+
+        assert result["status"] == "unreachable"
+        assert "refused" in result["detail"].lower()
+
+    def test_check_embedding_service_timeout(self):
+        """验证嵌入服务探针 — 超时"""
+        from app.core.rag_health_monitor import _check_embedding_service
+        import requests as r
+
+        with patch("requests.get", side_effect=r.Timeout("timed out")):
+            result = _check_embedding_service(timeout=1.0)
+
+        assert result["status"] == "unreachable"
+        assert "timeout" in result["detail"].lower()
+
+    def test_check_pgvector_knowledge_none(self):
+        """验证 pgvector 探针 — knowledge 为 None"""
+        from app.core.rag_health_monitor import _check_pgvector
+
+        # _check_pgvector 内部 from .agno_knowledge import knowledge
+        with patch("app.core.agno_knowledge.knowledge", None):
+            result = _check_pgvector(timeout=1.0)
+
+        assert result["status"] == "unreachable"
+        assert "None" in result["detail"]
+
+    def test_check_pgvector_healthy(self):
+        """验证 pgvector 探针 — 正常检索"""
+        from app.core.rag_health_monitor import _check_pgvector
+
+        mock_doc = MagicMock()
+        mock_knowledge = MagicMock()
+        mock_knowledge.search.return_value = [mock_doc]
+
+        with patch("app.core.agno_knowledge.knowledge", mock_knowledge):
+            result = _check_pgvector(timeout=1.0)
+
+        assert result["status"] == "healthy"
+        assert "1 chunks" in result["detail"]
+
+    def test_check_pgvector_empty_table(self):
+        """验证 pgvector 探针 — 表存在但无数据"""
+        from app.core.rag_health_monitor import _check_pgvector
+
+        mock_knowledge = MagicMock()
+        mock_knowledge.search.return_value = []
+
+        with patch("app.core.agno_knowledge.knowledge", mock_knowledge):
+            result = _check_pgvector(timeout=1.0)
+
+        assert result["status"] == "empty"
+
+    def test_check_pgvector_search_error(self):
+        """验证 pgvector 探针 — 检索异常"""
+        from app.core.rag_health_monitor import _check_pgvector
+
+        mock_knowledge = MagicMock()
+        mock_knowledge.search.side_effect = Exception("connection timeout")
+
+        with patch("app.core.agno_knowledge.knowledge", mock_knowledge):
+            result = _check_pgvector(timeout=1.0)
+
+        assert result["status"] == "unreachable"
+
+    def test_health_check_job_updates_degraded_flag(self):
+        """验证定时健康检查任务更新降级标志"""
+        from app.core.rag_health_monitor import _health_check_job, get_health_status
+
+        # 模拟两个服务都不可用
+        with patch("app.core.rag_health_monitor._check_embedding_service",
+                   return_value={"status": "unreachable", "detail": "mock down", "latency_ms": 5.0}):
+            with patch("app.core.rag_health_monitor._check_pgvector",
+                       return_value={"status": "unreachable", "detail": "mock down", "latency_ms": 5.0}):
+                _health_check_job()
+
+        status = get_health_status()
+        assert status["degraded"] is True
+        assert status["consecutive_failures"] >= 1
+
+        # 模拟恢复
+        with patch("app.core.rag_health_monitor._check_embedding_service",
+                   return_value={"status": "healthy", "detail": "ok", "latency_ms": 1.0}):
+            with patch("app.core.rag_health_monitor._check_pgvector",
+                       return_value={"status": "healthy", "detail": "1 chunks", "latency_ms": 1.0}):
+                _health_check_job()
+
+        status = get_health_status()
+        assert status["degraded"] is False
+        assert status["consecutive_failures"] == 0
+
+    def test_rag_status_endpoint_includes_health_monitor(self):
+        """验证增强后的 /rag/status 包含 health_monitor 字段"""
+        from app.routers.chat import rag_status
+
+        with patch("app.routers.chat.settings") as mock_settings:
+            mock_settings.rag_enabled = True
+            mock_settings.rag_search_type = "hybrid"
+            mock_settings.embedding_model = "text-embedding-v3"
+            mock_settings.embedding_dimensions = 1024
+            mock_settings.rag_max_results = 5
+            mock_settings.rag_chunk_size = 600
+            mock_settings.rag_chunk_overlap = 120
+            mock_settings.agno_knowledge_table = "knowledge_chunks"
+            mock_settings.embedding_api_url = "http://localhost:8081/v1"
+
+            with patch("app.routers.chat.knowledge") as mock_knowledge:
+                mock_doc = MagicMock()
+                mock_knowledge.search.return_value = [mock_doc]
+
+                result = rag_status()
+
+        # 新字段
+        assert "health_monitor" in result, "rag_status should include health_monitor field"
+        assert "embedding_api_url" in result
+        assert "chunk_size" in result
+        assert "knowledge_table" in result

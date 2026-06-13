@@ -178,7 +178,14 @@ async def agno_handle_issue(issue_id: str = "", resolution: str = "", run_contex
 
 @tool
 def agno_query_clinical_guideline(topic: str = "") -> dict:
-    """查询临床指南和规范。优先使用知识库检索。"""
+    """查询临床指南和规范。优先使用知识库检索 (RAG)，不可用时回退硬编码指南库。
+
+    检索策略:
+    1. 优先: Agno Knowledge + PgVector 语义/混合检索，带角色过滤器 (doctor/nurse/all)
+    2. 回退: 硬编码临床指南库 (clinical_guidelines_fallback.py)，
+       包含 12 个核心主题的完整临床关键点，内容提取自 knowledge_docs/
+    """
+    # ── 优先路径: RAG 知识库检索 ──
     try:
         from ..agno_knowledge import knowledge
         if knowledge is None:
@@ -198,14 +205,30 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
     except Exception:
         pass
 
-    guidelines = {
-        "fgr": "ACOG Practice Bulletin No. 204: Fetal Growth Restriction (2021)",
-        "gdm": "ACOG Practice Bulletin No. 190: Gestational Diabetes Mellitus (2023)",
-        "hypertension": "ACOG Practice Bulletin No. 222: Gestational Hypertension and Preeclampsia (2023)",
-        "prenatal": "中华医学会妇产科学分会. 孕前和孕期保健指南(2022)",
+    # ── 回退路径: 硬编码临床指南库 ──
+    from .clinical_guidelines_fallback import search_guidelines
+
+    matched = search_guidelines(topic, max_results=3)
+    if matched:
+        guidelines_text = []
+        for entry in matched:
+            header = f"【{entry['title']}】(来源: {entry['source']})"
+            points = "\n".join(f"  {p}" for p in entry.get("key_points", []))
+            guidelines_text.append(f"{header}\n{points}")
+        return {
+            "topic": topic,
+            "guidelines": guidelines_text,
+            "source": "hardcoded_fallback",
+        }
+
+    # 完全无匹配时返回通用提示
+    return {
+        "topic": topic,
+        "guidelines": [
+            "未找到与 '{topic}' 匹配的临床指南。系统当前无法访问知识库，"
+            "且硬编码指南库中无此主题。"
+            "建议：1) 检查 pgvector PostgreSQL 连接和嵌入服务状态；"
+            "2) 针对此主题咨询相关专科医生或查阅最新 ACOG/中华医学会指南。",
+        ],
+        "source": "hardcoded_fallback",
     }
-    topic_lower = topic.lower()
-    matched = [v for k, v in guidelines.items() if k in topic_lower]
-    if not matched:
-        matched = list(guidelines.values())[:3]
-    return {"topic": topic, "guidelines": matched, "source": "hardcoded_fallback"}

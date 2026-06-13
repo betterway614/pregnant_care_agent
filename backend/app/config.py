@@ -189,6 +189,9 @@ class Settings(BaseSettings):
     persist_chat_messages: bool = True
     audit_enabled: bool = True  # 审计日志总开关，设为 False 可禁用全部审计写入
 
+    # RAG 健康监控
+    rag_health_check_interval_minutes: int = 5  # RAG 健康检查间隔 (分钟)，设为 0 禁用
+
     # 随访定时调度
     followup_scheduler_enabled: bool = True  # 是否启用随访自动调度
     followup_scheduler_hour: int = 8  # 每日扫描时间（北京时间，0-23）
