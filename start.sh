@@ -48,6 +48,7 @@ mkdir -p "${PID_DIR}" "${LOG_DIR}"
 # 监控文件
 MONITOR_STATE="${PID_DIR}/.monitor_state"
 MONITOR_LOG="${LOG_DIR}/monitor.log"
+SHUTDOWN_SENTINEL="${PID_DIR}/.shutdown"
 
 # 颜色
 C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[1;33m'
@@ -267,11 +268,22 @@ start_ai_services() {
 stop_project() {
     log_step "停止项目服务..."
 
+    # 1. 先按 PID 文件杀
     for name in backend frontend; do
         for suffix in real.pid pid; do
             local pf="${PID_DIR}/${name}.${suffix}"
             [ -f "${pf}" ] && graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
         done
+    done
+
+    # 2. 兜底：强制清理仍占用端口的进程（防止 monitor 自动重启残留）
+    for port in ${BACKEND_PORT} ${FRONTEND_PORT}; do
+        local leftover_pid
+        leftover_pid=$(resolve_port_pid "${port}")
+        if [ -n "${leftover_pid}" ]; then
+            log_warn "清理端口 ${port} 残留进程 (PID: ${leftover_pid})"
+            kill -9 "${leftover_pid}" 2>/dev/null || true
+        fi
     done
 
     cd "${PROJECT_DIR}"
@@ -283,12 +295,26 @@ stop_project() {
 }
 
 stop_all() {
+    # 1. 先设置停机哨兵，防止 monitor 在停止过程中自动重启服务
+    touch "${SHUTDOWN_SENTINEL}" 2>/dev/null || true
+
+    # 2. 停止监控守护进程（它会检测哨兵文件并主动退出）
     stop_monitor
+
+    # 3. 短暂等待确保 monitor 完全退出，不再有新的重启操作
+    sleep 1
+
+    # 4. 停止项目服务
     stop_project
+
+    # 5. 停止 AI 服务
     if [ -f "${AI_SERVICES_SCRIPT}" ]; then
         log_step "停止 AI 服务..."
         bash "${AI_SERVICES_SCRIPT}" stop 2>/dev/null || true
     fi
+
+    # 6. 清理哨兵文件
+    rm -f "${SHUTDOWN_SENTINEL}"
 }
 
 # 仅停止前后端应用服务（保留基础设施和 AI 服务）
@@ -500,7 +526,9 @@ start_monitor() {
     if [ -f "${MONITOR_STATE}" ]; then
         local existing_pid
         existing_pid=$(monitor_state_get "mon_pid")
+        # 兼容旧格式（第一行是裸 PID）、新格式（mon_pid=XXX）
         [ -z "${existing_pid}" ] && existing_pid=$(head -1 "${MONITOR_STATE}" 2>/dev/null)
+        [[ "${existing_pid}" == mon_pid=* ]] && existing_pid="${existing_pid#mon_pid=}"
         if [ -n "${existing_pid}" ] && kill -0 "${existing_pid}" 2>/dev/null; then
             log_warn "监控已在运行 (PID: ${existing_pid})"
             log_info "查看: tail -f ${MONITOR_LOG}"
@@ -511,12 +539,15 @@ start_monitor() {
 
     log_step "启动监控守护进程 (间隔 ${interval}s, 自动重启: ${auto_restart})"
 
+    # 清理残留哨兵文件
+    rm -f "${SHUTDOWN_SENTINEL}"
+
     # 在子进程中运行监控循环
     (
         set +e  # 关闭 errexit，避免非关键命令导致子进程退出
 
         cat > "${MONITOR_STATE}" <<EOF
-${$}
+mon_pid=${$}
 interval=${interval}
 auto_restart=${auto_restart}
 started=$(date +%s)
@@ -567,6 +598,12 @@ EOF
         }
 
         while true; do
+            # ── 停机哨兵检测：如果存在 .shutdown 则主动退出，不重启任何服务 ──
+            if [ -f "${SHUTDOWN_SENTINEL}" ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${C_YELLOW}⏏${C_NC} 收到停机信号，监控守护进程退出" | tee -a "${MONITOR_LOG}"
+                exit 0
+            fi
+
             now=$(date '+%Y-%m-%d %H:%M:%S')
             changed=false
 
@@ -628,12 +665,28 @@ EOF
 stop_monitor() {
     [ ! -f "${MONITOR_STATE}" ] && return 0
 
+    # 先设置停机哨兵（让监控循环自己检测并退出，避免竞态）
+    touch "${SHUTDOWN_SENTINEL}" 2>/dev/null || true
+
     local mon_pid
     mon_pid=$(monitor_state_get "mon_pid")
+    # 兼容旧格式（第一行是裸 PID）
     [ -z "${mon_pid}" ] && mon_pid=$(head -1 "${MONITOR_STATE}" 2>/dev/null)
+    # 兼容新格式（第一行可能是 mon_pid=XXX）
+    [[ "${mon_pid}" == mon_pid=* ]] && mon_pid="${mon_pid#mon_pid=}"
 
     if [ -n "${mon_pid}" ] && kill -0 "${mon_pid}" 2>/dev/null; then
-        graceful_kill "${mon_pid}" "监控守护进程"
+        # 先给监控进程一点时间自行检测哨兵退出（最多 2s）
+        local waited=0
+        while kill -0 "${mon_pid}" 2>/dev/null && [ ${waited} -lt 2 ]; do
+            sleep 0.5; waited=$((waited + 1))
+        done
+        # 如果还在运行，强制终止
+        if kill -0 "${mon_pid}" 2>/dev/null; then
+            graceful_kill "${mon_pid}" "监控守护进程"
+        else
+            log_info "监控守护进程已自行退出"
+        fi
     fi
     rm -f "${MONITOR_STATE}"
     log_info "监控已停止"
