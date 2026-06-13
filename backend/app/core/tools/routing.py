@@ -63,15 +63,23 @@ TOOL_GROUPS: dict[str, list] = {
     "complex": MEDICAL_TOOLS,
 }
 
+# 意图 → variant 路由 (RAG 灵敏度门控策略)
+#   qa:      仅高置信度医学知识查询 (NLU 已确认含医学主题词)
+#   complex: 症状/检查等复杂场景 (有 search_knowledge 但 LLM 自主决定是否检索)
+#   chat:    闲聊/情绪/日常操作 (无 search_knowledge，不触发 RAG)
+#   record:  数据记录 (无 search_knowledge)
 INTENT_TO_GROUP: dict[str, str] = {
     "health_data_report": "record", "emotion_express": "chat",
-    "knowledge_query": "qa", "schedule_inquiry": "qa",
+    "knowledge_query": "qa", "schedule_inquiry": "chat",
     "emergency": "emergency", "suicide_risk": "emergency",
     "greeting": "chat", "unknown": "complex",
     "chat": "chat", "emotion": "chat",
     "record_weight": "record", "record_bp": "record",
     "record_glucose": "record", "record_fetal_movement": "record",
-    "ask_knowledge": "qa", "ask_symptom": "qa", "ask_exam": "qa",
+    # LLM 辅助分类的意图:
+    "ask_knowledge": "qa",       # LLM 明确判定为知识问题 → qa
+    "ask_symptom": "complex",    # 症状咨询 → 复杂兜底 (全量工具+知识)
+    "ask_exam": "complex",       # 检查解读 → 复杂兜底 (可能需趋势+知识)
 }
 
 # 知识检索工具 search_knowledge_base 由 Agno 框架根据 search_knowledge=True 自动注入，不在此处显式列出

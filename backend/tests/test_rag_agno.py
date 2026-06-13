@@ -402,14 +402,27 @@ class TestKnowledgeFilters:
         ("complex", "get_main_agent"),
     ])
     def test_all_pregnant_variants_have_filters(self, variant_name, getter):
-        """孕妇端所有变体都设置了 knowledge_filters"""
+        """孕妇端所有变体的 knowledge_filters 状态
+
+        门控策略 (RAG 灵敏度优化):
+          qa/complex → search_knowledge=True  → knowledge_filters is not None
+          chat/record/emergency → search_knowledge=False → knowledge_filters is None
+        """
         from app.core import agno_agent as mod
         factory = getattr(mod, getter)
         mock_model = self._make_mock_model()
         with patch("app.core.agno_agent.get_agno_model", return_value=mock_model):
             with patch("agno.agent._init.get_model", return_value=mock_model):
                 agent = factory()
-                assert agent.knowledge_filters is not None, f"{variant_name} missing knowledge_filters"
+                if variant_name in ("qa", "complex"):
+                    assert agent.knowledge_filters is not None, (
+                        f"{variant_name} should have knowledge_filters (search_knowledge=True)"
+                    )
+                else:
+                    # chat/record/emergency: 主动关闭知识检索，减少 RAG 误触发
+                    assert agent.knowledge_filters is None, (
+                        f"{variant_name} should NOT have knowledge_filters (search_knowledge=False per gating)"
+                    )
 
     @pytest.mark.parametrize("getter", [
         "get_nurse_analyze_agent",

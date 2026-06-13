@@ -51,16 +51,26 @@ def _create_pregnant_db():
     return SqliteDb(db_file=_pregnant_db_path)
 
 
-def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
+def _build_agent(variant_name: str, tools: list, tool_call_limit: int,
+                 enable_knowledge: bool | None = None) -> Agent:
     """通用 Agent 构造器 — 所有变体共享 SqliteDb
 
     知识检索机制:
-        search_knowledge=True 触发 Agno 框架自动注入 search_knowledge_base 工具，
-        该工具调用 knowledge.search() 执行 PgVector 向量/混合检索。
-        因此 tools 列表中不需要显式包含知识检索工具。
-        角色级过滤通过 knowledge_filters=_PREGNANT_KNOWLEDGE_FILTERS 控制，
-        仅返回 audience 为 'patient' 或 'all' 的知识条目。
+        search_knowledge=True 触发 Agno 框架自动注入 search_knowledge_base 工具。
+        仅 qa 和 complex (兜底) 变体默认启用知识检索；chat/record/emergency 关闭，
+        减少非必要场景的 RAG 误触发。
+
+    角色级过滤通过 knowledge_filters=_PREGNANT_KNOWLEDGE_FILTERS 控制，
+    仅返回 audience 为 'patient' 或 'all' 的知识条目。
+
+    Args:
+        enable_knowledge: 是否启用知识检索。None 时按变体名默认决定:
+            qa/complex → True, 其余 → False
     """
+    # 知识检索门控: 仅知识问答和兜底变体默认启用
+    if enable_knowledge is None:
+        enable_knowledge = variant_name in ("qa", "main", "complex", "qa-full")
+
     kwargs = dict(
         name=f"小安-{variant_name}",
         model=get_agno_model(role="pregnant"),
@@ -77,10 +87,13 @@ def _build_agent(variant_name: str, tools: list, tool_call_limit: int) -> Agent:
         tool_call_limit=tool_call_limit,
         debug_mode=False,
     )
-    if knowledge is not None:
+    if knowledge is not None and enable_knowledge:
         kwargs["knowledge"] = knowledge
         kwargs["search_knowledge"] = True
         kwargs["knowledge_filters"] = _PREGNANT_KNOWLEDGE_FILTERS
+    elif knowledge is not None and not enable_knowledge:
+        # 不启用知识检索但保留 knowledge 引用 (运行时可由 LLM 通过其他工具间接获取)
+        logger.debug("[RAG] Pregnant Agent '%s': knowledge 可用但主动关闭检索 (非知识场景)", variant_name)
     else:
         logger.warning("[RAG] Pregnant Agent '%s': knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
     return Agent(**kwargs)
