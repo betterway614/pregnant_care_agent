@@ -242,9 +242,8 @@ async function doSignOrder() {
 
     ElMessage.success('医嘱已签署并发布')
     // 重新加载展示打印预览
-    const res = await orderApi.list({})
-    const updated = (res.data || []).find((o: MedicalOrder) => o.id === orderId)
-    if (updated) order.value = updated
+    const updatedRes = await orderApi.get(orderId)
+    if (updatedRes.data) order.value = updatedRes.data as MedicalOrder
     previewMode.value = true
   } catch (err: any) {
     const msg = err.response?.data?.detail || '签署失败'
@@ -281,14 +280,13 @@ async function doExportPdf() {
 
 onMounted(async () => {
   try {
-    const res = await orderApi.list({})
-    const found = (res.data || []).find((o: MedicalOrder) => o.id === orderId)
+    const res = await orderApi.get(orderId)
+    const found = res.data as MedicalOrder
     if (found) {
       order.value = found
       editContent.value = found.content || ''
       originalContent.value = found.content || ''
       doctorNotes.value = found.doctor_notes || ''
-      // 获取孕周信息
       if (found.pregnant_id) {
         pregnantApi.getHome(found.pregnant_id).then((homeRes) => {
           gestDays.value = homeRes.data?.gestational_day || 0

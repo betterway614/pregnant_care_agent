@@ -629,7 +629,12 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             yield event
 
         # 审计日志（后台异步写入，不阻塞响应）
-        import asyncio
+        def _on_audit_done(task):
+            _audit_tasks.discard(task)
+            exc = task.exception()
+            if exc:
+                logger.error("医生端审计日志后台写入失败: {}", exc)
+
         _bg_task = asyncio.create_task(asyncio.to_thread(
             AuditService.save_log,
             session_id=session_id,
@@ -641,7 +646,7 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             run_response=state.run_response,
             total_latency_ms=state.elapsed_ms,
         ))
-        _bg_task.add_done_callback(_audit_tasks.discard)
+        _bg_task.add_done_callback(_on_audit_done)
         _audit_tasks.add(_bg_task)
 
     return EventSourceResponse(agno_event_generator(), ping=15)

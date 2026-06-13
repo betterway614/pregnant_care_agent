@@ -133,6 +133,8 @@ export const fgrApi = {
 
 // 医嘱
 export const orderApi = {
+  get: (orderId: string) =>
+    client.get<MedicalOrder>(`/orders/${orderId}`),
   generate: (data: { pregnant_id: string; alert_id?: string; risk_level: string; gestational_weeks: number }) =>
     client.post<MedicalOrder>('/orders/generate', data),
   list: (params?: { status?: string; pregnant_id?: string }) =>

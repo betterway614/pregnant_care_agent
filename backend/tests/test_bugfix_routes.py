@@ -181,15 +181,16 @@ class TestFollowUpStateMachine:
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_record.status = "completed"
+        mock_record.pregnant_id = "P001"
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_record
 
         sign_req = MagicMock()
         sign_req.signature_image = "base64..."
-        sign_req.signer_name = "张护士"
+        sign_req.signer_name = "张三"
 
-        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+        mock_user = TokenPayload(sub="P001", role="pregnant", pregnant_id="P001")
 
         with pytest.raises(HTTPException) as exc_info:
             sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
@@ -204,6 +205,7 @@ class TestFollowUpStateMachine:
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_record.status = "confirmed"
+        mock_record.pregnant_id = "P001"
         mock_record.signature_data = {}
 
         mock_db = MagicMock()
@@ -211,12 +213,12 @@ class TestFollowUpStateMachine:
 
         sign_req = MagicMock()
         sign_req.signature_image = "base64..."
-        sign_req.signer_name = "张护士"
+        sign_req.signer_name = "张三"
 
-        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
+        mock_user = TokenPayload(sub="P001", role="pregnant", pregnant_id="P001")
 
         result = sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
-        assert mock_record.signature_data["signer"] == "张护士"
+        assert mock_record.signature_data["signer"] == "张三"
         mock_db.commit.assert_called_once()
 
 

@@ -72,12 +72,14 @@ def _quick_audit(
             db.add(log)
             db.commit()
             return log.id
-        except Exception:
+        except Exception as e:
             db.rollback()
+            logger.warning("随访审计日志DB写入失败: {}", e)
             return None
         finally:
             db.close()
-    except Exception:
+    except Exception as e:
+        logger.warning("随访审计日志会话创建失败: {}", e)
         return None
 
 
@@ -164,7 +166,10 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
 
     写入审核追溯信息 + 生成归档文档快照。
     使用状态机校验转换合法性，从JWT提取审核者身份。
+    仅护士/管理员可以确认审核。
     """
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以审核确认随访记录")
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
@@ -306,13 +311,17 @@ async def ai_review_followup(record_id: str, db: Session = Depends(get_db),
     if alert_text:
         context += f"\n\n活跃预警：\n{alert_text}"
 
-    # 尝试1: Agno Agent
+    # 尝试1: Agno Agent（120s 超时保护）
     try:
+        import asyncio as _asyncio
         from ..core.agno_medical_agents import create_followup_review_agent
         from ..core.agno_structured import extract_structured_content
         agent = create_followup_review_agent()
         t0 = time.time()
-        response = await agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}")
+        response = await _asyncio.wait_for(
+            agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}"),
+            timeout=120,
+        )
         _quick_audit(
             session_id=f"followup_review_{record_id}",
             user_id=record.pregnant_id,
@@ -392,7 +401,10 @@ async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: S
     """更新随访记录（仅允许更新安全字段）
 
     仅 draft/in_progress 状态允许修改，已归档记录不可篡改。
+    仅护士/管理员可以更新随访记录。
     """
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以编辑随访记录")
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
@@ -446,10 +458,15 @@ def sign_record(record_id: str, req: FollowUpSignatureRequest, db: Session = Dep
     """提交手写签名
 
     将签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
+    仅孕妇本人可以签名自己的随访记录。
     """
+    if current_user.role != "pregnant":
+        raise HTTPException(403, "仅孕妇可以签署随访记录")
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
+    if record.pregnant_id != current_user.pregnant_id:
+        raise HTTPException(403, "只能签署本人的随访记录")
     # 状态机校验：仅 confirmed 状态允许签名
     if record.status != "confirmed":
         raise HTTPException(400, f"当前状态 '{record.status}' 不允许签名，仅 'confirmed' 状态可签名")
@@ -562,9 +579,10 @@ async def respond_to_followup(req: FollowUpAnswer, db: Session = Depends(get_db)
     """
     from datetime import datetime
 
+    # SELECT ... FOR UPDATE 防止并发提交时的读-改-写竞争
     record = db.query(FollowUpRecord).filter(
         FollowUpRecord.id == UUID(req.record_id)
-    ).first()
+    ).with_for_update().first()
     if not record:
         raise HTTPException(404, "随访记录不存在")
 

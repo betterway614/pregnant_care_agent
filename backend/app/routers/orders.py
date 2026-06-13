@@ -27,6 +27,8 @@ async def generate_order(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """生成医嘱建议（LLM增强版）"""
+    if current_user.role not in _SIGN_ALLOWED_ROLES:
+        raise HTTPException(403, "仅医生或管理员可以生成医嘱")
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == req.pregnant_id).first()
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
@@ -160,6 +162,23 @@ def get_pregnant_orders(
     ]
 
 
+@router.get("/{order_id}", response_model=OrderResponse)
+def get_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """获取单条医嘱详情"""
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
+    return OrderResponse(
+        **{c.name: getattr(order, c.name) for c in order.__table__.columns},
+        patient_name=pregnant.display_name if pregnant else "未知",
+    )
+
+
 @router.put("/{order_id}/sign", response_model=OrderResponse)
 def sign_order(
     order_id: str,
@@ -179,7 +198,10 @@ def sign_order(
     if current_user.role not in _SIGN_ALLOWED_ROLES:
         raise HTTPException(403, "仅医生或管理员可以签署医嘱")
 
-    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    # 使用 SELECT ... FOR UPDATE 防止并发签署竞态条件
+    order = db.query(MedicalOrder).filter(
+        MedicalOrder.id == UUID(order_id)
+    ).with_for_update().first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
 
@@ -258,8 +280,10 @@ def update_order(
 ):
     """更新医嘱（内容修改时自动标记 modified_by_doctor）
 
-    仅 draft 状态的医嘱允许修改。
+    仅 draft 状态的医嘱允许修改。仅医生/管理员可修改。
     """
+    if current_user.role not in _SIGN_ALLOWED_ROLES:
+        raise HTTPException(403, "仅医生或管理员可以修改医嘱")
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
