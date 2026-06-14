@@ -419,10 +419,14 @@ async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: S
 
     if data.summary is not None:
         record.summary = data.summary
+    if data.chief_complaint is not None:
+        record.chief_complaint = data.chief_complaint
     if data.classification is not None:
         record.classification = data.classification
     if data.health_education is not None:
         record.health_education = data.health_education
+    if data.self_reported_data is not None:
+        record.self_reported_data = data.self_reported_data
     # nurse_notes 字段在 FollowUpRecord 模型中不存在，使用 review_comment 替代
     if data.nurse_notes is not None:
         record.review_comment = data.nurse_notes

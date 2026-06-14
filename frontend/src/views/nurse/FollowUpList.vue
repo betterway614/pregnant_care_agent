@@ -149,13 +149,21 @@
                   孕妇详情
                 </el-button>
                 <el-button
-                  v-if="row.status === 'completed' || row.status === 'in_progress'"
+                  v-if="row.status === 'completed'"
                   type="primary"
                   class="brand-gradient-btn"
                   size="small"
                   @click.stop="openReviewDrawer(row)"
                 >
                   确认审核
+                </el-button>
+                <el-button
+                  v-else-if="row.status === 'in_progress'"
+                  type="warning"
+                  size="small"
+                  @click.stop="openReviewDrawer(row)"
+                >
+                  进行中
                 </el-button>
                 <el-button
                   v-else-if="row.status === 'draft'"
@@ -270,10 +278,10 @@
             <span class="record-section__title">主观数据</span>
           </div>
           <div class="record-section__body">
-            <template v-if="Object.keys(reviewRecord.self_reported_data || {}).length">
-              <div v-for="(val, key) in reviewRecord.self_reported_data" :key="key" class="record-kv">
+            <template v-if="Object.keys(visibleSelfReportedData).length">
+              <div v-for="(val, key) in visibleSelfReportedData" :key="key" class="record-kv">
                 <span class="record-kv__key">{{ fieldLabel(String(key)) }}</span>
-                <span class="record-kv__val">{{ val }}</span>
+                <span class="record-kv__val">{{ formatDisplayValue(val) }}</span>
               </div>
             </template>
             <span v-else class="record-muted">暂无自报数据</span>
@@ -348,7 +356,7 @@
             </div>
             <!-- 下次随访 -->
             <div v-if="reviewRecord.next_followup_date" class="record-next-date">
-              下次随访日期：{{ reviewRecord.next_followup_date }}
+              下次随访日期：{{ formatDate(reviewRecord.next_followup_date) }}
             </div>
             <!-- 转诊 -->
             <div v-if="reviewRecord.referral?.has_referral" class="record-referral">
@@ -424,7 +432,18 @@
           />
         </div>
 
-        <!-- in_progress / completed 状态：审核通过 + 上报医生 -->
+        <!-- in_progress 状态：等待孕妇填写完成 -->
+        <div class="record-actions" v-else-if="isInProgress">
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            title="孕妇正在填写中，请等待完成后再进行审核。"
+            style="flex: 1"
+          />
+        </div>
+
+        <!-- completed 状态：审核通过 + 上报医生 -->
         <div class="record-actions" v-else-if="isReviewable">
           <el-button
             type="primary"
@@ -462,7 +481,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, Refresh, Document, Loading } from '@element-plus/icons-vue'
-import { followUpApi, dashboardApi, nurseAiApi, collaborationApi } from '@/api/endpoints'
+import { followUpApi, dashboardApi, nurseAiApi, collaborationApi, nurseBriefingApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FollowUpRecord, Pregnant } from '@/types'
 import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
@@ -484,6 +503,16 @@ function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+}
+
+/** 页面可见性变化：隐藏时暂停轮询，显示时恢复并立即刷新 */
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopPolling()
+  } else {
+    fetchRecords()
+    startPolling()
   }
 }
 
@@ -535,7 +564,12 @@ const isEditable = computed(() => {
 
 const isReviewable = computed(() => {
   const s = reviewRecord.value?.status
-  return s === 'completed' || s === 'in_progress'
+  return s === 'completed'
+})
+
+const isInProgress = computed(() => {
+  const s = reviewRecord.value?.status
+  return s === 'in_progress'
 })
 
 const isArchived = computed(() => {
@@ -622,6 +656,26 @@ function formatDate(d?: string): string {
 
 function hasExam(obj: Record<string, any> | undefined): boolean {
   return !!obj && Object.keys(obj).length > 0
+}
+
+/** 系统内部字段，不应展示给护士 */
+const INTERNAL_FIELDS = new Set(['template_id', 'auto_generated'])
+
+/** 过滤掉内部字段后的主观数据 */
+const visibleSelfReportedData = computed(() => {
+  const data = reviewRecord.value?.self_reported_data
+  if (!data) return {}
+  return Object.fromEntries(
+    Object.entries(data).filter(([key]) => !INTERNAL_FIELDS.has(key))
+  )
+})
+
+/** 格式化显示值：布尔→中文，对象/数组→友好文本 */
+function formatDisplayValue(val: any): string {
+  if (val === null || val === undefined || val === '') return '--'
+  if (typeof val === 'boolean') return val ? '是' : '否'
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
 }
 
 function examHighlightClass(key: string, val: any): string {
@@ -840,7 +894,7 @@ async function doQuickTrigger(rec: any) {
   }
 }
 
-/** 批量触发选中的推荐随访 */
+/** 批量触发选中的推荐随访（使用后端批量端点，避免串行逐个调用） */
 async function doBatchTrigger() {
   const selected = selectedRecommendations.value
   if (!selected.length) return
@@ -852,25 +906,30 @@ async function doBatchTrigger() {
   )
 
   batchTriggering.value = true
-  let successCount = 0
-  let failCount = 0
+  try {
+    const pregnantIds = selected.map(r => r.pregnant_id)
+    const res = await nurseBriefingApi.batchTriggerFollowups(pregnantIds, '')
+    const data = res.data
+    const triggered = data?.triggered ?? 0
+    const skipped = data?.skipped ?? 0
+    const errors = data?.errors ?? []
 
-  for (const rec of selected) {
-    try {
-      await followUpApi.trigger(rec.pregnant_id, rec.template_id)
-      successCount++
-    } catch {
-      failCount++
+    if (triggered > 0) {
+      ElMessage.success(
+        `成功触发 ${triggered} 条随访` +
+        (skipped > 0 ? `，${skipped} 条已跳过（存在活跃随访）` : '') +
+        (errors.length > 0 ? `，${errors.length} 条失败` : '')
+      )
+    } else if (skipped > 0) {
+      ElMessage.warning(`${skipped} 条已跳过（存在活跃随访）`)
+    } else {
+      ElMessage.error('批量触发失败')
     }
-  }
-
-  batchTriggering.value = false
-  selectAllRecommendations.value = false
-
-  if (successCount > 0) {
-    ElMessage.success(`成功触发 ${successCount} 条随访${failCount > 0 ? `，${failCount} 条失败` : ''}`)
-  } else {
-    ElMessage.error('批量触发失败')
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '批量触发失败')
+  } finally {
+    batchTriggering.value = false
+    selectAllRecommendations.value = false
   }
 
   await fetchRecords()
@@ -892,10 +951,12 @@ onMounted(() => {
   fetchPatients()
   fetchRecommendations()
   startPolling()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   stopPolling()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

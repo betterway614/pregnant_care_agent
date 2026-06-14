@@ -9,6 +9,15 @@ import {
   getCategory,
   getCategoryMetrics,
   getCategoryByMetric,
+  fieldLabel,
+  examLabel,
+  labLabel,
+  triggerSourceLabel,
+  ruleIdLabel,
+  alertStatusText,
+  alertStatusTagType,
+  formatRawDetails,
+  hasRawDetails,
 } from '../labelMaps'
 import type { IndicatorCategory } from '../labelMaps'
 
@@ -193,5 +202,152 @@ describe('分类完整性检查', () => {
       expect(cat.icon).toBeTruthy()
       expect(cat.description).toBeTruthy()
     }
+  })
+})
+
+describe('fieldLabel 主观数据字段中文映射', () => {
+  it('已知字段应返回中文标签', () => {
+    expect(fieldLabel('weight')).toBe('体重')
+    expect(fieldLabel('bp')).toBe('血压')
+    expect(fieldLabel('fetal_movement')).toBe('胎动')
+    expect(fieldLabel('sleep_hours')).toBe('睡眠')
+    expect(fieldLabel('blood_sugar_fasting')).toBe('空腹血糖')
+    expect(fieldLabel('headache')).toBe('头痛')
+    expect(fieldLabel('dizziness')).toBe('头晕')
+    expect(fieldLabel('mood')).toBe('情绪')
+  })
+
+  it('未知 snake_case 字段应尝试词根翻译而非直接返回英文', () => {
+    const label = fieldLabel('blood_pressure_level')
+    // 应包含中文翻译部分
+    expect(label).not.toBe('blood_pressure_level')
+    expect(label).toContain('血液')
+  })
+
+  it('完全未知的字段应返回可读形式', () => {
+    const label = fieldLabel('custom_field_xyz')
+    // 不应原样返回 snake_case
+    expect(label).not.toBe('custom_field_xyz')
+  })
+})
+
+describe('examLabel 产科检查字段中文映射', () => {
+  it('已知字段应返回中文标签', () => {
+    expect(examLabel('fundal_height_cm')).toBe('宫高(cm)')
+    expect(examLabel('fetal_heart_rate_bpm')).toBe('胎心率(bpm)')
+    expect(examLabel('blood_pressure')).toBe('血压(mmHg)')
+    expect(examLabel('cervical_dilation')).toBe('宫口开大')
+    expect(examLabel('amniotic_fluid')).toBe('羊水')
+  })
+
+  it('未知字段应尝试词根翻译', () => {
+    const label = examLabel('fetal_position_custom')
+    expect(label).not.toBe('fetal_position_custom')
+  })
+})
+
+describe('labLabel 生化指标字段中文映射', () => {
+  it('已知字段应返回中文标签（含单位）', () => {
+    expect(labLabel('hemoglobin_g_L')).toBe('血红蛋白(g/L)')
+    expect(labLabel('creatinine')).toBe('肌酐(μmol/L)')
+    expect(labLabel('hba1c')).toBe('糖化血红蛋白')
+    expect(labLabel('tsh')).toBe('促甲状腺激素')
+    expect(labLabel('urine_glucose')).toBe('尿糖')
+  })
+
+  it('未知字段应尝试词根翻译', () => {
+    const label = labLabel('urine_ketone_custom')
+    expect(label).not.toBe('urine_ketone_custom')
+  })
+})
+
+describe('triggerSourceLabel 触发来源中文映射', () => {
+  it('已知来源应返回中文', () => {
+    expect(triggerSourceLabel('RULE_ENGINE')).toBe('规则引擎')
+    expect(triggerSourceLabel('FGR_ALGORITHM')).toBe('FGR评估算法')
+    expect(triggerSourceLabel('MANUAL')).toBe('手动创建')
+    expect(triggerSourceLabel('EPDS_SCREENING')).toBe('EPDS心理筛查')
+    expect(triggerSourceLabel('AI_ANALYSIS')).toBe('AI分析')
+  })
+
+  it('未知来源应返回原始值', () => {
+    expect(triggerSourceLabel('UNKNOWN_SOURCE')).toBe('UNKNOWN_SOURCE')
+  })
+
+  it('空值应返回 --', () => {
+    expect(triggerSourceLabel()).toBe('--')
+    expect(triggerSourceLabel('')).toBe('--')
+  })
+})
+
+describe('ruleIdLabel 规则ID中文映射', () => {
+  it('护士端常见规则应返回中文', () => {
+    expect(ruleIdLabel('RULE_BP_HIGH')).toBe('血压异常升高')
+    expect(ruleIdLabel('RULE_FETAL_DROP')).toBe('胎动显著减少')
+    expect(ruleIdLabel('NURSE_AI_ALERT')).toBe('护士AI预警')
+  })
+
+  it('医生端扩展规则应返回中文', () => {
+    expect(ruleIdLabel('RULE_BP_HIGH_ORANGE')).toBe('血压偏高关注')
+    expect(ruleIdLabel('FGR_CRITICAL_RISK')).toBe('FGR极高风险')
+    expect(ruleIdLabel('EPDS_HIGH_RISK')).toBe('EPDS心理筛查高风险')
+    expect(ruleIdLabel('RULE_EMOTION_CRITICAL')).toBe('情绪评分严重偏低')
+  })
+
+  it('未知规则应返回下划线替换后的文本', () => {
+    expect(ruleIdLabel('SOME_NEW_RULE')).toBe('SOME NEW RULE')
+  })
+
+  it('空值应返回 --', () => {
+    expect(ruleIdLabel()).toBe('--')
+    expect(ruleIdLabel('')).toBe('--')
+  })
+})
+
+describe('alertStatusText 预警状态中文文本', () => {
+  it('应正确映射各种状态（大小写不敏感）', () => {
+    expect(alertStatusText('PENDING')).toBe('待处理')
+    expect(alertStatusText('pending')).toBe('待处理')
+    expect(alertStatusText('CONFIRMED')).toBe('已确认')
+    expect(alertStatusText('ESCALATED')).toBe('已升级(紧急)')
+    expect(alertStatusText('DISMISSED')).toBe('已驳回')
+    expect(alertStatusText('AUTO_DISMISSED')).toBe('已自动关闭')
+  })
+
+  it('未知状态应返回原始值', () => {
+    expect(alertStatusText('UNKNOWN')).toBe('UNKNOWN')
+  })
+})
+
+describe('alertStatusTagType 预警状态Tag颜色', () => {
+  it('应正确映射各种状态（大小写不敏感）', () => {
+    expect(alertStatusTagType('PENDING')).toBe('warning')
+    expect(alertStatusTagType('pending')).toBe('warning')
+    expect(alertStatusTagType('ESCALATED')).toBe('danger')
+    expect(alertStatusTagType('CONFIRMED')).toBe('success')
+    expect(alertStatusTagType('DISMISSED')).toBe('info')
+  })
+
+  it('未知状态应返回 info', () => {
+    expect(alertStatusTagType('UNKNOWN')).toBe('info')
+    expect(alertStatusTagType('')).toBe('info')
+  })
+})
+
+describe('formatRawDetails / hasRawDetails 原始数据处理', () => {
+  it('formatRawDetails 应翻译 key 为中文并排除 llm_analysis', () => {
+    const result = JSON.parse(formatRawDetails({
+      action: 'ALERT',
+      value: 150,
+      llm_analysis: 'should be excluded',
+    }))
+    expect(result).toEqual({ '处理动作': 'ALERT', '数值': 150 })
+    expect(result).not.toHaveProperty('llm_analysis')
+  })
+
+  it('hasRawDetails 应在仅有 llm_analysis 时返回 false', () => {
+    expect(hasRawDetails({ llm_analysis: 'some text' })).toBe(false)
+    expect(hasRawDetails({ llm_analysis: 'text', action: 'ALERT' })).toBe(true)
+    expect(hasRawDetails(undefined)).toBe(false)
   })
 })

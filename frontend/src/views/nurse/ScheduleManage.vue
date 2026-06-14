@@ -133,11 +133,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { Plus, Refresh, Calendar } from '@element-plus/icons-vue'
 import { scheduleApi, dashboardApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Pregnant, ScheduleNode } from '@/types'
 
+const route = useRoute()
 const loading = ref(false)
 const error = ref('')
 const pregnant = ref<Pregnant[]>([])
@@ -297,7 +299,15 @@ async function updateNodeDate(node: ScheduleNode, newDate: string) {
   }
 }
 
-onMounted(fetchPregnant)
+onMounted(async () => {
+  await fetchPregnant()
+  // 从路由 query 读取预选孕妇（从孕妇详情页跳转时传入）
+  const queryPregnantId = route.query.pregnant_id as string
+  if (queryPregnantId && pregnant.value.some(p => p.pregnant_id === queryPregnantId)) {
+    selectedPregnantId.value = queryPregnantId
+    fetchSchedule()
+  }
+})
 </script>
 
 <style scoped>

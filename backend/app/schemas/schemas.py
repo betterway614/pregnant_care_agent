@@ -258,9 +258,11 @@ class FollowUpSignatureRequest(BaseModel):
 class FollowUpRecordUpdateRequest(BaseModel):
     """Update a follow-up record (partial update, safe fields only)"""
     summary: Optional[str] = Field(None, max_length=5000)
+    chief_complaint: Optional[str] = Field(None, max_length=5000)
     classification: Optional[str] = Field(None, max_length=50)
     health_education: Optional[Any] = None
     nurse_notes: Optional[str] = Field(None, max_length=5000)
+    self_reported_data: Optional[dict] = None
 
 
 class FollowUpTrigger(BaseModel):

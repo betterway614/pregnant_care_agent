@@ -703,7 +703,7 @@ class TestBatchTriggerEndpoint:
         app.dependency_overrides.clear()
 
     def test_batch_trigger_empty_list(self, test_client, mock_nurse_user):
-        """空列表也能正常处理"""
+        """空列表应被拒绝（400）"""
         from app.core.auth import get_current_user
         from app.main import app
 
@@ -711,13 +711,10 @@ class TestBatchTriggerEndpoint:
             return mock_nurse_user
         app.dependency_overrides[get_current_user] = override_user
 
-        with patch("app.services.batch_followup.BatchFollowupService.batch_trigger") as mock_trigger:
-            mock_trigger.return_value = MagicMock()
-            mock_trigger.return_value.to_dict.return_value = {"triggered": 0, "skipped": 0, "errors": []}
-            resp = test_client.post("/api/v1/nurse/followup/batch-trigger",
-                                    json={"pregnant_ids": []})
+        resp = test_client.post("/api/v1/nurse/followup/batch-trigger",
+                                json={"pregnant_ids": []})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         app.dependency_overrides.clear()
 
 

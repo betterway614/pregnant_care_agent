@@ -200,6 +200,22 @@ const FIELD_LABEL_MAP: Record<string, string> = {
   blood_sugar_postprandial: '餐后血糖',
   steps: '步数',
   heart_rate: '心率',
+  reason: '原因说明',
+  notes: '备注',
+  symptoms: '症状',
+  temperature: '体温',
+  headache: '头痛',
+  dizziness: '头晕',
+  fatigue: '疲劳',
+  pain: '疼痛',
+  swelling: '肿胀',
+  vomiting: '呕吐',
+  constipation: '便秘',
+  frequency_of_urination: '排尿频率',
+  baby_movement: '胎动',
+  water_break: '破水',
+  vision_changes: '视力变化',
+  shortness_of_breath: '呼吸困难',
 }
 
 /** 产科检查字段中文映射 */
@@ -212,6 +228,11 @@ const EXAM_LABEL_MAP: Record<string, string> = {
   urine_protein: '尿蛋白',
   blood_sugar_fasting: '空腹血糖',
   blood_sugar_2h: '餐后2h血糖',
+  cervical_dilation: '宫口开大',
+  effacement: '宫颈消退',
+  presentation: '先露',
+  amniotic_fluid: '羊水',
+  estimated_fetal_weight: '估计胎儿体重',
 }
 
 /** 生化指标字段中文映射 */
@@ -229,19 +250,174 @@ export const LAB_LABEL_MAP: Record<string, string> = {
   platelet: '血小板(×10⁹/L)',
   hct: '红细胞压积(%)',
   bilirubin_total: '总胆红素(μmol/L)',
+  urine_glucose: '尿糖',
+  urine_ketone: '尿酮体',
+  hba1c: '糖化血红蛋白',
+  tsh: '促甲状腺激素',
+  ft4: '游离甲状腺素',
 }
 
-/** 获取主观数据字段中文标签，未匹配时返回原始 key */
+/** snake_case 常见英文词根→中文映射（用于未知 key 的友好回退） */
+const SNAKE_WORD_MAP: Record<string, string> = {
+  blood: '血液', pressure: '压力/血压', sugar: '糖', heart: '心', rate: '率',
+  weight: '体重', height: '身高', sleep: '睡眠', mood: '情绪', diet: '饮食',
+  fetal: '胎儿', baby: '婴儿', movement: '活动', motion: '运动',
+  pain: '疼痛', score: '评分', level: '水平', count: '计数',
+  morning: '晨', evening: '晚', night: '夜', day: '日',
+  fasting: '空腹', postprandial: '餐后', quality: '质量',
+  systolic: '收缩压', diastolic: '舒张压',
+  urine: '尿', protein: '蛋白', glucose: '葡萄糖', ketone: '酮体',
+  hemoglobin: '血红蛋白', albumin: '白蛋白', creatinine: '肌酐',
+  acid: '酸', total: '总', direct: '直接', indirect: '间接',
+  wbc: '白细胞', rbc: '红细胞', platelet: '血小板', hct: '红细胞压积',
+  alt: '谷丙转氨酶', ast: '谷草转氨酶', tsh: '促甲状腺激素',
+  fundal: '宫底', abdominal: '腹部', circumference: '周长',
+  position: '位置', cervical: '宫颈', dilation: '扩张',
+  amniotic: '羊水', fluid: '液体', estimated: '估计',
+  temperature: '体温', headache: '头痛', dizziness: '头晕',
+  fatigue: '疲劳', nausea: '恶心', vomiting: '呕吐',
+  edema: '水肿', bleeding: '出血', contraction: '宫缩',
+  appetite: '食欲', stress: '压力', exercise: '运动',
+  steps: '步数', emotion: '情绪', feeling: '感受',
+  reason: '原因', notes: '备注', symptoms: '症状',
+  self: '自', harm: '伤害', harm_thoughts: '自伤想法',
+}
+
+/** 将 snake_case 英文 key 转为友好中文标签（尽力翻译，无法翻译的部分保留原文） */
+function snakeToChineseLabel(key: string): string {
+  const parts = key.split('_')
+  const translated = parts.map(p => SNAKE_WORD_MAP[p] || p)
+  // 如果所有部分都翻译成功，拼接中文
+  const allTranslated = translated.every(t => !/^[a-z_]+$/i.test(t) || SNAKE_WORD_MAP[t])
+  if (allTranslated && translated.every(t => !/^[a-z]+$/.test(t))) {
+    return translated.join('')
+  }
+  // 部分翻译：用中文部分 + 原文下划线分隔
+  return translated.join(' ')
+}
+
+/** 获取主观数据字段中文标签，未匹配时将 snake_case 转为可读中文 */
 export function fieldLabel(key: string): string {
-  return FIELD_LABEL_MAP[key] || key
+  return FIELD_LABEL_MAP[key] || snakeToChineseLabel(key)
 }
 
-/** 获取产科检查字段中文标签，未匹配时返回原始 key */
+/** 获取产科检查字段中文标签，未匹配时将 snake_case 转为可读中文 */
 export function examLabel(key: string): string {
-  return EXAM_LABEL_MAP[key] || key
+  return EXAM_LABEL_MAP[key] || snakeToChineseLabel(key)
 }
 
-/** 获取生化指标字段中文标签，未匹配时返回原始 key */
+/** 获取生化指标字段中文标签，未匹配时将 snake_case 转为可读中文 */
 export function labLabel(key: string): string {
-  return LAB_LABEL_MAP[key] || key
+  return LAB_LABEL_MAP[key] || snakeToChineseLabel(key)
+}
+
+// ==================== 预警公共映射 ====================
+
+/** 触发来源中文映射（护士端 + 医生端共用） */
+const TRIGGER_SOURCE_LABEL_MAP: Record<string, string> = {
+  RULE_ENGINE: '规则引擎',
+  FGR_ALGORITHM: 'FGR评估算法',
+  MANUAL: '手动创建',
+  AI_ANALYSIS: 'AI分析',
+  FOLLOWUP_COMPLETE: '随访完成触发',
+  EPDS_SCREENING: 'EPDS心理筛查',
+  FOLLOWUP: '随访',
+}
+
+/** 获取触发来源中文标签 */
+export function triggerSourceLabel(source?: string): string {
+  if (!source) return '--'
+  return TRIGGER_SOURCE_LABEL_MAP[source] || source
+}
+
+/** 规则ID中文名称映射（全量，覆盖护士端 + 医生端所有规则） */
+const RULE_ID_LABEL_MAP: Record<string, string> = {
+  RULE_BP_HIGH: '血压异常升高',
+  RULE_BP_HIGH_ORANGE: '血压偏高关注',
+  RULE_BP_CRITICAL: '血压危急',
+  RULE_BP_LOW: '血压偏低',
+  RULE_LATE_PREGNANCY_BP: '孕晚期血压偏高',
+  RULE_BLOOD_SUGAR_HIGH: '血糖偏高',
+  RULE_BS_POSTPRANDIAL_HIGH: '餐后血糖异常',
+  RULE_BS_FASTING_HIGH: '空腹血糖偏高',
+  RULE_WEIGHT_GAIN_FAST: '体重增长过快',
+  RULE_WEIGHT_GAIN_SLOW: '体重增长过慢',
+  RULE_FETAL_DROP: '胎动显著减少',
+  RULE_FETAL_VERY_LOW: '胎动极少',
+  RULE_FETAL_HEART: '胎心异常',
+  RULE_GDM: '妊娠糖尿病',
+  RULE_PRE_ECLAMPSIA: '子痫前期',
+  RULE_EMOTION_CRITICAL: '情绪评分严重偏低',
+  RULE_EMOTION_HIGH: '情绪评分偏低',
+  RULE_SLEEP_SHORT: '睡眠不足',
+  FGR_CRITICAL_RISK: 'FGR极高风险',
+  FGR_HIGH_RISK: 'FGR高风险',
+  FGR_MEDIUM_RISK: 'FGR中风险',
+  EPDS_HIGH_RISK: 'EPDS心理筛查高风险',
+  NURSE_AI_ALERT: '护士AI预警',
+  AGENT_TOOL_ALERT: '智能体工具预警',
+  MANUAL: '手动创建',
+}
+
+/** 获取规则ID中文名称 */
+export function ruleIdLabel(ruleId?: string): string {
+  if (!ruleId) return '--'
+  return RULE_ID_LABEL_MAP[ruleId] || ruleId.replace(/_/g, ' ')
+}
+
+/** 预警状态中文文本映射 */
+const ALERT_STATUS_TEXT_MAP: Record<string, string> = {
+  PENDING: '待处理',
+  CONFIRMED: '已确认',
+  DISMISSED: '已驳回',
+  ESCALATED: '已升级(紧急)',
+  AUTO_DISMISSED: '已自动关闭',
+}
+
+/** 获取预警状态中文文本（兼容大小写输入） */
+export function alertStatusText(status: string): string {
+  return ALERT_STATUS_TEXT_MAP[(status || '').toUpperCase()] || status
+}
+
+/** 预警状态对应的 Element Plus Tag 类型 */
+const ALERT_STATUS_TAG_MAP: Record<string, string> = {
+  PENDING: 'warning',
+  CONFIRMED: 'success',
+  DISMISSED: 'info',
+  ESCALATED: 'danger',
+  AUTO_DISMISSED: 'info',
+}
+
+/** 获取预警状态 Tag 颜色类型（兼容大小写输入） */
+export function alertStatusTagType(status: string): string {
+  return ALERT_STATUS_TAG_MAP[(status || '').toUpperCase()] || 'info'
+}
+
+/** 原始数据 key 中文映射（用于 JSON 详情展示） */
+const RAW_KEY_MAP: Record<string, string> = {
+  action: '处理动作', metric: '指标', value: '数值', threshold: '阈值',
+  unit: '单位', pregnant_id: '孕妇ID', gestational_week: '孕周',
+  trigger_source: '触发来源', rule_id: '规则ID',
+  bp_systolic: '收缩压', bp_diastolic: '舒张压', blood_sugar: '血糖',
+  fetal_movement: '胎动', risk_level: '风险等级', risk_score: '风险评分',
+  estimated_weight: '估计体重', explanation: '说明', recommendation: '建议',
+}
+
+/** 格式化原始数据（排除 llm_analysis，key 中文化） */
+export function formatRawDetails(details: Record<string, any>): string {
+  const raw: Record<string, any> = {}
+  for (const [key, val] of Object.entries(details)) {
+    if (key === 'llm_analysis') continue
+    const label = RAW_KEY_MAP[key] || key
+    raw[label] = val
+  }
+  return JSON.stringify(raw, null, 2)
+}
+
+/** 是否有需要展示的原始数据（排除 llm_analysis 后仍有其他字段） */
+export function hasRawDetails(details: Record<string, any> | undefined): boolean {
+  if (!details) return false
+  const raw = { ...details }
+  delete raw.llm_analysis
+  return Object.keys(raw).length > 0
 }

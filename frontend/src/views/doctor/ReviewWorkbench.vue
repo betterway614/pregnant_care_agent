@@ -129,7 +129,7 @@
                   </div>
                   <div class="detail-item">
                     <span class="detail-item__label">预警来源</span>
-                    <span class="detail-item__value">{{ getTriggerSourceText(selectedAlert.trigger_source) }}</span>
+                    <span class="detail-item__value">{{ triggerSourceLabel(selectedAlert.trigger_source) }}</span>
                   </div>
                   <div class="detail-item">
                     <span class="detail-item__label">预警时间</span>
@@ -148,7 +148,7 @@
                 <div class="rule-card">
                   <div class="rule-card__header">
                     <el-icon color="var(--danger)"><WarningFilled /></el-icon>
-                    <span>{{ ruleNameMap(selectedAlert.rule_id || '') }}</span>
+                    <span>{{ ruleIdLabel(selectedAlert.rule_id || '') }}</span>
                   </div>
                   <p class="rule-card__desc">规则 ID: {{ selectedAlert.rule_id || 'N/A' }}</p>
                   <p class="rule-card__desc" style="margin-top: 6px">
@@ -648,7 +648,7 @@ import type { Alert, MedicalOrder, FollowUpRecord } from '@/types'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 import PatientBioInfoPanel from '@/components/common/PatientBioInfoPanel.vue'
 import { ElNotification } from 'element-plus'
-import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
+import { fieldLabel, examLabel, labLabel, triggerSourceLabel, ruleIdLabel } from '@/utils/labelMaps'
 
 const route = useRoute()
 const router = useRouter()
@@ -725,18 +725,6 @@ function formatTime(t?: string): string {
   if (!t) return ''
   const d = new Date(t)
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-/** 预警来源文本 */
-function getTriggerSourceText(source: string): string {
-  const map: Record<string, string> = {
-    RULE_ENGINE: '规则引擎',
-    FGR_ALGORITHM: 'FGR评估',
-    MANUAL: '人工创建',
-    EPDS_SCREENING: 'EPDS心理筛查',
-    FOLLOWUP: '随访',
-  }
-  return map[source] || source
 }
 
 /** 预警状态标签 */
@@ -887,7 +875,7 @@ function formatDetailValue(key: string, value: any): string {
       if (!value.length) return '无'
       // 触发规则列表 — 用中文规则名展示
       if (key === 'triggered_rules') {
-        return value.map((id: string) => ruleNameMap(id)).join('、')
+        return value.map((id: string) => ruleIdLabel(id)).join('、')
       }
       // 其他数组 — 检查是否全是简单值
       if (value.every((v: any) => typeof v !== 'object' || v === null)) {
@@ -1201,31 +1189,6 @@ async function runDoctorAiAnalysis() {
   } finally {
     aiAnalyzing.value = false
   }
-}
-
-/** 规则ID中文名称映射 */
-function ruleNameMap(ruleId: string): string {
-  const map: Record<string, string> = {
-    RULE_BP_HIGH: '血压异常升高',
-    RULE_BP_HIGH_ORANGE: '血压偏高关注',
-    RULE_BP_LOW: '血压偏低',
-    RULE_LATE_PREGNANCY_BP: '孕晚期血压偏高',
-    RULE_BS_POSTPRANDIAL_HIGH: '餐后血糖异常',
-    RULE_BS_FASTING_HIGH: '空腹血糖偏高',
-    RULE_WEIGHT_GAIN_FAST: '体重增长过快',
-    RULE_WEIGHT_GAIN_SLOW: '体重增长过慢',
-    RULE_FETAL_DROP: '胎动显著减少',
-    RULE_FETAL_VERY_LOW: '胎动极少',
-    RULE_EMOTION_CRITICAL: '情绪评分严重偏低',
-    RULE_EMOTION_HIGH: '情绪评分偏低',
-    RULE_SLEEP_SHORT: '睡眠不足',
-    FGR_CRITICAL_RISK: 'FGR极高风险',
-    FGR_HIGH_RISK: 'FGR高风险',
-    FGR_MEDIUM_RISK: 'FGR中风险',
-    EPDS_HIGH_RISK: 'EPDS心理筛查高风险',
-    NURSE_AI_ALERT: '护士AI分析预警',
-  }
-  return map[ruleId] || ruleId
 }
 
 /** 规则ID对应的标准消息（与后端规则引擎保持一致） */

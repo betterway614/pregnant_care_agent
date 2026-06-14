@@ -242,52 +242,6 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
         return None
 
 
-def _build_nurse_analyze_prompt(pregnant: Pregnant, gest_week: int, gest_day: int,
-                                 risk_tags: list, patient_data: dict) -> str:
-    """构建护士分析提示词"""
-    risk_text = "、".join(risk_tags) if risk_tags else "无特殊风险"
-    health_text = "\n".join(
-        f"  - {h['metric']}: {h['value']}{h['unit']} (记录于 {h['recorded_at']})"
-        for h in patient_data.get("recent_health", [])[:7]
-    ) or "  暂无健康数据"
-    alerts_text = "\n".join(
-        f"  - [{a['level']}] {a['message']} ({a['created_at']})"
-        for a in patient_data.get("active_alerts", [])
-    ) or "  暂无活跃预警"
-    fgr_text = ""
-    if patient_data.get("recent_fgr"):
-        f = patient_data["recent_fgr"]
-        fgr_text = f"  风险等级: {f['risk_level']}, 评估孕周: {f['gestational_weeks']}周, 说明: {f.get('explanation', '')}"
-
-    return f"""请为以下孕妇提供护理分析：
-
-孕妇：{pregnant.display_name}
-孕周：{gest_week}周+{gest_day}天
-风险标签：{risk_text}
-
-最近健康数据：
-{health_text}
-
-活跃预警：
-{alerts_text}
-
-最近FGR评估：
-{fgr_text or '无'}
-
-请提供：
-1. summary: 综合概述（100-200字），概括孕妇当前整体状况
-2. risk_assessment: 风险评估（100-200字），分析当前主要风险因素
-3. nursing_suggestions: 护理建议（150-300字），具体的护理措施和健康教育要点
-4. followup_focus: 随访重点（字符串数组，3-5个项目），列出随访时需要特别关注的内容
-5. alert_level: 预警级别判断，取值：
-   - "RED"（高危）：需要立即医疗干预，如血压≥140/90、胎动极少、餐后血糖>7.0
-   - "ORANGE"（预警）：需要密切关注，如血压偏高、体重增长异常、血糖偏高
-   - "YELLOW"（关注）：需要一般关注，如情绪偏高、睡眠不足
-   - "NONE"：无需预警
-
-请以JSON格式返回，键名使用英文，值使用中文。"""
-
-
 def _fallback_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: int,
                             risk_tags: list, patient_data: dict) -> NurseAnalyzeResponse:
     """模板兜底护士分析"""
@@ -711,8 +665,14 @@ def _build_suggested_actions(gest_week: int, risk_tags: list, data_freq: str) ->
     return actions
 
 
-def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
-    """根据历史随访和数据上报情况，生成随访排期推荐列表"""
+def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = False) -> dict:
+    """根据历史随访和数据上报情况，生成随访排期推荐列表
+
+    Args:
+        db: 数据库会话
+        pregnant_id: 孕妇 ID
+        read_only: 为 True 时不执行僵尸随访自动归档（用于 GET 端点，避免读请求修改 DB 状态）
+    """
     # 1. 查询孕妇信息
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
@@ -758,17 +718,24 @@ def tool_recommend_followup_schedule(db, pregnant_id: str) -> dict:
                 "skip_reason": f"该孕妇已有进行中的随访任务（{old_status}, {age_days}天），请先处理完成后再推荐",
             }
         else:
-            # 自动归档僵尸随访，继续执行后续推荐逻辑
-            active_followup.status = "archived"
-            active_followup.review_comment = (
-                f"[系统自动归档] 原状态 {old_status} 已超过超时时间（{age_days}天），自动关闭。"
-                f"原创建时间: {active_followup.created_at}"
-            )
-            db.flush()
-            logger.info(
-                "自动归档僵尸随访 id={} pregnant_id={} old_status={} age_days={}",
-                active_followup.id, pregnant_id, old_status, age_days,
-            )
+            if read_only:
+                # GET 请求不修改 DB，仅记录日志，仍然继续推荐
+                logger.info(
+                    "检测到僵尸随访(read_only跳过归档) id={} pregnant_id={} old_status={} age_days={}",
+                    active_followup.id, pregnant_id, old_status, age_days,
+                )
+            else:
+                # 自动归档僵尸随访，继续执行后续推荐逻辑
+                active_followup.status = "archived"
+                active_followup.review_comment = (
+                    f"[系统自动归档] 原状态 {old_status} 已超过超时时间（{age_days}天），自动关闭。"
+                    f"原创建时间: {active_followup.created_at}"
+                )
+                db.flush()
+                logger.info(
+                    "自动归档僵尸随访 id={} pregnant_id={} old_status={} age_days={}",
+                    active_followup.id, pregnant_id, old_status, age_days,
+                )
 
     # 2. 查询最近随访记录
     last_followup = db.query(FollowUpRecord).filter(
@@ -987,7 +954,8 @@ def get_followup_recommendations(user: TokenPayload = Depends(get_current_user),
     all_recommendations = []
 
     for p in all_pregnant:
-        result = tool_recommend_followup_schedule(db, p.pregnant_id)
+        # read_only=True: GET 请求不应修改 DB 状态（僵尸随访归档延迟到实际触发时执行）
+        result = tool_recommend_followup_schedule(db, p.pregnant_id, read_only=True)
         if "error" in result:
             continue
         for rec in result.get("recommendations", []):
@@ -1003,7 +971,7 @@ def get_followup_recommendations(user: TokenPayload = Depends(get_current_user),
                 try:
                     from datetime import date as date_cls
                     rec_date = date_cls.fromisoformat(rec["recommended_date"])
-                    if (rec_date - date.today()).days <= 7:
+                    if (rec_date - beijing_now().date()).days <= 7:
                         all_recommendations.append({
                             "pregnant_id": p.pregnant_id,
                             "patient_name": p.display_name,
@@ -1213,6 +1181,10 @@ async def batch_trigger_followup(req: BatchTriggerRequest, user: TokenPayload = 
     """批量触发随访记录"""
     if user.role not in ("nurse", "doctor"):
         raise HTTPException(status_code=403, detail="需要护士或医生权限")
+    if not req.pregnant_ids:
+        raise HTTPException(status_code=400, detail="请选择至少一位孕妇")
+    if len(req.pregnant_ids) > 50:
+        raise HTTPException(status_code=400, detail="单次批量触发不能超过 50 人")
     from ..services.batch_followup import BatchFollowupService
 
     service = BatchFollowupService()
