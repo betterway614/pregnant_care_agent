@@ -85,15 +85,31 @@ class ScheduleNodeCreate(BaseModel):
     scheduled_date: date
     item: str
     node_type: str = "routine"
+    gest_week_start: Optional[int] = None
+    gest_week_end: Optional[int] = None
+    visit_number: Optional[int] = None
+    category: Optional[str] = "checkup"
+    frequency: Optional[str] = "once"
+    mandatory_items: Optional[list[str]] = None
+    optional_items: Optional[list[str]] = None
+    notes: Optional[str] = None
 
 
 class ScheduleNodeResponse(BaseModel):
     id: UUID
     pregnant_id: str
     gest_week: int
+    gest_week_start: Optional[int] = None
+    gest_week_end: Optional[int] = None
     scheduled_date: date
     item: str
     node_type: str
+    visit_number: Optional[int] = None
+    category: Optional[str] = None
+    frequency: Optional[str] = None
+    mandatory_items: Optional[list[str]] = None
+    optional_items: Optional[list[str]] = None
+    notes: Optional[str] = None
     status: str
     is_published: int
 

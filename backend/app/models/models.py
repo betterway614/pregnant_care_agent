@@ -86,15 +86,32 @@ class HealthDataPoint(Base):
 
 
 class ScheduleNode(Base):
-    """排期节点"""
+    """排期节点 — 基于 ACOG/中华医学会 产检指南
+
+    每个节点对应一次检查安排，核心字段：
+    - 产检序号 visit_number (1-13，对应附录一标准产检)
+    - 孕周范围 gest_week_start/end（替代单点gest_week）
+    - 必查/备查项目分列（mandatory_items / optional_items）
+    - 分类 category（checkup/ultrasound/lab）
+    - 检查频率 frequency（once/weekly/biweekly/every_4_weeks）
+    """
     __tablename__ = "schedule_nodes"
 
     id = Column(UUIDColumn(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pregnant_id = Column(String(64), ForeignKey("pregnant.pregnant_id"), nullable=False)
-    gest_week = Column(Integer, nullable=False, comment="孕周")
+    gest_week = Column(Integer, nullable=False, comment="计划孕周（取范围中点）")
+    gest_week_start = Column(Integer, nullable=True, comment="建议孕周起始")
+    gest_week_end = Column(Integer, nullable=True, comment="建议孕周结束")
     scheduled_date = Column(Date, nullable=False, comment="计划日期")
-    item = Column(String(128), nullable=False, comment="检查项目")
-    node_type = Column(String(32), default="routine", comment="节点类型: routine/fgr_high_risk/custom")
+    item = Column(String(256), nullable=False, comment="检查项目摘要")
+    node_type = Column(String(32), default="routine",
+                       comment="节点类型: routine/fgr_high_risk/gdm_monitor/bp_monitor/ultrasound/checkup/lab/custom")
+    visit_number = Column(Integer, nullable=True, comment="产检序号(1-13)")
+    category = Column(String(16), default="checkup", comment="分类: checkup/ultrasound/lab")
+    frequency = Column(String(32), default="once", comment="检查频率: once/weekly/biweekly/every_4_weeks")
+    mandatory_items = Column(JSON, default=list, comment="必查项目列表")
+    optional_items = Column(JSON, default=list, comment="备查/可选项目列表")
+    notes = Column(Text, nullable=True, comment="注意事项")
     status = Column(String(16), default="pending", comment="状态: pending/published/completed")
     is_published = Column(Integer, default=0, comment="是否已发布")
 

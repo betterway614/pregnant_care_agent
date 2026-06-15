@@ -80,14 +80,22 @@ export interface HealthDataPoint {
   source: string
 }
 
-// 排期节点
+// 排期节点 — 基于附录一/二/三 完整产检时间表
 export interface ScheduleNode {
   id: string
   pregnant_id: string
   gest_week: number
+  gest_week_start?: number
+  gest_week_end?: number
   scheduled_date: string
   item: string
   node_type: string
+  visit_number?: number | null
+  category?: string
+  frequency?: string
+  mandatory_items?: string[]
+  optional_items?: string[]
+  notes?: string
   status: string
   is_published: number
 }

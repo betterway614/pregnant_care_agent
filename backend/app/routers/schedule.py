@@ -42,8 +42,13 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db),
     if not pregnant.lmp_date:
         raise HTTPException(status_code=400, detail="孕妇缺少末次月经日期")
 
-    # 使用排期引擎生成
-    current_week = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else None
+    # 动态计算当前孕周（优先从 lmp_date 实时推算，兜底静态字段）
+    today = date.today()
+    if pregnant.lmp_date:
+        current_week = max(0, (today - pregnant.lmp_date).days) // 7
+    else:
+        current_week = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else None
+
     nodes = schedule_engine.generate(
         lmp_date=pregnant.lmp_date,
         risk_tags=pregnant.risk_tags or [],
@@ -53,15 +58,23 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db),
     # 删除旧排期
     db.query(ScheduleNode).filter(ScheduleNode.pregnant_id == pregnant_id).delete()
 
-    # 插入新排期
+    # 插入新排期（包含所有新字段）
     created = []
     for node in nodes:
         db_node = ScheduleNode(
             pregnant_id=pregnant_id,
             gest_week=node["gest_week"],
+            gest_week_start=node.get("gest_week_start"),
+            gest_week_end=node.get("gest_week_end"),
             scheduled_date=date.fromisoformat(node["scheduled_date"]),
             item=node["item"],
             node_type=node.get("node_type", "routine"),
+            visit_number=node.get("visit_number"),
+            category=node.get("category", "checkup"),
+            frequency=node.get("frequency", "once"),
+            mandatory_items=node.get("mandatory_items", []),
+            optional_items=node.get("optional_items", []),
+            notes=node.get("notes"),
         )
         db.add(db_node)
         created.append(db_node)

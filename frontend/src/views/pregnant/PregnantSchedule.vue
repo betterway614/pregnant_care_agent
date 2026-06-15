@@ -78,9 +78,15 @@
                       <el-icon :size="13"><Clock /></el-icon>
                       {{ formatDate(item.scheduled_date) }}
                     </span>
+                    <span v-if="item.category" class="schedule-item-category">
+                      {{ getCategoryLabel(item.category) }}
+                    </span>
                     <span class="schedule-item-status">
                       {{ item.status === 'completed' ? '已完成' : item.status === 'pending' ? '待完成' : item.status }}
                     </span>
+                  </div>
+                  <div v-if="item.notes" class="schedule-item-notes">
+                    {{ item.notes }}
                   </div>
                 </div>
               </div>
@@ -269,6 +275,16 @@ function getCheckTypeLabel(type?: string): string {
     follow_up: '随访',
   }
   return labelMap[type] || type
+}
+
+function getCategoryLabel(category?: string): string {
+  if (!category) return ''
+  const map: Record<string, string> = {
+    checkup: '产检',
+    ultrasound: '超声',
+    lab: '检验',
+  }
+  return map[category] || category
 }
 
 function getStatusClass(status: string): string {

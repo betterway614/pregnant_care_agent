@@ -83,7 +83,7 @@
             <el-timeline-item
               v-for="node in sortedNodes"
               :key="node.id"
-              :timestamp="`孕${node.gest_week}周 · ${formatDate(node.scheduled_date)}`"
+              :timestamp="`孕${node.gest_week}周${node.gest_week_start ? ` (${node.gest_week_start}-${node.gest_week_end}周)` : ''} · ${formatDate(node.scheduled_date)}`"
               placement="top"
               :type="getTimelineType(node)"
               :hollow="!node.is_published"
@@ -92,8 +92,14 @@
                 <div class="node-card__header">
                   <div class="node-card__title-row">
                     <span class="node-card__week">孕 {{ node.gest_week }} 周</span>
+                    <el-tag v-if="node.visit_number" size="small" type="primary">
+                      第{{ node.visit_number }}次
+                    </el-tag>
                     <el-tag size="small" :type="getNodeTypeTag(node.node_type)">
-                      {{ node.node_type }}
+                      {{ getNodeTypeLabel(node) }}
+                    </el-tag>
+                    <el-tag v-if="node.category" size="small" :type="getCategoryTag(node.category)">
+                      {{ getCategoryLabel(node.category) }}
                     </el-tag>
                     <el-tag v-if="node.status === 'completed'" size="small" type="success">已完成</el-tag>
                     <el-tag v-if="node.is_published" size="small" type="info">已发布</el-tag>
@@ -102,7 +108,43 @@
 
                 <p class="node-card__item">{{ node.item }}</p>
 
+                <!-- 必查项目 -->
+                <div v-if="node.mandatory_items?.length" class="node-card__items">
+                  <span class="node-card__items-label">必查：</span>
+                  <el-tag
+                    v-for="(mi, i) in node.mandatory_items"
+                    :key="'m'+i"
+                    size="small"
+                    type="danger"
+                    effect="plain"
+                    class="node-card__item-tag"
+                  >{{ mi }}</el-tag>
+                </div>
+
+                <!-- 备查项目 -->
+                <div v-if="node.optional_items?.length" class="node-card__items">
+                  <span class="node-card__items-label">备查：</span>
+                  <el-tag
+                    v-for="(oi, i) in node.optional_items"
+                    :key="'o'+i"
+                    size="small"
+                    type="warning"
+                    effect="plain"
+                    class="node-card__item-tag"
+                  >{{ oi }}</el-tag>
+                </div>
+
+                <!-- 注意事项 -->
+                <div v-if="node.notes" class="node-card__notes">
+                  <el-icon><InfoFilled /></el-icon>
+                  <span>{{ node.notes }}</span>
+                </div>
+
                 <div class="node-card__footer">
+                  <div class="node-card__frequency" v-if="node.frequency && node.frequency !== 'once'">
+                    <span class="text-light">频率：</span>
+                    <el-tag size="small" type="info">{{ getFrequencyLabel(node.frequency) }}</el-tag>
+                  </div>
                   <div class="node-card__date">
                     <span class="node-card__date-label">日期：</span>
                     <el-date-picker
@@ -134,7 +176,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, Refresh, Calendar } from '@element-plus/icons-vue'
+import { Plus, Refresh, Calendar, InfoFilled } from '@element-plus/icons-vue'
 import { scheduleApi, dashboardApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Pregnant, ScheduleNode } from '@/types'
@@ -182,6 +224,52 @@ function getNodeTypeTag(type: string): string {
     检验: '',
   }
   return map[type] || 'info'
+}
+
+/** 获取节点类型中文标签 */
+function getNodeTypeLabel(node: ScheduleNode): string {
+  const map: Record<string, string> = {
+    routine: '常规产检',
+    fgr_high_risk: 'FGR高风险',
+    gdm_monitor: 'GDM监测',
+    bp_monitor: '血压监测',
+    ultrasound: '超声检查',
+    checkup: '产检',
+    lab: '检验',
+    custom: '自定义',
+  }
+  return map[node.node_type] || node.node_type
+}
+
+/** 获取分类标签样式 */
+function getCategoryTag(category: string): string {
+  const map: Record<string, string> = {
+    checkup: 'primary',
+    ultrasound: 'success',
+    lab: 'warning',
+  }
+  return map[category] || 'info'
+}
+
+/** 获取分类中文标签 */
+function getCategoryLabel(category: string): string {
+  const map: Record<string, string> = {
+    checkup: '产检',
+    ultrasound: '超声',
+    lab: '检验',
+  }
+  return map[category] || category
+}
+
+/** 获取频率中文标签 */
+function getFrequencyLabel(frequency: string): string {
+  const map: Record<string, string> = {
+    once: '单次',
+    weekly: '每周',
+    biweekly: '每两周',
+    every_4_weeks: '每四周',
+  }
+  return map[frequency] || frequency
 }
 
 /** 日期格式化 */
@@ -360,6 +448,45 @@ onMounted(async () => {
   color: var(--text-primary);
   margin: 10px 0;
   line-height: 1.6;
+}
+
+/* 必查/备查项目标签区 */
+.node-card__items {
+  margin: 8px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.node-card__items-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  line-height: 22px;
+  margin-right: 4px;
+}
+.node-card__item-tag {
+  margin-bottom: 2px;
+}
+
+/* 注意事项 */
+.node-card__notes {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: rgba(230, 162, 60, 0.08);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.node-card__frequency {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .node-card__footer {

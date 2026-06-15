@@ -25,6 +25,39 @@ from loguru import logger
 setup_logging()
 
 
+def _ensure_schedule_columns():
+    """为已有 SQLite 数据库添加 ScheduleNode 排期引擎升级新列（幂等）"""
+    import sqlalchemy as sa
+    try:
+        inspector = sa.inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("schedule_nodes")]
+        new_cols = [
+            ("gest_week_start", "INTEGER"),
+            ("gest_week_end", "INTEGER"),
+            ("visit_number", "INTEGER"),
+            ("category", "VARCHAR(16)"),
+            ("frequency", "VARCHAR(32)"),
+            ("mandatory_items", "JSON"),
+            ("optional_items", "JSON"),
+            ("notes", "TEXT"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_cols:
+                if col_name not in columns:
+                    conn.execute(sa.text(
+                        f"ALTER TABLE schedule_nodes ADD COLUMN {col_name} {col_type}"
+                    ))
+            # 扩容 item 列（128→256）
+            # SQLite 不支持 ALTER COLUMN 修改类型，只能重建，跳过
+            conn.commit()
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("Schedule 列已存在，跳过: {}", e)
+        else:
+            logger.error("Schedule 列迁移意外失败: {}", e)
+
+
 def _ensure_fgr_columns():
     """为已有 SQLite 数据库添加 FGR 新列（幂等）"""
     import sqlalchemy as sa
@@ -382,6 +415,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("数据库已存在，跳过初始化")
 
+    # 对已有 SQLite 数据库添加 ScheduleNode 排期升级新列
+    _ensure_schedule_columns()
     # 对已有 SQLite 数据库添加 Pregnant 基线数据新列
     _ensure_pregnant_columns()
     # 对已有 SQLite 数据库添加 FGR 新列

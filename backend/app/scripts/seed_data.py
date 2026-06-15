@@ -7,6 +7,7 @@ from sqlalchemy import text
 from loguru import logger
 from ..database import SessionLocal
 from ..models import Pregnant, HealthDataPoint, ScheduleNode, FollowUpRecord, FgrAssessment, MedicalOrder, ConversationMessage, MentalHealthScreening, FetalMovementSession, Feedback
+from ..services.schedule_engine import schedule_engine
 
 # 存储对话消息ID供反馈关联（seed_feedback 使用）
 _generated_message_ids: list[str] = []
@@ -258,58 +259,46 @@ def _seed_health_data(db):
 
 
 def _seed_schedules(db):
-    """生成全孕周排期"""
+    """生成全孕周排期 — 使用升级后的 ScheduleEngine"""
     if db.query(ScheduleNode).count() > 0:
         logger.info("排期数据已存在，跳过")
         return
-    pregnant = db.query(Pregnant).all()
+    pregnant_list = db.query(Pregnant).all()
     count = 0
-    for pregnant in pregnant:
+    for pregnant in pregnant_list:
         if not pregnant.lmp_date:
             continue
-        for gest_week, item in [
-            (12, "NT检查"), (16, "中期唐筛"), (20, "大排畸B超"),
-            (24, "OGTT糖耐量"), (28, "常规产检"), (30, "B超生长监测"),
-            (32, "胎心监护"), (34, "常规产检"), (36, "B超评估"),
-            (37, "产前评估"), (38, "胎心监护"), (39, "B超"),
-            (40, "产前评估"),
-        ]:
-            current_gw = (pregnant.gestational_age_days or 168) // 7
-            if gest_week < current_gw:
-                continue
-            node_date = pregnant.lmp_date + timedelta(weeks=gest_week)
-            is_fgr = "FGR" in (pregnant.risk_tags or [])
-            node_type = "fgr_high_risk" if is_fgr else "routine"
+        # 动态计算当前孕周
+        today = date.today()
+        current_week = max(0, (today - pregnant.lmp_date).days) // 7
+        nodes = schedule_engine.generate(
+            lmp_date=pregnant.lmp_date,
+            risk_tags=pregnant.risk_tags or [],
+            current_gest_week=current_week,
+        )
+        for node_dict in nodes:
             is_published_flag = random.random() > 0.3
             node = ScheduleNode(
                 pregnant_id=pregnant.pregnant_id,
-                gest_week=gest_week,
-                scheduled_date=node_date,
-                item=item,
-                node_type=node_type,
+                gest_week=node_dict["gest_week"],
+                gest_week_start=node_dict.get("gest_week_start"),
+                gest_week_end=node_dict.get("gest_week_end"),
+                scheduled_date=date.fromisoformat(node_dict["scheduled_date"]),
+                item=node_dict["item"],
+                node_type=node_dict.get("node_type", "routine"),
+                visit_number=node_dict.get("visit_number"),
+                category=node_dict.get("category", "checkup"),
+                frequency=node_dict.get("frequency", "once"),
+                mandatory_items=node_dict.get("mandatory_items", []),
+                optional_items=node_dict.get("optional_items", []),
+                notes=node_dict.get("notes"),
                 status="published" if is_published_flag else "pending",
                 is_published=1 if is_published_flag else 0,
             )
-            # FGR高危增加B超节点（避免与常规排期同一周重叠）
-            standard_weeks = {12, 16, 20, 24, 28, 30, 32, 34, 36, 37, 38, 39, 40}
-            if is_fgr:
-                for fgr_week in range(25, 37, 2):  # 用奇数周避免与常规排期偶数周重叠
-                    if fgr_week < current_gw or fgr_week in standard_weeks:
-                        continue
-                    extra_node = ScheduleNode(
-                        pregnant_id=pregnant.pregnant_id,
-                        gest_week=fgr_week,
-                        scheduled_date=pregnant.lmp_date + timedelta(weeks=fgr_week),
-                        item="B超生长监测(FGR专项)",
-                        node_type="fgr_high_risk",
-                        status="published",
-                        is_published=1,
-                    )
-                    db.add(extra_node)
-                    count += 1
             db.add(node)
             count += 1
-    logger.info("生成 {} 条排期数据", count)
+    db.commit()
+    logger.info("生成 {} 条排期数据（新版13次标准产检+超声里程碑+风险联动）", count)
 
 
 def _seed_fgr_assessments(db):
