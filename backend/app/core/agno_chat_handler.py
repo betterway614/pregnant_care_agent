@@ -31,6 +31,111 @@ from .agno_tools import set_nlu_context, pop_nlu_context, tool_metrics
 # 保持后台审计任务引用，防止 fire-and-forget 被 GC 回收
 _audit_tasks: set = set()
 
+# NLU 实体 key → health_data_service METRIC_MAP key 映射
+_NLU_ENTITY_TO_METRIC: dict[str, str] = {
+    "weight": "weight",
+    "sbp": "systolic",
+    "dbp": "diastolic",
+    "fetal_movement": "fetal_movement",
+    "blood_sugar": "blood_sugar",
+    "heart_rate": "heart_rate",
+    "sleep_hours": "sleep_hours",
+}
+
+# 健康数据合理范围校验 (min, max)
+_METRIC_RANGES: dict[str, tuple[float, float]] = {
+    "weight": (30, 200),
+    "systolic": (60, 250),
+    "diastolic": (30, 180),
+    "fetal_movement": (0, 50),
+    "blood_sugar": (1, 30),
+    "heart_rate": (40, 220),
+    "sleep_hours": (0, 24),
+}
+
+
+def _auto_save_nlu_health_data(pregnant_id: str, entities: dict) -> dict:
+    """根据 NLU 提取的实体自动保存健康数据到数据库
+
+    在 Agent 执行前调用，确保数据不依赖 LLM 工具调用决策。
+    已存在的当日记录会被跳过（去重）。
+
+    Returns:
+        {"saved": [...], "skipped": [...]}
+    """
+    from .health_data_service import save_health_metrics, HealthDataSource
+    from ..database import SessionLocal
+    from ..models import HealthDataPoint
+    from datetime import date, datetime, timedelta
+
+    metrics_to_save: dict = {}
+    for nlukey, value in _NLU_ENTITY_TO_METRIC.items():
+        if nlukey not in entities:
+            continue
+        val = entities[nlukey]
+        if val is None:
+            continue
+        try:
+            fval = float(val)
+        except (ValueError, TypeError):
+            continue
+        # 范围校验
+        range_check = _METRIC_RANGES.get(value)
+        if range_check:
+            lo, hi = range_check
+            if fval < lo or fval > hi:
+                logger.info("NLU实体值超出合理范围，跳过自动保存: key=%s value=%s range=%s", nlukey, fval, range_check)
+                continue
+        metrics_to_save[value] = fval
+
+    if not metrics_to_save:
+        return {"saved": [], "skipped": []}
+
+    # 当日去重：查询今日已记录的 metric_codes
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    db = SessionLocal()
+    try:
+        existing = (
+            db.query(HealthDataPoint.metric_code)
+            .filter(
+                HealthDataPoint.pregnant_id == pregnant_id,
+                HealthDataPoint.recorded_at >= today_start,
+                HealthDataPoint.metric_code.in_(list(metrics_to_save.keys())),
+            )
+            .distinct()
+            .all()
+        )
+        existing_codes = {row[0] for row in existing}
+
+        deduped: dict = {}
+        skipped: list[str] = []
+        for mc, val in metrics_to_save.items():
+            if mc in existing_codes:
+                skipped.append(mc)
+            else:
+                deduped[mc] = val
+
+        if deduped:
+            saved = save_health_metrics(
+                pregnant_id, deduped,
+                source=HealthDataSource.PATIENT_CHAT,
+            )
+            # save_health_metrics 返回的是 metric_key (如 "weight", "systolic")
+            # 我们需要 metric_code 名称返回给前端
+            saved_codes = [mc for mc in deduped if mc in saved
+                           or any(mc == _NLU_ENTITY_TO_METRIC.get(s, "") for s in saved)]
+            if not saved_codes:
+                saved_codes = list(deduped.keys())  # 回退
+        else:
+            saved_codes = []
+
+        return {"saved": saved_codes, "skipped": skipped}
+    except Exception:
+        logger.warning("NLU实体自动保存失败 pregnant_id=%s", pregnant_id, exc_info=True)
+        return {"saved": [], "skipped": []}
+    finally:
+        db.close()
+
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
 TOOL_THINKING_MAP: dict[str, str] = {
     "agno_get_nlu_result": "正在理解您的需求...",
@@ -208,6 +313,12 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
 
+    # 1b. 自动保存 NLU 提取的健康数据实体（不依赖 Agent 工具调用）
+    auto_saved = {"saved": [], "skipped": []}
+    if nlu_result and nlu_result.entities:
+        import asyncio
+        auto_saved = await asyncio.to_thread(_auto_save_nlu_health_data, req.pregnant_id, nlu_result.entities)
+
     # 复杂症状/检查查询走工作流（多步编排）；图片消息跳过（工作流不支持多模态）
     if not agent_images and intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
         try:
@@ -313,6 +424,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         session_id=session_id,
         source="AI_CARE",
         audit_log_id=audit_log_id,
+        saved_health_data=auto_saved,
     )
 
 
@@ -367,6 +479,12 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             intent_variant = "chat"
     except Exception:
         logger.warning("NLU意图分类失败，使用兜底Agent", exc_info=True)
+
+    # 1b. 自动保存 NLU 提取的健康数据实体（不依赖 Agent 工具调用）
+    auto_saved = {"saved": [], "skipped": []}
+    if nlu_result and nlu_result.entities:
+        import asyncio
+        auto_saved = await asyncio.to_thread(_auto_save_nlu_health_data, req.pregnant_id, nlu_result.entities)
 
     # 复杂症状/检查查询走工作流（多步编排）；图片消息跳过（工作流不支持多模态）
     if not agent_images and intent_variant == "complex" and nlu_result and nlu_result.intent in ("ASK_SYMPTOM", "ASK_EXAM", "KNOWLEDGE_QUERY"):
@@ -449,9 +567,10 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         done_source="AI_CARE",
         images=agent_images,
         done_extra={
-            "nlu_result": None,
+            "nlu_result": nlu_dict if nlu_result else None,
             "memory_updated": [],
             "transcribed_text": transcribed_text,
+            "saved_health_data": auto_saved,
         },
     )
 

@@ -219,6 +219,12 @@
                 <span v-if="msg.role === 'assistant' && isStreamingMessage(msg)" class="typing-cursor" />
               </div>
 
+              <!-- 健康数据已记录徽章 -->
+              <div v-if="msg.role === 'assistant' && msg.savedMetrics && msg.savedMetrics.length > 0" class="data-saved-badge">
+                <el-icon :size="12"><Check /></el-icon>
+                <span>数据已记录</span>
+              </div>
+
               <!-- 时间戳与操作栏 -->
               <div
                 class="message-footer"
@@ -463,6 +469,7 @@ import { chatApi, postChatStream, feedbackApi } from '@/api/endpoints'
 import type { ChatRequest } from '@/types'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { useChatStore } from '@/stores/chat'
+import { useAppStore } from '@/stores/app'
 import type { ChatMessage } from '@/stores/chat'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
 import { ElMessageBox, ElMessage } from 'element-plus'
@@ -510,6 +517,7 @@ const FETUS_DATA: Record<number, { length: string; weight: string; size: string 
 const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
+const appStore = useAppStore()
 
 const pregnantId = ref(localStorage.getItem('currentPregnantId') || '')
 const displayName = ref('')
@@ -870,7 +878,12 @@ async function handleSend() {
             currentStep: undefined,
             toolSteps: metadata?.tool_steps || [],
             timestamp: new Date().toISOString(),
+            savedMetrics: metadata?.saved_health_data?.saved || [],
           })
+          // 健康数据已自动保存：刷新待办状态
+          if (metadata?.saved_health_data?.saved?.length > 0) {
+            appStore.fetchDailyTaskStatus()
+          }
           // 自动播报助手消息
           if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
             ttsSpeakingId.value = loadingMsg.id
@@ -1189,7 +1202,12 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           timestamp: new Date().toISOString(),
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
+          savedMetrics: metadata?.saved_health_data?.saved || [],
         })
+        // 健康数据已自动保存：刷新待办状态
+        if (metadata?.saved_health_data?.saved?.length > 0) {
+          appStore.fetchDailyTaskStatus()
+        }
         // 保存 ASR 转录文本到用户语音消息
         if (metadata.transcribed_text) {
           const userAudioMsg = chatStore.messages.find(
@@ -1360,7 +1378,12 @@ async function sendImageWithText(text: string, images: UploadFile[]) {
           timestamp: new Date().toISOString(),
           toolSteps: metadata.tool_steps || [],
           currentStep: undefined,
+          savedMetrics: metadata?.saved_health_data?.saved || [],
         })
+        // 健康数据已自动保存：刷新待办状态
+        if (metadata?.saved_health_data?.saved?.length > 0) {
+          appStore.fetchDailyTaskStatus()
+        }
         if (autoPlayTTS.value && loadingMsg.content && !isMuted.value) {
           ttsSpeakingId.value = loadingMsg.id
           speak(cleanForTTS(loadingMsg.content))
@@ -1787,6 +1810,20 @@ onMounted(async () => {
 .thinking-text { font-size: 14px; font-weight: 600; color: #FB7185; }
 
 /* 操作栏与时间 */
+/* 数据已记录徽章 */
+.data-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(52, 211, 153, 0.12);
+  color: #059669;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .message-footer { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .message-footer--user { flex-direction: row-reverse; }
 .message-time { font-size: 11px; color: #94A3B8; }

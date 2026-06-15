@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserRole, DashboardStats, Pregnant } from '@/types'
-import { dashboardApi } from '@/api/endpoints'
+import { dashboardApi, pregnantApi } from '@/api/endpoints'
 
 export const useAppStore = defineStore('app', () => {
   const currentRole = ref<UserRole>('nurse')
@@ -17,6 +17,22 @@ export const useAppStore = defineStore('app', () => {
   const currentPregnant = ref<Pregnant | null>(null)
   const isLoggedIn = ref(!!localStorage.getItem('isLoggedIn'))
   const currentUserId = ref(localStorage.getItem('currentUserId') || '')
+
+  // ===== 今日待办状态 (跨页面共享) =====
+  const dailyTaskStatus = ref<{ weight: boolean; blood_pressure: boolean; fetal_movement: boolean }>({
+    weight: false,
+    blood_pressure: false,
+    fetal_movement: false,
+  })
+
+  async function fetchDailyTaskStatus() {
+    try {
+      const pid = currentPregnantId.value
+      if (!pid) return
+      const res = await pregnantApi.getDailyTaskStatus(pid)
+      dailyTaskStatus.value = res.data
+    } catch { /* ignore */ }
+  }
 
   const roleName = computed(() => ({
     nurse: '助孕师小护',
@@ -91,5 +107,7 @@ export const useAppStore = defineStore('app', () => {
     // 新增认证相关
     currentPregnantId, currentPregnant, isLoggedIn, currentUserId,
     setPregnant, login, logout,
+    // 待办状态（跨页面共享）
+    dailyTaskStatus, fetchDailyTaskStatus,
   }
 })

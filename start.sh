@@ -3,16 +3,16 @@
 # AI-Care 孕产妇智能护理平台 — 一键启动脚本
 #
 # 用法:
-#   bash start.sh                  # 启动所有服务
-#   bash start.sh --no-ai          # 跳过 AI 服务
-#   bash start.sh --init-db        # 启动前初始化数据库
-#   bash start.sh stop             # 停止所有服务
-#   bash start.sh status           # 查看服务状态（含 PID + CPU/MEM）
-#   bash start.sh restart          # 重启所有服务
-#   bash start.sh monitor          # 后台监控守护进程
-#   bash start.sh monitor --auto-restart  # 监控 + 异常自动重启
-#   bash start.sh dashboard        # 实时仪表盘
-#
+# bash start.sh                          # 启动所有服务
+#   bash start.sh --no-ai                  # 仅启动应用服务
+#   bash start.sh --init-db                # 初始化数据库后启动
+#   bash start.sh --init-db --ingest       # 初始化 + 知识库入库
+#   bash start.sh stop                     # 停止所有服务
+#   bash start.sh reload                   # 仅重启前后端
+#   bash start.sh monitor                  # 启动后台监控
+#   bash start.sh monitor --auto-restart   # 启动监控 + 自动重启
+#   bash start.sh dashboard                # 实时仪表盘
+# #
 # 端口分配:
 #   5432  - PostgreSQL (Docker)
 #   6379  - Redis (Docker)

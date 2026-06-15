@@ -28,6 +28,8 @@ export interface ChatMessage {
   // ASR 转录文本
   transcribedText?: string  // 语音转文字结果
   transcribing?: boolean    // 正在转录中
+  // 自动保存的健康数据指标列表
+  savedMetrics?: string[]   // 通过本消息自动保存的指标，如 ["weight", "systolic"]
 }
 
 const MAX_MESSAGES = 200
