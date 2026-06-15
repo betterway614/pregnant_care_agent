@@ -71,10 +71,10 @@ class TestTruncateToolResult:
         assert result == "{}"
 
     def test_default_max_chars_is_1500(self):
-        """默认 max_chars 为 1500"""
-        from app.core.tools.common import TOOL_RESULT_MAX_CHARS
+        """默认 max_chars 为 1500（TRUNC_DEFAULT）"""
+        from app.core.tools.common import TRUNC_DEFAULT
 
-        assert TOOL_RESULT_MAX_CHARS == 1500
+        assert TRUNC_DEFAULT == 1500
 
     def test_truncated_result_is_valid_json(self):
         """截断后的结果始终是合法 JSON"""
@@ -346,8 +346,8 @@ class TestToolTruncationIntegration:
         with patch("app.database.SessionLocal", return_value=mock_db):
             result = await agno_list_patients.entrypoint()
             assert isinstance(result, str)
-            # 即使 30 条数据，结果也不超过截断上限（JSON wrapper 可能略超）
-            assert len(result) <= 1800
+            # 即使 30 条数据，结果也不超过截断上限（TRUNC_DATA_QUERY=2000 + JSON wrapper 开销）
+            assert len(result) <= 2100
 
     @pytest.mark.asyncio
     async def test_nurse_query_patient_data_truncated(self):

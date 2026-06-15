@@ -432,3 +432,34 @@ def get_order_document(
         signature=order.signature_data or {},
         has_document=bool(order.order_snapshot),
     )
+
+
+@router.delete("/{order_id}")
+def delete_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """删除医嘱（软删除：将状态设为 cancelled）
+
+    权限：仅医生/管理员可删除。
+    可删除状态：draft（草稿）、cancelled（已取消）。
+    已签署/已执行的医嘱不可删除，确保医疗记录完整性。
+    """
+    if current_user.role not in _SIGN_ALLOWED_ROLES:
+        raise HTTPException(403, "仅医生或管理员可以删除医嘱")
+
+    order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
+    if not order:
+        raise HTTPException(404, "医嘱不存在")
+
+    if order.status not in ("draft", "cancelled"):
+        raise HTTPException(
+            400,
+            f"当前状态 '{order.status}' 不允许删除，仅 'draft' 或 'cancelled' 状态可删除。"
+            "已签署或已执行的医嘱不可删除以保障医疗记录完整性。",
+        )
+
+    order.status = "cancelled"
+    db.commit()
+    return {"success": True, "message": "医嘱已取消"}

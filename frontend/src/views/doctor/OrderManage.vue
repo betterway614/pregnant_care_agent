@@ -45,8 +45,8 @@
               <span class="text-light">{{ formatDate(row.signed_at || row.created_at) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="patient_name" label="孕妇" width="100" />
-          <el-table-column label="医嘱内容" min-width="240">
+          <el-table-column prop="patient_name" label="孕妇" width="100" align="center" />
+          <el-table-column label="医嘱内容" min-width="240" align="center">
             <template #default="{ row }">
               <span class="order-content-truncate">{{ truncateContent(row.content, 40) }}</span>
             </template>
@@ -54,7 +54,7 @@
           <el-table-column label="类型" width="90" align="center">
             <template #default="{ row }">
               <el-tag :type="getOrderTypeTag(row.order_type)" size="small">
-                {{ row.order_type }}
+                {{ getOrderTypeText(row.order_type) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -70,29 +70,43 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column label="操作" min-width="230" align="center">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click="showDetail(row)">
-                详情
-              </el-button>
-              <el-button
-                v-if="row.status === 'draft'"
-                text
-                type="warning"
-                size="small"
-                @click="handleEdit(row)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                v-if="row.status === 'draft' || row.status === 'pending_sign'"
-                text
-                type="success"
-                size="small"
-                @click="confirmSignOrder(row)"
-              >
-                签署
-              </el-button>
+              <div class="action-buttons">
+                <el-button text type="info" size="small" :icon="View" @click="showDetail(row)">
+                  详情
+                </el-button>
+                <el-button
+                  v-if="row.status === 'draft'"
+                  text
+                  type="warning"
+                  size="small"
+                  :icon="Edit"
+                  @click="handleEdit(row)"
+                >
+                  编辑
+                </el-button>
+                <el-button
+                  v-if="row.status === 'draft' || row.status === 'pending_sign'"
+                  text
+                  type="success"
+                  size="small"
+                  :icon="EditPen"
+                  @click="confirmSignOrder(row)"
+                >
+                  签署
+                </el-button>
+                <el-button
+                  v-if="row.status === 'draft' || row.status === 'cancelled'"
+                  text
+                  type="danger"
+                  size="small"
+                  :icon="Delete"
+                  @click="confirmDeleteOrder(row)"
+                >
+                  删除
+                </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -121,7 +135,7 @@
             </div>
             <div class="detail-row">
               <span class="detail-row__label">医嘱类型</span>
-              <el-tag size="small">{{ detailOrder.order_type }}</el-tag>
+              <el-tag size="small">{{ getOrderTypeText(detailOrder.order_type) }}</el-tag>
             </div>
             <div class="detail-row">
               <span class="detail-row__label">来源</span>
@@ -178,6 +192,8 @@
               <el-option label="治疗医嘱" value="治疗医嘱" />
               <el-option label="护理医嘱" value="护理医嘱" />
               <el-option label="饮食医嘱" value="饮食医嘱" />
+              <el-option label="常规医嘱" value="standard" />
+              <el-option label="紧急医嘱" value="urgent" />
             </el-select>
           </el-form-item>
           <el-form-item label="医嘱内容" required>
@@ -270,11 +286,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Refresh, Document, Plus } from '@element-plus/icons-vue'
+import { Search, Refresh, Document, Plus, View, Edit, EditPen, Delete } from '@element-plus/icons-vue'
 import { orderApi, dashboardApi } from '@/api/endpoints'
 import type { MedicalOrder, Pregnant } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { renderMarkdown } from '@/utils/markdown'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -318,7 +335,22 @@ function truncateContent(content: string, maxLen: number): string {
   return content.length > maxLen ? content.slice(0, maxLen) + '...' : content
 }
 
-/** 医嘱类型标签颜色 */
+/** 医嘱类型汉化 */
+function getOrderTypeText(type: string): string {
+  const map: Record<string, string> = {
+    用药医嘱: '用药',
+    检查医嘱: '检查',
+    检验医嘱: '检验',
+    治疗医嘱: '治疗',
+    护理医嘱: '护理',
+    饮食医嘱: '饮食',
+    standard: '常规',
+    urgent: '紧急',
+  }
+  return map[type] || type
+}
+
+/** 医嘱类型标签颜色（按严重/紧急程度映射） */
 function getOrderTypeTag(type: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
   const map: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
     用药医嘱: 'warning',
@@ -327,6 +359,8 @@ function getOrderTypeTag(type: string): 'success' | 'warning' | 'info' | 'danger
     治疗医嘱: 'danger',
     护理医嘱: 'success',
     饮食医嘱: 'success',
+    standard: 'info',
+    urgent: 'danger',
   }
   return map[type] || 'info'
 }
@@ -361,7 +395,11 @@ async function loadOrders() {
   try {
     const params: { status?: string; pregnant_id?: string } = {}
     if (filterStatus.value) {
+      // 明确选择了某个状态筛选
       params.status = filterStatus.value
+    } else {
+      // 默认"全部"排除已取消的医嘱，保持列表清爽，已取消需主动筛选
+      params.status = 'draft,pending_sign,signed,executed'
     }
     const res = await orderApi.list(params)
     let list = res.data || []
@@ -415,6 +453,32 @@ async function doEditOrder() {
 /** 签署确认弹窗 — 跳转到医嘱签名页 */
 function confirmSignOrder(order: MedicalOrder) {
   router.push({ name: 'OrderSign', params: { orderId: order.id } })
+}
+
+/** 删除确认弹窗 */
+function confirmDeleteOrder(order: MedicalOrder) {
+  ElMessageBox.confirm(
+    `确定要删除孕妇「${order.patient_name}」的医嘱吗？删除后状态将变为"已取消"。`,
+    '删除确认',
+    {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    },
+  )
+    .then(async () => {
+      try {
+        await orderApi.delete(order.id)
+        ElMessage.success('医嘱已删除')
+        await loadOrders()
+      } catch (err: any) {
+        ElMessage.error(err?.response?.data?.detail || '删除失败')
+      }
+    })
+    .catch(() => {
+      // 用户取消删除
+    })
 }
 
 // 新建医嘱
@@ -650,5 +714,19 @@ onMounted(loadOrders)
 
 .dialog-body {
   padding: 8px 0;
+}
+
+/* 操作按钮组 — 居中 + 自适应不截断 */
+.action-buttons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.action-buttons .el-button {
+  transition: all var(--transition-fast);
+  padding: 0 5px;
+  min-width: auto;
 }
 </style>

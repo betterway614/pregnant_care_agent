@@ -210,12 +210,11 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             filters=[IN("audience", ["doctor", "nurse", "all"])],
         )
         if results:
-            tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)
-            return {
+            return truncate_tool_result({
                 "topic": topic,
                 "guidelines": [doc.content[:300] if hasattr(doc, "content") else str(doc)[:300] for doc in results],
                 "source": "knowledge_base",
-            }
+            }, tool_name="agno_query_clinical_guideline", tool_start_time=_t0)
     except Exception:
         pass
 
@@ -229,12 +228,11 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             header = f"【{entry['title']}】(来源: {entry['source']})"
             points = "\n".join(f"  {p}" for p in entry.get("key_points", [])[:5])
             guidelines_text.append(f"{header}\n{points}")
-        tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)
-        return {
+        return truncate_tool_result({
             "topic": topic,
             "guidelines": guidelines_text,
             "source": "hardcoded_fallback",
-        }
+        }, tool_name="agno_query_clinical_guideline", tool_start_time=_t0)
 
     # 完全无匹配时返回通用提示
     tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)

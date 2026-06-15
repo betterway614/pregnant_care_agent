@@ -150,6 +150,8 @@ export const orderApi = {
     client.put(`/orders/${orderId}/acknowledge`),
   getDocument: (orderId: string) =>
     client.get<OrderDocument>(`/orders/${orderId}/document`),
+  delete: (orderId: string) =>
+    client.delete(`/orders/${orderId}`),
 }
 
 // 统计

@@ -11,6 +11,7 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import ast
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 
@@ -424,39 +425,51 @@ class TestKnowledgeFilters:
                         f"{variant_name} should NOT have knowledge_filters (search_knowledge=False per gating)"
                     )
 
-    @pytest.mark.parametrize("getter", [
-        "get_nurse_analyze_agent",
-        "get_nurse_followup_agent",
-        "get_nurse_report_agent",
-        "get_nurse_chat_variant_agent",
-        "get_nurse_agent",
+    @pytest.mark.parametrize("getter,should_have_filters", [
+        ("get_nurse_analyze_agent", True),       # analyze: enable_knowledge=True
+        ("get_nurse_followup_agent", False),      # followup: enable_knowledge=False (RAG gating)
+        ("get_nurse_report_agent", False),         # report: enable_knowledge=False (RAG gating)
+        ("get_nurse_chat_variant_agent", True),   # chat: enable_knowledge=True
+        ("get_nurse_agent", True),                 # main: enable_knowledge=True
     ])
-    def test_all_nurse_variants_have_filters(self, getter):
-        """护士端所有变体都设置了 knowledge_filters"""
-        from app.core import agno_medical_agents as mod
-        factory = getattr(mod, getter)
-        mock_model = self._make_mock_model()
-        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
-            with patch("agno.agent._init.get_model", return_value=mock_model):
-                agent = factory()
-                assert agent.knowledge_filters is not None, f"{getter} missing knowledge_filters"
+    def test_all_nurse_variants_have_filters(self, getter, should_have_filters):
+        """护士端变体 knowledge_filters 与 RAG 门控策略一致
 
-    @pytest.mark.parametrize("getter", [
-        "get_doctor_analyze_agent",
-        "get_doctor_order_agent",
-        "get_doctor_issue_agent",
-        "get_doctor_chat_variant_agent",
-        "get_doctor_agent",
-    ])
-    def test_all_doctor_variants_have_filters(self, getter):
-        """医生端所有变体都设置了 knowledge_filters"""
+        RAG 门控: analyze/chat 开启知识检索，followup/report 关闭以减少 token 浪费。
+        """
         from app.core import agno_medical_agents as mod
         factory = getattr(mod, getter)
         mock_model = self._make_mock_model()
         with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
             with patch("agno.agent._init.get_model", return_value=mock_model):
                 agent = factory()
-                assert agent.knowledge_filters is not None, f"{getter} missing knowledge_filters"
+                if should_have_filters:
+                    assert agent.knowledge_filters is not None, f"{getter} should have knowledge_filters"
+                else:
+                    assert agent.knowledge_filters is None, f"{getter} should NOT have knowledge_filters (RAG gating: enable_knowledge=False)"
+
+    @pytest.mark.parametrize("getter,should_have_filters", [
+        ("get_doctor_analyze_agent", True),       # analyze: enable_knowledge=True
+        ("get_doctor_order_agent", False),         # order: enable_knowledge=False (RAG gating)
+        ("get_doctor_issue_agent", False),         # issue: enable_knowledge=False (RAG gating)
+        ("get_doctor_chat_variant_agent", True),  # chat: enable_knowledge=True
+        ("get_doctor_agent", True),                # main: enable_knowledge=True
+    ])
+    def test_all_doctor_variants_have_filters(self, getter, should_have_filters):
+        """医生端变体 knowledge_filters 与 RAG 门控策略一致
+
+        RAG 门控: analyze/chat 开启知识检索，order/issue 关闭以减少 token 浪费。
+        """
+        from app.core import agno_medical_agents as mod
+        factory = getattr(mod, getter)
+        mock_model = self._make_mock_model()
+        with patch("app.core.agno_medical_agents.get_agno_model", return_value=mock_model):
+            with patch("agno.agent._init.get_model", return_value=mock_model):
+                agent = factory()
+                if should_have_filters:
+                    assert agent.knowledge_filters is not None, f"{getter} should have knowledge_filters"
+                else:
+                    assert agent.knowledge_filters is None, f"{getter} should NOT have knowledge_filters (RAG gating: enable_knowledge=False)"
 
 
 # ==================== 旧模块清理验证 ====================
@@ -658,6 +671,21 @@ class TestClinicalGuidelinesFallback:
 # ==================== 医生工具兜底路径测试 ====================
 
 
+def _parse_tool_result(result) -> dict:
+    """解析 truncate_tool_result 返回的字符串为 dict（兼容已是 dict 的情况）。
+
+    truncate_tool_result 返回 str(dict)（Python repr，单引号），
+    截断时返回 json.dumps() 格式。部分路径直接返回 dict。
+    """
+    import json
+    if isinstance(result, dict):
+        return result
+    try:
+        return json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return ast.literal_eval(result)
+
+
 class TestDoctorToolsFallbackPath:
     """验证 agno_query_clinical_guideline 在 RAG 不可用时的兜底行为
 
@@ -672,6 +700,7 @@ class TestDoctorToolsFallbackPath:
         # 模拟 RAG 不可用: knowledge 为 None
         with patch("app.core.agno_knowledge.knowledge", None):
             result = agno_query_clinical_guideline.entrypoint(topic="gdm")
+            result = _parse_tool_result(result)
 
         assert result["source"] == "hardcoded_fallback"
         guidelines = result["guidelines"]
@@ -689,6 +718,7 @@ class TestDoctorToolsFallbackPath:
 
         with patch("app.core.agno_knowledge.knowledge", None):
             result = agno_query_clinical_guideline.entrypoint(topic="xyz_nonexistent_abcdef")
+            result = _parse_tool_result(result)
 
         assert result["source"] == "hardcoded_fallback"
         assert len(result["guidelines"]) >= 1
@@ -701,6 +731,7 @@ class TestDoctorToolsFallbackPath:
 
         with patch("app.core.agno_knowledge.knowledge", None):
             result = agno_query_clinical_guideline.entrypoint(topic="妊娠期糖尿病饮食")
+            result = _parse_tool_result(result)
 
         assert result["source"] == "hardcoded_fallback"
         assert len(result["guidelines"]) >= 1
@@ -717,6 +748,7 @@ class TestDoctorToolsFallbackPath:
 
         with patch("app.core.agno_knowledge.knowledge", mock_knowledge):
             result = agno_query_clinical_guideline.entrypoint(topic="prenatal")
+            result = _parse_tool_result(result)
 
         assert result["source"] == "knowledge_base"
         assert "叶酸" in result["guidelines"][0]
