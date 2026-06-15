@@ -56,6 +56,29 @@ async def generate_order(
     if pregnant.nickname:
         patient_context += f" 孕妇昵称：{pregnant.nickname}。"
 
+    # 2.1.1 RAG 检索相关临床指南作为参考上下文
+    rag_context = ""
+    try:
+        from ..core.agno_knowledge import knowledge
+        if knowledge is not None:
+            from agno.filters import IN
+            # 用风险标签构建检索查询
+            rag_query = " ".join(pregnant.risk_tags) if pregnant.risk_tags else recommendation.get("source", "")
+            if rag_query:
+                results = knowledge.search(
+                    query=rag_query, max_results=2,
+                    filters=[IN("audience", ["doctor", "nurse", "all"])],
+                )
+                if results:
+                    guidelines = []
+                    for doc in results:
+                        text = doc.content[:300] if hasattr(doc, "content") else str(doc)[:300]
+                        guidelines.append(text)
+                    rag_context = "\n\n参考临床指南：\n" + "\n---\n".join(guidelines)
+    except Exception:
+        # RAG 不可用时静默跳过，不影响模板生成
+        pass
+
     try:
         system_prompt = {
             "role": "system",
@@ -72,7 +95,7 @@ async def generate_order(
         }
         user_msg = {
             "role": "user",
-            "content": f"{patient_context}\n\n原始医嘱模板：{recommendation['content']}\n\n请优化上述医嘱内容，使其更加个性化和孕妇友好。"
+            "content": f"{patient_context}\n\n原始医嘱模板：{recommendation['content']}{rag_context}\n\n请优化上述医嘱内容，使其更加个性化和孕妇友好。"
         }
         enhanced = await llm.chat([system_prompt, user_msg], max_tokens=2048)
         if enhanced and len(enhanced.strip()) > 10:

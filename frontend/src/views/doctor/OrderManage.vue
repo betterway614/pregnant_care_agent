@@ -147,9 +147,7 @@
 
           <div class="detail-card__section">
             <h4 class="detail-section-title">医嘱内容</h4>
-            <div class="detail-content-box">
-              {{ detailOrder.content }}
-            </div>
+            <div class="detail-content-box order-markdown" v-html="renderMarkdown(detailOrder.content)"></div>
           </div>
         </div>
       </template>
@@ -276,6 +274,7 @@ import { Search, Refresh, Document, Plus } from '@element-plus/icons-vue'
 import { orderApi, dashboardApi } from '@/api/endpoints'
 import type { MedicalOrder, Pregnant } from '@/types'
 import { useAppStore } from '@/stores/app'
+import { renderMarkdown } from '@/utils/markdown'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -553,7 +552,66 @@ onMounted(loadOrders)
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-primary);
-  white-space: pre-wrap;
+}
+.detail-content-box.order-markdown {
+  white-space: normal;
+}
+.detail-content-box.order-markdown :deep(h1),
+.detail-content-box.order-markdown :deep(h2),
+.detail-content-box.order-markdown :deep(h3),
+.detail-content-box.order-markdown :deep(h4) {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 12px 0 6px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.detail-content-box.order-markdown :deep(p) {
+  margin: 4px 0;
+}
+.detail-content-box.order-markdown :deep(ul),
+.detail-content-box.order-markdown :deep(ol) {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.detail-content-box.order-markdown :deep(li) {
+  margin: 2px 0;
+}
+.detail-content-box.order-markdown :deep(strong) {
+  font-weight: 700;
+}
+.detail-content-box.order-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.detail-content-box.order-markdown :deep(th),
+.detail-content-box.order-markdown :deep(td) {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.detail-content-box.order-markdown :deep(th) {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+.detail-content-box.order-markdown :deep(blockquote) {
+  border-left: 3px solid var(--border);
+  margin: 8px 0;
+  padding-left: 12px;
+  color: var(--text-muted);
+}
+.detail-content-box.order-markdown :deep(hr) {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 12px 0;
+}
+.detail-content-box.order-markdown :deep(code) {
+  background: rgba(0,0,0,0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
 }
 
 /* 签署预览 */

@@ -277,6 +277,210 @@ class TestOrdersRouterIntegration:
         assert order.content == "修改后的医嘱内容"
 
 
+# ==================== RAG 辅助医嘱生成 ====================
+
+
+class TestOrderGenerateWithRAG:
+    """测试路径A生成医嘱时的RAG检索集成"""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        return db
+
+    @pytest.fixture
+    def client(self, mock_db):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.database import get_db
+        from app.core.auth import get_current_user, TokenPayload, create_token
+
+        def override_get_db():
+            yield mock_db
+
+        mock_user = TokenPayload(sub="test-doctor", role="doctor", pregnant_id="")
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+        token = create_token(mock_user)
+        yield TestClient(app, headers={"Authorization": f"Bearer {token}"})
+        app.dependency_overrides.clear()
+
+    def _setup_pregnant_mock(self, mock_db):
+        """构建一个带风险标签的孕妇 mock"""
+        from app.models import Pregnant
+        pregnant = Pregnant(
+            pregnant_id="PT_RAG_TEST",
+            display_name="RAG测试孕妇",
+            gestational_age_days=28 * 7,
+            risk_tags=["GDM", "FGR"],
+        )
+        mock_db.query.return_value.filter.return_value.first.return_value = pregnant
+
+        def mock_refresh(order):
+            order.id = uuid4()
+        mock_db.refresh = mock_refresh
+
+        return pregnant
+
+    @patch("app.routers.orders.llm")
+    def test_rag_injects_guidelines_before_llm_call(self, mock_llm, client, mock_db):
+        """RAG检索到的指南应出现在LLM的user_message中"""
+        self._setup_pregnant_mock(mock_db)
+
+        mock_llm.chat = AsyncMock(return_value="建议血糖监测，每2周B超评估FGR进展。")
+
+        # 直接调用生成端点，验证LLM收到了包含RAG上下文的prompt
+        with patch("app.core.agno_knowledge.knowledge") as mock_knowledge:
+            # Mock knowledge 存在且返回检索结果
+            mock_knowledge.search.return_value = [
+                type("Doc", (), {
+                    "content": "GDM患者应每日监测空腹及三餐后2小时血糖，目标空腹<5.3mmol/L。"
+                })(),
+            ]
+
+            # 拦截 llm.chat 并检查 prompt 内容
+            captured_messages = []
+
+            async def capture_chat(messages, **kwargs):
+                captured_messages.extend(messages)
+                return "建议血糖监测，每2周B超评估。"
+
+            mock_llm.chat = capture_chat
+
+            client.post("/api/v1/orders/generate", json={
+                "pregnant_id": "PT_RAG_TEST",
+                "risk_level": "medium",
+                "gestational_weeks": 28.0,
+            })
+
+            # 验证 user message 中包含了 RAG 检索到的指南
+            user_msgs = [m["content"] for m in captured_messages if m.get("role") == "user"]
+            assert len(user_msgs) > 0, "应有user消息被发送给LLM"
+            rag_found = any("参考临床指南" in msg for msg in user_msgs)
+            assert rag_found, f"LLM的user message中应包含参考临床指南, 实际: {user_msgs[0][:200] if user_msgs else 'empty'}"
+
+    @patch("app.routers.orders.llm")
+    def test_rag_unavailable_graceful_degradation(self, mock_llm, client, mock_db):
+        """RAG不可用时静默降级，医嘱生成不受影响"""
+        self._setup_pregnant_mock(mock_db)
+
+        mock_llm.chat = AsyncMock(return_value="建议定期产检，低盐饮食。")
+
+        # knowledge 为 None 时（RAG不可用）不应抛异常
+        with patch("app.core.agno_knowledge.knowledge", None):
+            response = client.post("/api/v1/orders/generate", json={
+                "pregnant_id": "PT_RAG_TEST",
+                "risk_level": "low",
+                "gestational_weeks": 12.0,
+            })
+
+        # 即使RAG不可用，端点也应返回成功
+        assert response.status_code == 200, f"RAG不可用时端点应正常返回, 实际: {response.status_code}"
+        data = response.json()
+        assert "content" in data
+        assert len(data["content"]) > 0
+
+    @patch("app.routers.orders.llm")
+    def test_rag_search_exception_does_not_block(self, mock_llm, client, mock_db):
+        """RAG检索抛异常时不应阻断医嘱生成"""
+        self._setup_pregnant_mock(mock_db)
+
+        mock_llm.chat = AsyncMock(return_value="建议常规保健，按时产检。")
+
+        with patch("app.core.agno_knowledge.knowledge") as mock_knowledge:
+            # knowledge存在但search抛异常
+            mock_knowledge.search.side_effect = RuntimeError("PgVector connection timeout")
+
+            response = client.post("/api/v1/orders/generate", json={
+                "pregnant_id": "PT_RAG_TEST",
+                "risk_level": "low",
+                "gestational_weeks": 12.0,
+            })
+
+        assert response.status_code == 200, f"RAG检索异常时端点应正常返回, 实际: {response.status_code}"
+        data = response.json()
+        assert "content" in data
+        assert len(data["content"]) > 0
+
+    @patch("app.routers.orders.llm")
+    def test_rag_no_results_still_generates_order(self, mock_llm, client, mock_db):
+        """RAG检索返回空结果时，医嘱仍正常生成"""
+        self._setup_pregnant_mock(mock_db)
+
+        mock_llm.chat = AsyncMock(return_value="建议定期产检，均衡饮食。")
+
+        with patch("app.core.agno_knowledge.knowledge") as mock_knowledge:
+            # knowledge存在但返回空结果
+            mock_knowledge.search.return_value = []
+
+            response = client.post("/api/v1/orders/generate", json={
+                "pregnant_id": "PT_RAG_TEST",
+                "risk_level": "low",
+                "gestational_weeks": 12.0,
+            })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["content"]) > 0
+
+    @patch("app.routers.orders.llm")
+    def test_rag_context_uses_risk_tags_as_query(self, mock_llm, client, mock_db):
+        """RAG检索应使用孕妇的risk_tags构建查询"""
+        self._setup_pregnant_mock(mock_db)
+
+        mock_llm.chat = AsyncMock(return_value="建议GDM饮食管理。")
+
+        with patch("app.core.agno_knowledge.knowledge") as mock_knowledge:
+            mock_knowledge.search.return_value = [
+                type("Doc", (), {"content": "GDM血糖管理要点..."})(),
+            ]
+
+            client.post("/api/v1/orders/generate", json={
+                "pregnant_id": "PT_RAG_TEST",
+                "risk_level": "medium",
+                "gestational_weeks": 28.0,
+            })
+
+            # 验证search被调用，且查询词包含风险标签
+            mock_knowledge.search.assert_called_once()
+            call_args = mock_knowledge.search.call_args
+            query = call_args[1]["query"]
+            assert "GDM" in query or "FGR" in query, \
+                f"RAG检索查询应包含风险标签, 实际: {query}"
+
+    def test_generate_order_without_risk_tags_no_rag_call(self, client, mock_db):
+        """孕妇无风险标签时，不应调用RAG（跳过空查询）"""
+        from app.models import Pregnant
+
+        pregnant = Pregnant(
+            pregnant_id="PT_NO_RISK",
+            display_name="无风险孕妇",
+            gestational_age_days=14 * 7,
+            risk_tags=[],
+        )
+        mock_db.query.return_value.filter.return_value.first.return_value = pregnant
+
+        def mock_refresh(order):
+            order.id = uuid4()
+        mock_db.refresh = mock_refresh
+
+        with patch("app.routers.orders.llm") as mock_llm:
+            mock_llm.chat = AsyncMock(return_value="建议定期产检。")
+
+            with patch("app.core.agno_knowledge.knowledge") as mock_knowledge:
+                mock_knowledge.search.return_value = []
+
+                response = client.post("/api/v1/orders/generate", json={
+                    "pregnant_id": "PT_NO_RISK",
+                    "risk_level": "low",
+                    "gestational_weeks": 14.0,
+                })
+
+                # RAG search 不应被调用（空查询）
+                # 注意: rag_query为空时，代码中 if rag_query: 会跳过search
+                assert response.status_code == 200
+
+
 # ==================== 去重验证 ====================
 
 

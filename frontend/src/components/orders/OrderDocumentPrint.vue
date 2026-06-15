@@ -21,7 +21,7 @@
 
       <div class="doc-section">
         <div class="doc-section__title">医嘱内容</div>
-        <div class="doc-section__content">{{ content }}</div>
+        <div class="doc-section__content order-markdown" v-html="renderedContent"></div>
       </div>
 
       <div class="doc-warning">
@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{
   patientName: string
@@ -68,6 +69,7 @@ function fmtDate(t?: string | null): string {
 
 const signDate = computed(() => fmtDate(props.signedAt))
 const printDate = computed(() => new Date().toLocaleDateString('zh-CN'))
+const renderedContent = computed(() => renderMarkdown(props.content))
 
 const typeLabel = computed(() => {
   const map: Record<string, string> = { standard: '标准医嘱', custom: '自定义医嘱' }
@@ -143,8 +145,73 @@ const sourceLabel = computed(() => {
 .doc-section__content {
   font-size: 14px;
   line-height: 2;
-  white-space: pre-wrap;
   padding: 8px 0;
+}
+/* Markdown 渲染元素适配医嘱文档风格 */
+.doc-section__content.order-markdown {
+  white-space: normal;
+}
+.doc-section__content.order-markdown :deep(h1),
+.doc-section__content.order-markdown :deep(h2),
+.doc-section__content.order-markdown :deep(h3),
+.doc-section__content.order-markdown :deep(h4) {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  line-height: 1.5;
+  border-bottom: none;
+}
+.doc-section__content.order-markdown :deep(p) {
+  margin: 4px 0;
+}
+.doc-section__content.order-markdown :deep(ul),
+.doc-section__content.order-markdown :deep(ol) {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.doc-section__content.order-markdown :deep(li) {
+  margin: 2px 0;
+}
+.doc-section__content.order-markdown :deep(strong) {
+  font-weight: 700;
+  color: #222;
+}
+.doc-section__content.order-markdown :deep(em) {
+  font-style: italic;
+}
+.doc-section__content.order-markdown :deep(code) {
+  background: #f5f5f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.doc-section__content.order-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.doc-section__content.order-markdown :deep(th),
+.doc-section__content.order-markdown :deep(td) {
+  border: 1px solid #ccc;
+  padding: 4px 8px;
+  text-align: left;
+}
+.doc-section__content.order-markdown :deep(th) {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+.doc-section__content.order-markdown :deep(blockquote) {
+  border-left: 3px solid #ccc;
+  margin: 8px 0;
+  padding-left: 12px;
+  color: #666;
+}
+.doc-section__content.order-markdown :deep(hr) {
+  border: none;
+  border-top: 1px dashed #ddd;
+  margin: 12px 0;
 }
 
 .doc-warning {
