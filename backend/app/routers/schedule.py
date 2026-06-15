@@ -15,10 +15,19 @@ router = APIRouter(prefix="/api/v1/schedule", tags=["排期管理"])
 @router.get("/{pregnant_id}", response_model=list[ScheduleNodeResponse])
 def get_schedule(pregnant_id: str, db: Session = Depends(get_db),
                  current_user: TokenPayload = Depends(get_current_user)):
-    """获取孕妇排期"""
-    nodes = db.query(ScheduleNode).filter(
+    """获取孕妇排期
+
+    - 孕妇角色：仅返回已发布的排期
+    - 护士/医生角色：返回所有排期（含未发布草稿）
+    """
+    query = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id
-    ).order_by(ScheduleNode.scheduled_date).all()
+    )
+    # 孕妇只能看到已发布的排期
+    if current_user.role == "pregnant":
+        query = query.filter(ScheduleNode.is_published == 1)
+
+    nodes = query.order_by(ScheduleNode.scheduled_date).all()
     return nodes
 
 

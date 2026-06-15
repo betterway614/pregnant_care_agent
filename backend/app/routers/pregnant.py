@@ -69,10 +69,11 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
     today = date.today()
     today_tasks = []
 
-    # 检查今日排期
+    # 检查今日排期（仅已发布的）
     schedule_nodes = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id,
-        ScheduleNode.scheduled_date == today
+        ScheduleNode.scheduled_date == today,
+        ScheduleNode.is_published == 1
     ).all()
     for node in schedule_nodes:
         today_tasks.append({
@@ -96,11 +97,12 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
             "status": "pending"
         })
 
-    # 近期检查
+    # 近期检查（仅已发布的）
     upcoming = db.query(ScheduleNode).filter(
         ScheduleNode.pregnant_id == pregnant_id,
         ScheduleNode.scheduled_date >= today,
-        ScheduleNode.scheduled_date <= today + timedelta(days=14)
+        ScheduleNode.scheduled_date <= today + timedelta(days=14),
+        ScheduleNode.is_published == 1
     ).order_by(ScheduleNode.scheduled_date).limit(5).all()
     upcoming_checks = [{"date": n.scheduled_date.isoformat(), "item": n.item, "type": n.node_type} for n in upcoming]
 
