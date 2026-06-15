@@ -646,6 +646,13 @@ class TestPregnantNotificationService:
         result = svc.mark_read(db, str(alert.id), "P001")
         assert result is True
 
+    def test_mark_read_handles_invalid_uuid_gracefully(self):
+        """传无效UUID字符串时不抛异常，返回False"""
+        svc = PregnantNotificationService()
+        db = MagicMock()
+        result = svc.mark_read(db, "not-a-valid-uuid", "P001")
+        assert result is False
+
     def test_mark_read_nonexistent_returns_false(self):
         """标记不存在的通知返回 False"""
         db = MagicMock()
@@ -738,6 +745,16 @@ class TestPregnantNotificationGentleMessages:
                 body = svc._gentle_body(msg, level)
                 results.append((msg, level, body))
         return results
+
+    def test_gentle_body_messages_fit_notification_card(self):
+        """所有映射消息长度 ≤50 字，确保移动端通知卡片2行内完整显示"""
+        svc = PregnantNotificationService()
+        for msg, level, body in self._all_gentle_bodies():
+            assert len(body) <= 50, (
+                f"温和消息过长 ({len(body)}字)，移动端2行会被截断！\n"
+                f"  原始消息: {msg}\n"
+                f"  温和输出: {body}"
+            )
 
     def test_gentle_body_never_contains_banned_words(self):
         """所有映射消息的温和输出绝不包含预警性词汇"""

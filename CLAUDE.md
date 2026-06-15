@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 知识检索 (RAG) 条件化: analyze/chat 变体开启 `search_knowledge=True`，followup/report/order/issue 变体关闭以减少 token 浪费
 - chat-full 变体 (NLU 兜底): nurse `tool_call_limit=5` (6 tools)，doctor `tool_call_limit=6` (8 tools)
 - **工具可观测性**: `common.py` → `ToolMetrics` 全局单例 `tool_metrics`；每个 @tool 函数入口 `_t0 = time.perf_counter()` + 出口 `record(name, duration_ms)`；per-session 增量通过 `start_session()`/`end_session()` → `AuditService.save_log(tool_metrics_session=…)` 持久化到 `AgentAuditLog.tool_metrics_json` + `ToolCallDetail.latency_ms`
-- **工作流**: 孕妇端 `prenatal_workflow` (症状/检查)；护士端 `nurse_workflow` (分析→评估上报)；医生端 `doctor_workflow` (分析→指南→医嘱)
+- **工作流**: 孕妇端 `prenatal_workflow` (症状/检查) + 孕期日记 API `GET /{pid}/diary`；护士端 `nurse_workflow` (分析→评估上报)；医生端 `doctor_workflow` (分析→指南→医嘱)
 
 **前端 (Vue 3 + TypeScript + Element Plus)**
 - 四角色端: 孕妇端、护士端、医生端、管理端
@@ -116,6 +116,7 @@ pregnent_care_agent/pregnant_care_agent/
 │   ├── app/
 │   │   ├── core/           # AI 引擎 (Agent/RAG/NLU/LLM)
 │   │   │   ├── tools/       # 16 个 @tool 函数 (nlu/health/nurse/doctor/routing/common)
+│   │   ├── data/           # 结构化参考数据 (40周孕期知识库等)
 │   │   ├── models/         # SQLAlchemy ORM 模型
 │   │   ├── routers/        # 22个 API 路由模块
 │   │   ├── schemas/        # Pydantic 数据校验
@@ -172,7 +173,8 @@ npm run test
 - 开发: SQLite (自动创建)
 - 生产: PostgreSQL 16 + pgvector
 - 迁移: Alembic (`backend/alembic/`)
-- 双模式兼容: `main.py` 中的 `_ensure_*_columns()` 函数处理 SQLite ALTER TABLE 兼容
+- 双模式兼容: `main.py` 中的 `_ensure_*()` 函数处理已有数据库的表/列增量迁移
+- 孕期日记缓存: `pregnancy_diary_entries` 表，每人每周一条，LLM 叙事 + 模板兜底
 
 ## 环境变量
 

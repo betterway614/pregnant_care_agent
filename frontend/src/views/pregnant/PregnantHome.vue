@@ -389,16 +389,20 @@ function dismissActionCenter(type: 'followup' | 'order' | 'greeting') {
   }
 }
 
-// ---- 预警通知：标记已读 + 导航 ----
+// ---- 预警通知：标记已读 + 本地dismiss缓存 + 导航 ----
 async function onAlertNoticeClick(item: any) {
   const pid = localStorage.getItem('currentPregnantId') || ''
-  // 先从列表中移除，提供即时反馈
+  // 1. 本地 dismiss 缓存 — 即使后端 markRead 失败，刷新也不会复现
+  saveDismissNotice(`alert_${pid}_${item.id}`, DISMISS_TTL_PROACTIVE)
+  // 2. 先从列表中移除，提供即时反馈
   alertNotifications.value = alertNotifications.value.filter((n: any) => n.id !== item.id)
-  // 调用后端标记已读（fire-and-forget，不阻塞导航）
+  // 3. 调用后端标记已读（fire-and-forget，不阻塞导航）
   if (pid) {
-    alertNotificationApi.markRead(item.id, pid).catch(() => {})
+    alertNotificationApi.markRead(item.id, pid).catch((err: any) => {
+      console.warn('[Home] markRead failed, but already dismissed locally:', err)
+    })
   }
-  // 导航
+  // 4. 导航
   if (item.action_route) {
     router.push(item.action_route)
   }
@@ -551,8 +555,12 @@ async function fetchNotifications() {
     alertNotificationApi.getNotifications(pid, true).catch(() => ({ data: [] })),
     proactiveApi.getNotifications(pid).catch(() => ({ data: [] })),
   ])
-  // 预警通知：仅保留 alert 类型（随访/医嘱由行动中心展示）
-  alertNotifications.value = (alertRes.data || []).filter((n: any) => n.type === 'alert')
+  // 预警通知：仅保留 alert 类型，且过滤本地已dismiss的（双重保障）
+  alertNotifications.value = (alertRes.data || []).filter((n: any) => {
+    if (n.type !== 'alert') return false
+    // 检查本地 dismiss 缓存，防止后端 markRead 失败导致刷新后复现
+    return !isDismissed(`alert_${pid}_${n.id}`)
+  })
   // 主动提醒：仅保留重要事项（血压异常、产检），过滤日常记录提醒和已忽略的
   proactiveNotifications.value = (proactiveRes.data || []).filter((n: any) => {
     // 日常数据记录提醒属于「今日待办」，不在通知栏显示
