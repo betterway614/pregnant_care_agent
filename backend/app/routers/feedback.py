@@ -67,9 +67,13 @@ async def get_feedback_stats(
     db: Session = Depends(get_db),
     user: TokenPayload = Depends(get_current_user),
 ):
-    """获取反馈统计（支持按角色筛选）"""
-    if user.role == "pregnant" and pregnant_id and user.pregnant_id != pregnant_id:
-        raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
+    """获取反馈统计（医护可查全部；孕妇仅可查自身）"""
+    # 孕妇角色：只能查自己的反馈统计
+    if user.role == "pregnant":
+        if not pregnant_id:
+            raise HTTPException(status_code=400, detail="孕妇端需要指定 pregnant_id")
+        if user.pregnant_id != pregnant_id:
+            raise HTTPException(status_code=403, detail="无权访问该孕妇数据")
     from sqlalchemy import func
     query = db.query(Feedback)
     if pregnant_id:

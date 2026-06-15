@@ -41,7 +41,13 @@ def get_alerts(status: Optional[str] = None,
                pregnant_id: Optional[str] = None,
                db: Session = Depends(get_db),
                current_user: TokenPayload = Depends(get_current_user)):
-    """获取预警列表"""
+    """获取预警列表
+
+    角色过滤规则：
+    - 医生端：默认隐藏 NOTE_NURSE + YELLOW 的仅护士关注预警
+      （护士升级后 level 变为 ORANGE/RED，医生端即可见）
+    - 护士端：查看所有预警
+    """
     query = db.query(Alert)
     if status:
         # 支持逗号分隔的多状态查询（如 "pending,escalated"），大小写不敏感
@@ -53,6 +59,24 @@ def get_alerts(status: Optional[str] = None,
         query = query.filter(Alert.pregnant_id == pregnant_id)
 
     alerts = query.order_by(Alert.created_at.desc()).limit(100).all()
+
+    # 医生端过滤：
+    # 1. 隐藏 NOTE_NURSE + YELLOW 的护士专属预警（未升级的仅护士关注项）
+    # 2. 隐藏医生已降级处理的预警（医生已做判断，不应继续出现在待处理列表）
+    if current_user.role == "doctor":
+        alerts = [
+            a for a in alerts
+            if not (
+                # 规则 1: 仅护士关注的未升级预警
+                ((a.details or {}).get("action") == "NOTE_NURSE"
+                 and a.level == "YELLOW")
+                # 规则 2: 医生已降级处理过的预警
+                or any(
+                    h.get("action") == "downgrade" and h.get("source_role") == "doctor"
+                    for h in (a.details or {}).get("history", [])
+                )
+            )
+        ]
 
     # 批量查询孕妇信息，避免 N+1 查询
     pregnant_ids = list(set(a.pregnant_id for a in alerts))
@@ -68,6 +92,7 @@ def get_alerts(status: Optional[str] = None,
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
             patient_name=pregnant.display_name if pregnant else "未知",
             gestational_age_days=pregnant.gestational_age_days if pregnant else None,
+            rule_standard_message=rule_engine.get_rule_message(a.rule_id),
         ))
     return result
 
@@ -103,7 +128,7 @@ async def create_alert(
         details=req.details,
     )
 
-    # 3. 构建推送数据
+    # 3. 构建推送数据（包含 details.action 供 route_alert 精确路由）
     alert_data = {
         "id": str(alert.id),
         "pregnant_id": req.pregnant_id,
@@ -114,12 +139,13 @@ async def create_alert(
         "status": alert.status,
         "created_at": alert.created_at.isoformat() if alert.created_at else None,
         "gestational_age_days": pregnant.gestational_age_days,
+        "source_role": "system",
+        "action": "created",
+        "details": req.details if req.details else {},
     }
 
-    # 4. 实时推送给医生端
+    # 4. 实时推送（route_alert 按级别+动作路由，NOTE_NURSE 仅推护士）
     try:
-        alert_data["source_role"] = "system"
-        alert_data["action"] = "created"
         await ws_manager.route_alert(alert_data)
     except Exception as e:
         logger.warning(f"WebSocket广播失败，预警已创建: {e}")
@@ -134,6 +160,7 @@ async def create_alert(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name,
         gestational_age_days=pregnant.gestational_age_days,
+        rule_standard_message=rule_engine.get_rule_message(req.rule_id),
     )
 
 
@@ -150,7 +177,8 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
         "message": f"触发了 {len(created)} 条预警",
         "alerts": [AlertResponse(
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
-            patient_name=""
+            patient_name="",
+            rule_standard_message=rule_engine.get_rule_message(a.rule_id),
         ) for a in created]
     }
 
@@ -277,6 +305,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
             "source_role": source_role,
             "action": review.action,
             "review_reason": review.reason,
+            "details": alert.details if alert.details else {},
         }
 
         if source_role == "doctor" and review.action == "escalate":
@@ -307,6 +336,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",
         gestational_age_days=pregnant.gestational_age_days if pregnant else None,
+        rule_standard_message=rule_engine.get_rule_message(alert.rule_id),
     )
 
 

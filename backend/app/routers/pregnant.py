@@ -293,8 +293,9 @@ async def _auto_evaluate_alerts(db: Session, pregnant_id: str):
     for alert in new_alerts:
         asyncio.create_task(alert_service.enrich_alert_with_llm(alert.id, pregnant_id))
 
-    # WebSocket 推送给医生端
+    # WebSocket 按级别和动作路由推送（非无差别广播）
     for alert in new_alerts:
+        rule_action = (alert.details or {}).get("action", "ALERT_NURSE")
         alert_data = {
             "id": str(alert.id),
             "pregnant_id": pregnant_id,
@@ -305,11 +306,14 @@ async def _auto_evaluate_alerts(db: Session, pregnant_id: str):
             "status": alert.status,
             "created_at": alert.created_at.isoformat() if alert.created_at else None,
             "gestational_age_days": pregnant.gestational_age_days,
+            "source_role": "system",
+            "action": "created",
+            "details": {"action": rule_action},
         }
         try:
-            await ws_manager.broadcast_alert(alert_data)
+            await ws_manager.route_alert(alert_data)
         except Exception as e:
-            logger.warning(f"WebSocket广播失败: {e}")
+            logger.warning(f"WebSocket路由推送失败: {e}")
 
 
 def _build_rule_context(db: Session, pregnant_id: str, gest_week: int) -> dict:

@@ -1,5 +1,5 @@
 """数据统计 API"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import timedelta
@@ -12,10 +12,13 @@ from ..utils.timezone import beijing_now
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["数据统计"])
 
+# 可查看统计看板的角色
+_STATS_ALLOWED_ROLES = {"doctor", "nurse", "admin"}
+
 
 @router.get("/stats", response_model=DashboardStats)
 def get_dashboard_stats(db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
-    """获取统计看板数据
+    """获取统计看板数据（仅医护/管理员可查看）
 
     统计口径说明：
     - pending_alerts: PENDING + ESCALATED 状态的预警数（与预警列表筛选一致）
@@ -24,6 +27,8 @@ def get_dashboard_stats(db: Session = Depends(get_db), user: TokenPayload = Depe
     - pending_orders: status=draft 或 pending_sign 的医嘱数（医生端"待签署医嘱"）
     - pending_reviews: status=completed 的随访记录数（护士端"待审核记录"——患者已完成，等待护士确认）
     """
+    if user.role not in _STATS_ALLOWED_ROLES:
+        raise HTTPException(403, "仅医护人员可查看统计看板")
     total_pregnant = db.query(func.count(Pregnant.pregnant_id)).scalar() or 0
 
     # 待处理预警：PENDING + ESCALATED（与列表筛选条件一致）
@@ -94,7 +99,33 @@ def get_pregnant_list(
     """获取孕妇列表（支持搜索、筛选、分页，含聚合信息）
 
     返回孕妇基本信息 + 活跃预警数 + 最近随访日期，用于孕妇管理页面。
+    孕妇角色仅可查看自身数据；医护角色可查看全部。
     """
+    # 孕妇角色：只能看自己的数据
+    if user.role == "pregnant":
+        if not user.pregnant_id:
+            raise HTTPException(403, "孕妇账号未关联孕妇档案")
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == user.pregnant_id).first()
+        if not pregnant:
+            raise HTTPException(404, "孕妇档案不存在")
+        return {
+            "total": 1, "page": 1, "page_size": page_size,
+            "data": [{
+                "pregnant_id": pregnant.pregnant_id,
+                "display_name": pregnant.display_name,
+                "nickname": pregnant.nickname,
+                "phone": pregnant.phone,
+                "hospital_id": pregnant.hospital_id,
+                "gestational_age_days": pregnant.gestational_age_days,
+                "edd": pregnant.edd.isoformat() if pregnant.edd else None,
+                "risk_tags": pregnant.risk_tags or [],
+                "created_at": pregnant.created_at.isoformat() if pregnant.created_at else None,
+                "active_alert_count": 0,
+                "latest_followup_date": None,
+                "has_fgr_image": False,
+            }]
+        }
+
     query = db.query(Pregnant)
 
     # 搜索：姓名或昵称模糊匹配
@@ -176,10 +207,12 @@ def get_pregnant_list(
 
 @router.get("/pregnant/{pregnant_id}")
 def get_pregnant_detail(pregnant_id: str, db: Session = Depends(get_db), user: TokenPayload = Depends(get_current_user)):
-    """获取孕妇详情"""
+    """获取孕妇详情（孕妇仅可查看自身；医护可查看全部）"""
+    # 孕妇角色：只能看自己的数据
+    if user.role == "pregnant" and user.pregnant_id != pregnant_id:
+        raise HTTPException(403, "无权访问该孕妇数据")
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
     if not pregnant:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="孕妇不存在")
 
     # 统计数据：该孕妇的活跃预警数（PENDING + ESCALATED + CONFIRMED）

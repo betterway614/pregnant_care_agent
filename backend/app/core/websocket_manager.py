@@ -125,7 +125,7 @@ class WebSocketManager:
     # ==================== 路由推送 ====================
 
     async def route_alert(self, alert_data: dict):
-        """按级别和来源角色路由推送
+        """按级别、动作和来源角色路由推送
 
         action 为 'created' 时发送 NEW_ALERT 类型，
         其他 action（confirm/dismiss/escalate/downgrade 等）发送 ALERT_STATUS_CHANGE 类型，
@@ -135,20 +135,22 @@ class WebSocketManager:
         1. FGR 医生专属预警 → 仅医生
         2. 护士操作通知 → 医护全员
         3. 医生降级 → 仅护士
-        4. 按预警级别兜底
+        4. 仅护士关注（NOTE_NURSE）→ 仅护士
+        5. 按预警级别兜底
         """
         level = alert_data.get("level", "YELLOW")
         source_role = alert_data.get("source_role", "system")
         action = alert_data.get("action", "")
 
-        # ---- FGR 医生专属预警：仅推送给医生 ----
-        trigger_source = alert_data.get("trigger_source", "")
+        # 从 details 中提取规则定义的 action（NOTE_NURSE/ALERT_NURSE/ALERT_NURSE_AND_DOCTOR/ALERT_DOCTOR）
         alert_details = alert_data.get("details", {})
         if isinstance(alert_details, dict):
             rule_action = alert_details.get("action", "")
         else:
             rule_action = ""
-        if trigger_source == "FGR_ALGORITHM" and rule_action == "ALERT_DOCTOR":
+
+        # ---- 医生专属预警（FGR 高危 / 护士上报问题等）：仅推送给医生 ----
+        if rule_action == "ALERT_DOCTOR":
             await self._broadcast_to_doctors_only(alert_data)
             return
 
@@ -173,6 +175,11 @@ class WebSocketManager:
             target_doctor_id = alert_data.get("target_doctor_id")
             if target_doctor_id:
                 await self.send_alert_to_doctor(target_doctor_id, alert_data)
+            await self._broadcast_to_nurses_only(alert_data)
+            return
+
+        # ---- 仅护士关注（NOTE_NURSE）：不推送给医生 ----
+        if rule_action == "NOTE_NURSE":
             await self._broadcast_to_nurses_only(alert_data)
             return
 

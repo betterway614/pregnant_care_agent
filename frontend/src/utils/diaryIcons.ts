@@ -63,6 +63,7 @@ const PENCIL_SVG =
 // ---------------------------------------------------------------------------
 
 const MOOD_SVG_MAP: Record<string, string> = {
+  '😟': FROWN_SVG,
   '😢': FROWN_SVG,
   '😔': FROWN_SVG,
   '😊': SMILE_SVG,
@@ -81,7 +82,7 @@ export function getMoodIconSvg(emoji: string): string {
 
 /**
  * 判断情绪是否属于"需关注"状态，用于切换时间线节点的 CSS 样式
- * 覆盖：😟（历史兼容）、😢（1.0-1.5 分）、😔（1.5-2.0 分）
+ * 覆盖：😟（忧虑）、😢（1.0-1.5 分）、😔（1.5-2.0 分）
  */
 export function isMoodWarn(emoji: string): boolean {
   return ['😟', '😢', '😔'].includes(emoji)

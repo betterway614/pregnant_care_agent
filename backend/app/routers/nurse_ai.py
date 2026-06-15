@@ -105,6 +105,7 @@ async def nurse_analyze(req: NurseAnalyzeRequest, user: TokenPayload = Depends(g
             },
         )
 
+        rule_action = "ALERT_NURSE_AND_DOCTOR" if alert_level == "RED" else "ALERT_NURSE"
         alert_data = {
             "id": str(alert.id),
             "pregnant_id": req.pregnant_id,
@@ -115,9 +116,13 @@ async def nurse_analyze(req: NurseAnalyzeRequest, user: TokenPayload = Depends(g
             "status": alert.status,
             "created_at": alert.created_at.isoformat() if alert.created_at else None,
             "gestational_age_days": pregnant.gestational_age_days,
+            "source_role": "system",
+            "action": "created",
+            "details": {"action": rule_action},
         }
 
-        await ws_manager.broadcast_alert(alert_data)
+        # 使用 route_alert 按级别和动作路由推送，而非广播给所有人
+        await ws_manager.route_alert(alert_data)
 
     # 生成随访排期推荐
     schedule_result = tool_recommend_followup_schedule(db, req.pregnant_id)
@@ -1125,7 +1130,8 @@ async def report_issue(req: NurseDoctorIssueCreate, user: TokenPayload = Depends
     db.commit()
     db.refresh(issue)
 
-    # 通过 WebSocket 推送给医生端
+    # 通过 WebSocket 推送给医生端（护士上报→医生专属，不广播给其他护士）
+    issue_level = "ORANGE" if req.priority in ("high", "urgent") else "YELLOW"
     issue_data = {
         "id": str(issue.id),
         "pregnant_id": req.pregnant_id,
@@ -1136,12 +1142,13 @@ async def report_issue(req: NurseDoctorIssueCreate, user: TokenPayload = Depends
         "priority": req.priority,
         "status": "pending",
         "created_at": issue.created_at.isoformat(),
-    }
-    await ws_manager.broadcast_alert({
-        **issue_data,
         "message": f"[问题上报] {req.title}",
-        "level": "ORANGE" if req.priority in ("high", "urgent") else "YELLOW",
-    })
+        "level": issue_level,
+        "source_role": "nurse",
+        "action": "created",
+        "details": {"action": "ALERT_DOCTOR"},
+    }
+    await ws_manager.route_alert(issue_data)
 
     return NurseDoctorIssueResponse(
         id=str(issue.id),

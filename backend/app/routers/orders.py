@@ -137,7 +137,13 @@ def get_orders(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    """获取医嘱列表"""
+    """获取医嘱列表（孕妇仅可查看自身；医护可查看全部）"""
+    # 孕妇角色：只能看自己的医嘱
+    if current_user.role == "pregnant":
+        if not current_user.pregnant_id:
+            raise HTTPException(403, "孕妇账号未关联孕妇档案")
+        pregnant_id = current_user.pregnant_id
+
     query = db.query(MedicalOrder)
     if status:
         # 支持逗号分隔的多状态查询（如 "draft,pending_sign"），大小写不敏感
@@ -170,7 +176,11 @@ def get_pregnant_orders(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    """获取孕妇的医嘱列表（用于孕妇端展示）"""
+    """获取孕妇的医嘱列表（孕妇仅可查看自身；医护可查看全部）"""
+    # 孕妇角色：只能看自己的医嘱
+    if current_user.role == "pregnant" and current_user.pregnant_id != pregnant_id:
+        raise HTTPException(403, "无权访问该孕妇数据")
+
     orders = db.query(MedicalOrder).filter(
         MedicalOrder.pregnant_id == pregnant_id,
     ).order_by(MedicalOrder.created_at.desc()).limit(10).all()
@@ -191,10 +201,13 @@ def get_order(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    """获取单条医嘱详情"""
+    """获取单条医嘱详情（孕妇仅可查看自身；医护可查看全部）"""
     order = db.query(MedicalOrder).filter(MedicalOrder.id == UUID(order_id)).first()
     if not order:
         raise HTTPException(404, "医嘱不存在")
+    # 孕妇角色：只能看自己的医嘱
+    if current_user.role == "pregnant" and current_user.pregnant_id != order.pregnant_id:
+        raise HTTPException(403, "无权访问该医嘱")
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
     return OrderResponse(
         **{c.name: getattr(order, c.name) for c in order.__table__.columns},

@@ -134,6 +134,7 @@ export interface Alert {
   created_at?: string
   patient_name?: string
   gestational_age_days?: number
+  rule_standard_message?: string  // 后端规则引擎定义的标准消息（用于一致性校验）
 }
 
 // FGR评估

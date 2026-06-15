@@ -325,6 +325,7 @@ class AlertResponse(BaseModel):
     created_at: Optional[datetime] = None
     patient_name: Optional[str] = None
     gestational_age_days: Optional[int] = None
+    rule_standard_message: Optional[str] = None  # 规则引擎定义的标准消息（前端用于一致性校验）
 
     model_config = {"from_attributes": True}
 
