@@ -42,6 +42,9 @@ from app.main import (
     _ensure_order_columns,
     _ensure_alert_columns,
     _ensure_audit_log_table,
+    _ensure_feedback_audit_link,
+    _ensure_resource_tables,
+    _ensure_diary_table,
 )
 _ensure_pregnant_columns()
 _ensure_fgr_columns()
@@ -49,6 +52,9 @@ _ensure_followup_columns()
 _ensure_order_columns()
 _ensure_alert_columns()
 _ensure_audit_log_table()
+_ensure_feedback_audit_link()
+_ensure_resource_tables()
+_ensure_diary_table()
 print("  列迁移完成")
 
 # 3. 注入Mock数据

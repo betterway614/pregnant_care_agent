@@ -316,6 +316,26 @@ def _ensure_feedback_audit_link():
             logger.error("feedback 迁移意外失败: {}", e)
 
 
+def _ensure_diary_table():
+    """为已有数据库添加 pregnancy_diary_entries 表（幂等）"""
+    import sqlalchemy as sa
+    from app.models.models import PregnancyDiaryEntry
+    try:
+        inspector = sa.inspect(engine)
+        existing = inspector.get_table_names()
+        if "pregnancy_diary_entries" not in existing:
+            Base.metadata.create_all(bind=engine, tables=[PregnancyDiaryEntry.__table__])
+            logger.info("孕期日记表 pregnancy_diary_entries 创建完成")
+        else:
+            logger.debug("孕期日记表已存在，跳过创建")
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "duplicate column" in err_msg or "already exists" in err_msg:
+            logger.debug("孕期日记表列已存在，跳过: {}", e)
+        else:
+            logger.error("孕期日记表迁移意外失败: {}", e)
+
+
 def _ensure_resource_tables():
     """为已有数据库添加资源管理相关表（幂等）"""
     import sqlalchemy as sa
@@ -375,6 +395,7 @@ async def lifespan(app: FastAPI):
     _ensure_audit_log_table()
     _ensure_feedback_audit_link()
     _ensure_resource_tables()
+    _ensure_diary_table()
 
     # FGR 模式：按 .env 的 FGR_BACKEND 加载真实预测模型
     if settings.fgr_mode:

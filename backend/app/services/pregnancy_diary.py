@@ -211,10 +211,10 @@ class PregnancyDiaryService:
             entry.bp_summary and "暂无" not in entry.bp_summary,
             entry.fetal_movement_summary and "暂无" not in entry.fetal_movement_summary,
             entry.mood_summary and "暂无" not in entry.mood_summary,
-            entry.blood_sugar_summary is not None,
-            entry.heart_rate_summary is not None,
-            entry.sleep_summary is not None,
-            entry.steps_summary is not None,
+            entry.blood_sugar_summary and "暂无" not in entry.blood_sugar_summary,
+            entry.heart_rate_summary and "暂无" not in entry.heart_rate_summary,
+            entry.sleep_summary and "暂无" not in entry.sleep_summary,
+            entry.steps_summary and "暂无" not in entry.steps_summary,
         ])
 
     # ------------------------------------------------------------------

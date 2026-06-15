@@ -383,7 +383,7 @@ class PregnancyDiaryEntry(Base):
     week_start_date = Column(Date, nullable=False, comment="该周起始日期")
     week_end_date = Column(Date, nullable=False, comment="该周结束日期")
     entry_data = Column(JSON, nullable=False, comment="完整 DiaryWeekSummary 序列化")
-    narrative_source = Column(String(16), default="template", comment="llm / template")
+    narrative_source = Column(String(32), default="template", comment="llm / template / template_fallback")
     created_at = Column(DateTime, default=beijing_now)
     updated_at = Column(DateTime, default=beijing_now, onupdate=beijing_now)
 
