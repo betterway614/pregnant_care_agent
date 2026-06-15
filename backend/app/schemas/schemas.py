@@ -50,6 +50,7 @@ class PregnantHomeData(BaseModel):
     gestational_week: str = ""
     gestational_day: int = 0
     baby_info: dict = {}
+    mom_changes: dict = {}
     today_tasks: list[dict] = []
     upcoming_checks: list[dict] = []
     recommendations: dict = {}
@@ -146,6 +147,7 @@ class ChatResponse(BaseModel):
     audit_log_id: Optional[int] = None  # 关联的审计日志 ID，供前端提交反馈时使用
     source: Optional[str] = None
     followup_progress: Optional[dict] = None  # 随访进度 {answered, total, status}
+    saved_health_data: Optional[dict] = None  # 自动保存的健康数据 {saved: [...], skipped: [...]}
 
 
 # === FollowUp ===

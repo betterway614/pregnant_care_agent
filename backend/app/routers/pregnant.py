@@ -8,6 +8,7 @@ from ..database import get_db
 from ..models import Pregnant, HealthDataPoint, ScheduleNode
 from ..schemas import PregnantResponse, PregnantUpdateRequest, PregnantHomeData
 from ..core.auth import get_current_user, TokenPayload
+from ..data.pregnancy_weeks import get_week_data
 
 router = APIRouter(prefix="/api/v1/pregnant", tags=["孕妇管理"])
 
@@ -62,8 +63,14 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
     gest_week = gest_days // 7
     gest_day = gest_days % 7
 
+    # 孕期知识库数据（40周全量覆盖）
+    week_data = get_week_data(gest_week)
+
     # 宝宝发育信息
-    baby_info = _get_baby_info(gest_week)
+    baby_info = week_data.as_baby_info()
+
+    # 妈妈变化
+    mom_changes = week_data.as_mom_changes()
 
     # 今日任务
     today = date.today()
@@ -106,8 +113,9 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
     ).order_by(ScheduleNode.scheduled_date).limit(5).all()
     upcoming_checks = [{"date": n.scheduled_date.isoformat(), "item": n.item, "type": n.node_type} for n in upcoming]
 
-    # AI推荐（模板兜底）
-    recommendations = _get_recommendations(gest_week, pregnant.risk_tags or [])
+    # AI推荐（从知识库获取基础建议，再叠加风险标签）
+    recommendations = week_data.as_recommendations()
+    _apply_risk_overrides(pregnant.risk_tags or [], recommendations)
 
     # 健康摘要
     health_summary = _get_health_summary(db, pregnant_id, gest_week)
@@ -117,64 +125,23 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
         gestational_week=f"{gest_week}+{gest_day}",
         gestational_day=gest_days,
         baby_info=baby_info,
+        mom_changes=mom_changes,
         today_tasks=today_tasks,
         upcoming_checks=upcoming_checks,
         recommendations=recommendations,
         health_summary=health_summary
     )
 
-def _get_baby_info(week: int) -> dict:
-    """根据孕周返回宝宝发育信息"""
-    milestones = {
-        8: {"size": "覆盆子大小", "size_cm": "1.6cm", "weight": "1g", "milestone": "心脏开始跳动，四肢开始形成"},
-        12: {"size": "李子大小", "size_cm": "5.4cm", "weight": "14g", "milestone": "手指脚趾分离，面部特征明显"},
-        16: {"size": "牛油果大小", "size_cm": "11.6cm", "weight": "100g", "milestone": "能听到声音，开始有吮吸反射"},
-        20: {"size": "香蕉大小", "size_cm": "16.4cm", "weight": "300g", "milestone": "能感知光线，开始有规律的活动"},
-        24: {"size": "玉米大小", "size_cm": "30cm", "weight": "600g", "milestone": "肺部开始发育，能辨别声音"},
-        28: {"size": "茄子大小", "size_cm": "37.6cm", "weight": "1000g", "milestone": "眼睛睁开，大脑快速发育"},
-        32: {"size": "南瓜大小", "size_cm": "42.4cm", "weight": "1700g", "milestone": "骨骼完全形成，开始储存脂肪"},
-        36: {"size": "生菜大小", "size_cm": "47.4cm", "weight": "2600g", "milestone": "肺部成熟，准备出生"},
-        40: {"size": "西瓜大小", "size_cm": "51cm", "weight": "3400g", "milestone": "足月，随时准备出生"},
-    }
-    # Find closest milestone
-    closest = min(milestones.keys(), key=lambda x: abs(x - week))
-    info = milestones[closest].copy()
-    info["current_week"] = week
-    return info
-
-def _get_recommendations(week: int, risk_tags: list) -> dict:
-    """根据孕周和风险标签返回推荐"""
-    rec = {
-        "weekly_tips": "",
-        "diet_advice": "",
-        "exercise_advice": "",
-        "warning_signs": "",
-    }
-
-    if week <= 12:
-        rec["weekly_tips"] = "孕早期是胎儿器官发育关键期，请按时服用叶酸(0.4mg/天)，避免接触有害物质。"
-        rec["diet_advice"] = "少量多餐，选择易消化食物。增加富含叶酸的食物（深绿色蔬菜、豆类）。"
-        rec["exercise_advice"] = "适度散步即可，避免剧烈运动和长时间站立。每天15-20分钟。"
-        rec["warning_signs"] = "如出现阴道出血、剧烈腹痛，请立即就医。"
-    elif week <= 28:
-        rec["weekly_tips"] = "孕中期是胎儿快速生长期，注意补充钙和铁。可以开始进行胎教。"
-        rec["diet_advice"] = "增加优质蛋白（鱼、蛋、瘦肉），补充钙质（牛奶、豆制品），控制盐摄入。"
-        rec["exercise_advice"] = "每天散步30分钟，可做孕妇瑜伽。避免仰卧位运动。每天注意胎动。"
-        rec["warning_signs"] = "如出现规律宫缩、阴道流液、胎动明显减少，请立即就医。"
-    else:
-        rec["weekly_tips"] = "孕晚期请准备好待产包，确认分娩医院和交通路线。保持左侧卧位休息。"
-        rec["diet_advice"] = "继续高蛋白饮食，控制碳水化合物，多吃含铁食物（红肉、动物肝脏）。"
-        rec["exercise_advice"] = "每天散步20-30分钟，做骨盆底肌锻炼。避免长时间站立和弯腰。"
-        rec["warning_signs"] = "如出现规律宫缩（每10分钟一次）、见红、破水，请立即前往医院。"
-
-    if "FGR高危" in (risk_tags or []):
+def _apply_risk_overrides(risk_tags: list, rec: dict) -> None:
+    """叠加风险标签的针对性建议到推荐字典上（原地修改）。"""
+    if not risk_tags:
+        return
+    if "FGR高危" in risk_tags:
         rec["weekly_tips"] += " 您是FGR高危孕妇，请严格按医嘱进行B超监测，注意胎动变化。"
-    if "GDM" in (risk_tags or []):
+    if "GDM" in risk_tags:
         rec["diet_advice"] += " 请严格控制糖分摄入，监测空腹及餐后血糖。"
-    if "高血压" in (risk_tags or []):
+    if "高血压" in risk_tags:
         rec["warning_signs"] += " 每日监测血压，如收缩压≥140或舒张压≥90请立即就医。"
-
-    return rec
 
 def _get_health_summary(db: Session, pregnant_id: str, week: int) -> dict:
     """获取健康数据摘要"""

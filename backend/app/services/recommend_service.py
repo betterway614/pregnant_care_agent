@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
+from ..data.pregnancy_weeks import get_week_data
 from ..models import Pregnant
 from ..schemas import RecommendResponse
 from .patient_context_service import get_patient_basic, get_recent_health_data, get_active_alerts
@@ -196,20 +197,6 @@ class LLMRecommendStrategy(RecommendStrategy):
 class TemplateRecommendStrategy(RecommendStrategy):
     """基于规则的模板推荐（LLM 不可用时的兜底方案）"""
 
-    # 按孕周的胎儿发育里程碑（每4周一档，粒度优于原先的8个散点）
-    MILESTONES: dict[int, str] = {
-        4: "受精卵着床完成，胚胎约0.2cm，像罂粟籽大小。",
-        8: "心脏开始跳动，四肢开始形成。宝宝约1.6cm，像覆盆子大小。",
-        12: "手指脚趾已分离，面部特征明显。宝宝约5.4cm，像李子大小。",
-        16: "能听到声音，开始有吮吸反射。宝宝约11.6cm，像牛油果大小。",
-        20: "能感知光线，开始有规律的活动。宝宝约16.4cm，像香蕉大小。",
-        24: "肺部开始发育，能辨别声音。宝宝约30cm，像玉米大小。",
-        28: "眼睛睁开，大脑快速发育。宝宝约37.6cm，像茄子大小。",
-        32: "骨骼完全形成，开始储存脂肪。宝宝约42.4cm，像南瓜大小。",
-        36: "肺部已成熟，准备出生。宝宝约47.4cm，像生菜大小。",
-        40: "已足月，随时准备出生。宝宝约51cm，像西瓜大小。",
-    }
-
     async def recommend(
         self,
         db: Session,
@@ -234,33 +221,14 @@ class TemplateRecommendStrategy(RecommendStrategy):
         )
 
     def _get_milestone(self, gest_week: int) -> str:
-        closest = min(self.MILESTONES.keys(), key=lambda x: abs(x - gest_week))
-        return self.MILESTONES[closest]
+        """从40周知识库获取胎儿发育里程碑。"""
+        return get_week_data(gest_week).milestone
 
     @staticmethod
     def _get_base_advice(gest_week: int) -> list[str]:
-        """根据孕期阶段返回基础建议 [weekly_tips, diet_advice, exercise_advice, warning_signs]"""
-        if gest_week <= 12:
-            return [
-                "孕早期是胎儿器官发育关键期，请按时服用叶酸(0.4mg/天)，避免接触有害物质。",
-                "少量多餐，选择易消化食物。增加富含叶酸的食物（深绿色蔬菜、豆类）。",
-                "适度散步即可，避免剧烈运动和长时间站立。每天15-20分钟。",
-                "如出现阴道出血、剧烈腹痛，请立即就医。",
-            ]
-        elif gest_week <= 28:
-            return [
-                "孕中期是胎儿快速生长期，注意补充钙和铁。可以开始进行胎教。",
-                "增加优质蛋白（鱼、蛋、瘦肉），补充钙质（牛奶、豆制品），控制盐摄入。",
-                "每天散步30分钟，可做孕妇瑜伽。避免仰卧位运动。每天注意胎动。",
-                "如出现规律宫缩、阴道流液、胎动明显减少，请立即就医。",
-            ]
-        else:
-            return [
-                "孕晚期请准备好待产包，确认分娩医院和交通路线。保持左侧卧位休息。",
-                "继续高蛋白饮食，控制碳水化合物，多吃含铁食物（红肉、动物肝脏）。",
-                "每天散步20-30分钟，做骨盆底肌锻炼。避免长时间站立和弯腰。",
-                "如出现规律宫缩（每10分钟一次）、见红、破水，请立即前往医院。",
-            ]
+        """从40周知识库获取基础建议 [weekly_tips, diet_advice, exercise_advice, warning_signs]。"""
+        wd = get_week_data(gest_week)
+        return [wd.weekly_tips, wd.diet_advice, wd.exercise_advice, wd.warning_signs]
 
     @staticmethod
     def _apply_risk_overrides(risk_tags: list[str], advice: list[str]) -> None:

@@ -22,6 +22,7 @@ export interface HomeResponse {
   gestational_week: string       // 后端返回字符串如 "24+3"
   gestational_day: number
   baby_info: Record<string, any> // 后端返回dict: {size, weight, milestone, ...}
+  mom_changes: Record<string, any> // 后端返回dict: {week, changes}
   today_tasks: TaskItem[]
   upcoming_checks: CheckItem[]
   recommendations: Recommendations
