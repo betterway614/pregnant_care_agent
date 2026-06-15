@@ -232,7 +232,7 @@
                     <span class="trend-name">{{ trendName(trend.metric) }}</span>
                   </div>
                   <div class="trend-status" :class="trend.is_normal === false ? 'status-warn' : 'status-ok'">
-                    {{ trend.is_normal === false ? '异常' : '正常' }}
+                    {{ trend.is_normal === false ? '需关注' : '良好' }}
                   </div>
                 </div>
                 <div class="trend-body">
@@ -298,9 +298,9 @@
                 </template>
                 <p class="collapse-text">{{ recommend.exercise_advice || '每天散步30分钟，避免剧烈运动。' }}</p>
               </el-collapse-item>
-              <el-collapse-item title="警惕信号" name="warning">
+              <el-collapse-item title="需要留意" name="warning">
                 <template #title>
-                  <div class="collapse-title warning"><el-icon><Warning /></el-icon> 警惕信号</div>
+                  <div class="collapse-title warning"><el-icon><Sunny /></el-icon> 需要留意</div>
                 </template>
                 <p class="collapse-text text-warning">{{ recommend.warning_signs || '如出现腹痛、出血请立即就医。' }}</p>
               </el-collapse-item>
@@ -319,13 +319,15 @@ import { useRouter } from 'vue-router'
 import {
   Loading, Check, ScaleToOriginal, Opportunity,
   Calendar, Document, Bell, ArrowRight, DocumentChecked,
-  ChatRound, Avatar, Moon, Female, Food, Bicycle, Warning,
+  ChatRound, Avatar, Moon, Female, Food, Bicycle,
   Odometer, Sunny, ArrowDown, TrendCharts, ChatDotSquare, Edit
 } from '@element-plus/icons-vue'
 import { pregnantApi, recommendApi, followUpApi, chatApi, orderApi, proactiveApi, alertNotificationApi } from '@/api/endpoints'
 import { trendName } from '@/utils/labelMaps'
+import { useAppStore } from '@/stores/app'
 
 const router = useRouter()
+const appStore = useAppStore()
 const loading = ref(true)
 const homeData = ref<any>(null)
 const recommend = ref<any>(null)
@@ -435,12 +437,7 @@ const greetingText = computed(() => {
   return '晚上好'
 })
 
-const momChanges = computed(() => {
-  const w = gestWeek.value
-  if (w <= 12) return '可能出现早孕反应，乳房胀痛，尿频。记得补充叶酸。'
-  if (w <= 28) return '腹部逐渐隆起，可能感受到胎动。胃口变好，注意均衡营养。'
-  return '腹部明显增大，可能感到腰酸背痛。建议左侧卧位休息，准备待产包。'
-})
+const momChanges = computed(() => homeData.value?.mom_changes?.changes || '妈妈正在经历美好的孕期变化...')
 
 // ---- 快捷操作：5 个独立入口，每个直达不同功能页 ----
 const tools = [
@@ -598,10 +595,9 @@ function translateUnit(unit: string): string {
 
 async function fetchDailyTaskStatus() {
   try {
-    const pid = localStorage.getItem('currentPregnantId') || ''
-    if (!pid) return
-    const res = await pregnantApi.getDailyTaskStatus(pid)
-    const status = res.data
+    // 使用共享 store 的 fetchDailyTaskStatus（与 PregnantChat 共享状态）
+    await appStore.fetchDailyTaskStatus()
+    const status = appStore.dailyTaskStatus
     // 动态更新今日待办的完成状态和提示
     for (const task of todayTasks.value) {
       if (task.title === '记录体重') {

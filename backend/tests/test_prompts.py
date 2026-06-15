@@ -138,9 +138,9 @@ def test_nurse_family_instructions_contain_safety_rules(fn):
 
 
 def test_pregnant_instructions_compressed_line_count():
-    """验证行数在合理范围"""
+    """验证行数在合理范围（温和用语章节增加了约6行）"""
     result = get_pregnant_system_prompt_instructions()
-    assert 15 <= len(result) <= 25, f"期望15-25行，实际{len(result)}行"
+    assert 15 <= len(result) <= 30, f"期望15-30行，实际{len(result)}行"
 
 
 def test_pregnant_instructions_contains_all_8_duties():
@@ -209,3 +209,95 @@ def test_other_instructions_unchanged():
     assert len(doctor) >= 10  # 医生分析最详细
     doctor_chat = get_doctor_chat_system_prompt_instructions()
     assert len(doctor_chat) >= 3
+
+
+# ==================== 温和用语指令验证 ====================
+
+GENTLE_BANNED_TERMS = ["预警", "警告", "危险", "紧急", "严重", "异常", "超标", "不合格", "确诊"]
+GENTLE_REQUIRED_TERMS = ["温和用语", "诊断标准", "焦虑"]
+
+
+def test_pregnant_instructions_contain_gentle_language_section():
+    """验证孕妇 instructions 包含'温和用语'章节"""
+    result = get_pregnant_system_prompt_instructions()
+    joined = " ".join(result)
+    assert "温和用语" in joined, "孕妇 instructions 应包含'温和用语'章节"
+
+
+def test_pregnant_instructions_ban_warning_words():
+    """验证孕妇 instructions 明确禁止预警性词汇"""
+    result = get_pregnant_system_prompt_instructions()
+    joined = " ".join(result)
+
+    for banned in ["预警", "警告", "危险", "异常", "超标", "确诊"]:
+        # 这些词应出现在禁止说明中，而不是不作为禁止项
+        assert "禁止" in joined, f"缺少'禁止'类约束语句"
+        # 至少有一半的禁止词被明确列出
+        covered_count = sum(1 for t in GENTLE_BANNED_TERMS if t in joined)
+        assert covered_count >= 5, (
+            f"仅列出 {covered_count}/{len(GENTLE_BANNED_TERMS)} 个禁止词汇，"
+            f"期望至少5个。已找到: {[t for t in GENTLE_BANNED_TERMS if t in joined]}"
+        )
+
+
+def test_pregnant_instructions_ban_diagnostic_language():
+    """验证孕妇 instructions 禁止诊断性表述"""
+    result = get_pregnant_system_prompt_instructions()
+    joined = " ".join(result)
+    assert "诊断标准" in joined or "诊断" in joined, "应包含禁止诊断性表述的指令"
+
+
+def test_pregnant_instructions_require_warm_tone():
+    """验证孕妇 instructions 要求温暖语气词结尾"""
+    result = get_pregnant_system_prompt_instructions()
+    joined = " ".join(result)
+    assert "～" in joined or "哦" in joined or "哒" in joined or "呢" in joined, (
+        "应要求使用温暖语气词结尾"
+    )
+
+
+def test_pregnant_instructions_require_reassurance():
+    """验证孕妇 instructions 要求偏离参考值时加安抚语句"""
+    result = get_pregnant_system_prompt_instructions()
+    joined = " ".join(result)
+    assert "不用太担心" in joined or "比较常见" in joined or "不用紧张" in joined, (
+        "应要求在健康建议中使用安抚语句"
+    )
+
+
+def test_record_variant_contains_gentle_reminder():
+    """验证 record 变体包含温和提醒专项指令"""
+    from app.core.prompts import VARIANT_INSTRUCTIONS
+
+    record_prompt = VARIANT_INSTRUCTIONS.get("record", "")
+    assert "温和提醒" in record_prompt, "record 变体应包含'温和提醒'专项指令"
+    assert "焦虑" in record_prompt, "应强调不引发焦虑"
+
+
+def test_record_variant_gentle_phrasing_examples():
+    """验证 record 变体给出具体的温和表述示例"""
+    from app.core.prompts import VARIANT_INSTRUCTIONS
+
+    record_prompt = VARIANT_INSTRUCTIONS.get("record", "")
+    # 应有具体的正向表述示例
+    assert "比参考范围略高" in record_prompt or "比平时稍高" in record_prompt, (
+        "应给出温和表述示例（如'比参考范围略高'）"
+    )
+    assert "不用紧张" in record_prompt or "不用太担心" in record_prompt, (
+        "应给出安抚语句示例"
+    )
+
+
+def test_chat_variant_contains_system_preanalysis():
+    """验证 chat 变体保留系统预分析说明"""
+    from app.core.prompts import VARIANT_INSTRUCTIONS
+
+    chat_prompt = VARIANT_INSTRUCTIONS.get("chat", "")
+    assert "系统预分析" in chat_prompt, "chat 变体应说明系统预分析标签"
+
+
+def test_pregnant_instructions_line_count_still_valid():
+    """验证新增温和用语后行数仍在合理范围"""
+    result = get_pregnant_system_prompt_instructions()
+    # 增加了温和用语章节，行数允许从15-25扩展到15-30
+    assert 15 <= len(result) <= 30, f"期望15-30行，实际{len(result)}行"

@@ -92,9 +92,9 @@ class ProactiveMonitorService:
                 notifications.append(ProactiveNotification(
                     id=str(uuid4()),
                     type="health_alert",
-                    title="血压偏高提醒",
-                    body="近7天血压平均值偏高，请注意监测",
-                    icon="Warning",
+                    title="血压小贴士",
+                    body="近期血压比平时略高，注意低盐饮食和充分休息就好～有需要随时联系护士哦",
+                    icon="Sunny",
                     priority=2,  # 高于普通提醒
                     action_route="/pregnant/tools/health-record",
                     created_at=now.isoformat(),
