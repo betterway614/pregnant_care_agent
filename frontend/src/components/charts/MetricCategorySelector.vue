@@ -121,7 +121,7 @@ function toggleAll(cat: IndicatorCategory) {
 }
 
 function switchToCategory(catKey: string) {
-  activeCategory.value = catKey
+  activeCategory.value = catKey as typeof props.categories[number]
   const cat = visibleCategories.value.find(c => c.key === catKey)
   if (cat) emit('update:modelValue', [...cat.metrics])
 }

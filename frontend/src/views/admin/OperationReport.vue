@@ -85,7 +85,7 @@
                 <VChart :option="tokenByRoleChartOption" autoresize style="height: 280px;" />
                 <div class="metric-list" v-if="agentDetail.token_analysis?.by_role">
                   <div class="metric-item" v-for="(stat, role) in agentDetail.token_analysis.by_role" :key="role">
-                    <span class="metric-label">{{ roleLabel(role) }}</span>
+                    <span class="metric-label">{{ roleLabel(String(role)) }}</span>
                     <span class="metric-value">{{ formatTokens(stat.total) }} ({{ stat.count }}次)</span>
                   </div>
                 </div>
@@ -619,10 +619,10 @@ const toolSuccessChartOption = computed(() => {
     tooltip: { trigger: 'axis' as const },
     grid: { left: 100, right: 20, top: 20, bottom: 30 },
     xAxis: { type: 'value' as const, max: 100, name: '成功率 %' },
-    yAxis: { type: 'category' as const, data: top5.map(d => d.name), inverse: true },
+    yAxis: { type: 'category' as const, data: top5.map((d: any) => d.name), inverse: true },
     series: [{
       type: 'bar',
-      data: top5.map(d => ({
+      data: top5.map((d: any) => ({
         value: d.success_rate,
         itemStyle: {
           color: d.success_rate >= 90 ? '#10b981' : d.success_rate >= 70 ? '#f97316' : '#ef4444',

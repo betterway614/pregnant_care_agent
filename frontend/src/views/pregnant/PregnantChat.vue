@@ -267,16 +267,6 @@
       </div>
     </div>
 
-    <!-- ==================== 工具调用步骤指示器 ==================== -->
-    <transition name="tool-slide">
-      <div v-if="activeToolStep" class="tool-step-indicator">
-        <div class="tool-step-indicator__icon">
-          <span class="tool-step-spinner"></span>
-        </div>
-        <span class="tool-step-indicator__text">{{ activeToolStep }}</span>
-      </div>
-    </transition>
-
     <!-- ==================== 3. 底部输入区 (灵动岛) ==================== -->
     <div class="input-container">
       <!-- ---- 兴趣推荐 (Prompt Chips) ---- -->
@@ -590,18 +580,6 @@ const fetusData = computed(() => {
 })
 
 const fetusSize = computed(() => fetusData.value.size)
-
-/** 当前活跃的工具调用步骤（取最后一条正在加载的助手消息的 currentStep） */
-const activeToolStep = computed(() => {
-  if (!chatStore.streaming && !chatStore.loading) return null
-  const msgs = chatStore.messages
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant' && msgs[i].currentStep) {
-      return msgs[i].currentStep
-    }
-  }
-  return null
-})
 
 /* ==================== 工具函数 ==================== */
 function formatTime(ts: string): string {
@@ -1807,49 +1785,6 @@ onMounted(async () => {
   100% { transform: scale(1.5); opacity: 0; }
 }
 .thinking-text { font-size: 14px; font-weight: 600; color: #FB7185; }
-
-/* ---- 工具调用步骤指示器 ---- */
-.tool-step-indicator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 18px;
-  margin: 0 16px 8px;
-  background: rgba(251, 113, 133, 0.06);
-  border-radius: 14px;
-  border: 1px solid rgba(251, 113, 133, 0.12);
-  z-index: 8;
-}
-.tool-step-indicator__icon {
-  flex-shrink: 0;
-  width: 18px; height: 18px;
-  display: flex; align-items: center; justify-content: center;
-}
-.tool-step-spinner {
-  width: 14px; height: 14px;
-  border: 2px solid rgba(251, 113, 133, 0.2);
-  border-top-color: #FB7185;
-  border-radius: 50%;
-  animation: tool-spin 0.8s linear infinite;
-}
-@keyframes tool-spin {
-  to { transform: rotate(360deg); }
-}
-.tool-step-indicator__text {
-  font-size: 13px;
-  color: #E11D48;
-  font-weight: 500;
-  line-height: 1.4;
-}
-.tool-slide-enter-active,
-.tool-slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.tool-slide-enter-from,
-.tool-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
 
 /* 操作栏与时间 */
 .message-footer { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
