@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 分层: Router → Service → Core (AI Engine) → Model (ORM)
 - 依赖注入: `backend/app/container.py` 管理服务实例
 - 配置: pydantic-settings，支持 `.env` 文件
-- **医嘱生成双路径**: REST API (`POST /orders/generate`) 直接调 LLM+模板+RAG 快速生成草稿；Agent 对话路径 (`doctor/chat/stream`) 经 NLU 意图路由+工具链生成，支持多轮推理和知识检索。两条路径均集成了 RAG 临床知识检索，RAG 不可用时静默降级。
+- **医嘱生命周期管理**: 生成（`POST /orders/generate` REST 直调 LLM+模板+RAG，或 Agent `doctor/chat/stream` NLU 路由+工具链）、签署（`PUT /{id}/sign` 含手写签名+归档快照）、软删除（`DELETE /{id}` 仅设 `status=cancelled`，禁止物理删除，保障医疗记录完整性）。已签署/已执行的医嘱不可删除；默认列表排除已取消医嘱，需主动筛选"已取消"查看。
 
 **多智能体系统 (Agno v2.6.9)**
 - 三角色 Agent: 小安(孕妇) / 小护(护士) / Dr.智(医生)
@@ -30,6 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 知识检索 (RAG) 条件化: analyze/chat 变体开启 `search_knowledge=True`，followup/report/order/issue 变体关闭以减少 token 浪费
 - chat-full 变体 (NLU 兜底): nurse `tool_call_limit=5` (6 tools)，doctor `tool_call_limit=6` (8 tools)
 - **工具可观测性**: `common.py` → `ToolMetrics` 全局单例 `tool_metrics`；每个 @tool 函数入口 `_t0 = time.perf_counter()` + 出口 `record(name, duration_ms)`；per-session 增量通过 `start_session()`/`end_session()` → `AuditService.save_log(tool_metrics_session=…)` 持久化到 `AgentAuditLog.tool_metrics_json` + `ToolCallDetail.latency_ms`
+- **随访排期推荐** (`app/routers/nurse_ai.py` → `tool_recommend_followup_schedule()`): **纯规则引擎**（非LLM），五维度判定优先级 — 告警(ALERT level) / 逾期(>2.0x间隔) / 数据活跃度(14天窗口) / 孕周(20周/28周/38周三档门槛) / 风险标签(FGR高危/高血压/子痫前期/GDM) — 输出 high(紧急)/medium(重要)/low(常规) 三档；前端映射: high→红色danger, medium→橙色warning, low→绿色success
 - **工作流**: 孕妇端 `prenatal_workflow` (症状/检查) + 孕期日记 API `GET /{pid}/diary`；护士端 `nurse_workflow` (分析→评估上报)；医生端 `doctor_workflow` (分析→指南→医嘱)
 
 **前端 (Vue 3 + TypeScript + Element Plus)**
