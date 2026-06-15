@@ -128,7 +128,7 @@ class TestInfoMissing:
     """Fix 3: 信息缺失检查"""
 
     def test_no_data_ever_triggers_immediate(self):
-        """从未上报任何健康数据（孕周≥12）→ 触发 high 优先级立即随访"""
+        """从未上报任何健康数据（孕周≥20）→ 触发立即随访；无高危标签且<28周 → medium"""
         db = TestSessionLocal()
         try:
             p = _make_pregnant("P_NO_DATA", gest_days=140, risk_tags=[])
@@ -149,7 +149,26 @@ class TestInfoMissing:
 
             info_rec = info_missing_recs[0]
             assert info_rec["recommended_date"] == "immediate"
-            assert info_rec["priority"] == "high"
+            # 20周无风险标签 → medium（非 high，因<28周且无高危因素）
+            assert info_rec["priority"] == "medium"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_no_data_ever_triggers_high_for_high_risk(self):
+        """从未上报数据+高危标签或≥28周 → 应标 high"""
+        db = TestSessionLocal()
+        try:
+            # 高危标签场景
+            p = _make_pregnant("P_NO_DATA_FGR", gest_days=140, risk_tags=["FGR高危"])
+            db.add(p)
+            db.commit()
+
+            result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_NO_DATA_FGR")
+            recs = result["recommendations"]
+            info_missing = [r for r in recs if "从未上报" in r.get("reason", "")]
+            assert len(info_missing) > 0
+            assert info_missing[0]["priority"] == "high", f"FGR高危+无数据应标high，实际: {info_missing[0]['priority']}"
         finally:
             db.rollback()
             db.close()
@@ -173,8 +192,8 @@ class TestInfoMissing:
             db.rollback()
             db.close()
 
-    def test_early_pregnancy_no_data_still_triggers_if_ge_12w(self):
-        """孕周刚好12周，无数据 → 应触发"""
+    def test_early_pregnancy_no_data_not_triggered_below_20w(self):
+        """孕周12周（<20周），无数据 → 不应触发信息缺失（建档初期属正常）"""
         db = TestSessionLocal()
         try:
             p = _make_pregnant("P_EARLY", gest_days=84, risk_tags=[])  # 12周
@@ -185,7 +204,7 @@ class TestInfoMissing:
             recs = result["recommendations"]
 
             info_missing = [r for r in recs if "从未上报" in r.get("reason", "")]
-            assert len(info_missing) > 0, f"孕12周无数据应触发，推荐列表: {recs}"
+            assert len(info_missing) == 0, f"孕12周（<20周）不应触发信息缺失，推荐列表: {recs}"
         finally:
             db.rollback()
             db.close()
@@ -230,7 +249,7 @@ class TestDataInactive:
     """Fix 2: 数据不活跃不再要求有风险标签"""
 
     def test_inactive_no_risk_tags_triggers(self):
-        """14天数据不活跃 + 无风险标签 → 修复后应触发"""
+        """14天数据不活跃 + 无风险标签 + <28周 → 触发但为 medium（非high）"""
         db = TestSessionLocal()
         try:
             p = _make_pregnant("P_INACTIVE_NO_RISK", gest_days=140, risk_tags=[])
@@ -244,8 +263,27 @@ class TestDataInactive:
 
             inactive_recs = [r for r in recs if "数据不活跃" in r.get("reason", "")]
             assert len(inactive_recs) > 0, f"无风险标签的数据不活跃应触发随访，推荐列表: {recs}"
-            # 14天内只有0条数据
-            assert inactive_recs[0]["priority"] == "high"
+            # 14天内0条数据但<28周且无高危标签 → medium
+            assert inactive_recs[0]["priority"] == "medium"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_inactive_high_priority_for_late_pregnancy(self):
+        """14天数据不活跃 + 孕晚期(≥28周) → 应标 high"""
+        db = TestSessionLocal()
+        try:
+            p = _make_pregnant("P_INACTIVE_LATE", gest_days=210, risk_tags=[])  # 30周
+            db.add(p)
+            db.add(_make_health_data_point("P_INACTIVE_LATE", "bp_systolic", 120.0, days_ago=15))
+            db.commit()
+
+            result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_INACTIVE_LATE")
+            recs = result["recommendations"]
+
+            inactive_recs = [r for r in recs if "数据不活跃" in r.get("reason", "")]
+            assert len(inactive_recs) > 0, f"孕晚期数据不活跃应触发，推荐列表: {recs}"
+            assert inactive_recs[0]["priority"] == "high", f"孕晚期零数据应标high，实际: {inactive_recs[0]['priority']}"
         finally:
             db.rollback()
             db.close()
