@@ -37,7 +37,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,  # SQLite 兼容：ALTER TABLE 用 batch 模式
+        render_as_batch=(settings.db_type == "sqlite"),  # SQLite 需要 batch 模式
     )
 
     with context.begin_transaction():

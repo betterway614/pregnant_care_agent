@@ -26,10 +26,12 @@ setup_logging()
 
 
 def _ensure_schedule_columns():
-    """为已有 SQLite 数据库添加 ScheduleNode 排期引擎升级新列（幂等）"""
+    """为已有数据库添加 ScheduleNode 排期引擎升级新列（幂等，PostgreSQL/SQLite 双兼容）"""
     import sqlalchemy as sa
     try:
         inspector = sa.inspect(engine)
+        if "schedule_nodes" not in inspector.get_table_names():
+            return
         columns = [c["name"] for c in inspector.get_columns("schedule_nodes")]
         new_cols = [
             ("gest_week_start", "INTEGER"),
@@ -47,15 +49,28 @@ def _ensure_schedule_columns():
                     conn.execute(sa.text(
                         f"ALTER TABLE schedule_nodes ADD COLUMN {col_name} {col_type}"
                     ))
+                    logger.info("schedule_nodes.{} 列已添加", col_name)
             # 扩容 item 列（128→256）
-            # SQLite 不支持 ALTER COLUMN 修改类型，只能重建，跳过
+            if settings.db_type == "postgres":
+                for col_info in inspector.get_columns("schedule_nodes"):
+                    if col_info["name"] == "item":
+                        col_type_len = getattr(col_info["type"], "length", None)
+                        if col_type_len and col_type_len < 256:
+                            conn.execute(sa.text(
+                                "ALTER TABLE schedule_nodes ALTER COLUMN item TYPE VARCHAR(256)"
+                            ))
+                            logger.info("schedule_nodes.item 列已扩容为 VARCHAR(256)")
+                        break
+            else:
+                # SQLite 不强制 VARCHAR 长度约束，无需处理
+                logger.debug("schedule_nodes: SQLite 不要求 ALTER COLUMN TYPE，跳过 item 扩容")
             conn.commit()
     except Exception as e:
         err_msg = str(e).lower()
         if "duplicate column" in err_msg or "already exists" in err_msg:
             logger.debug("Schedule 列已存在，跳过: {}", e)
         else:
-            logger.error("Schedule 列迁移意外失败: {}", e)
+            logger.warning("Schedule 列迁移意外失败（可能已执行过）: {}", e)
 
 
 def _ensure_fgr_columns():
@@ -269,12 +284,12 @@ def _ensure_audit_log_table():
                 router_col = inspector.get_columns("agent_audit_logs")
                 for col_info in router_col:
                     if col_info["name"] == "routed_agent":
-                        col_type = str(col_info["type"])
-                        if "32" in col_type or col_info.get("type_length") == 32:
+                        col_type_len = getattr(col_info["type"], "length", None)
+                        if col_type_len is not None and col_type_len < 64:
                             if settings.db_type == "postgres":
                                 conn.execute(sa.text("ALTER TABLE agent_audit_logs ALTER COLUMN routed_agent TYPE VARCHAR(64)"))
                             else:
-                                # SQLite 不支持 ALTER/MODIFY COLUMN，且列类型不强制校验，跳过
+                                # SQLite 不强制 VARCHAR 长度约束
                                 pass
                             logger.info("agent_audit_logs routed_agent 列扩展为 VARCHAR(64)")
                         break
@@ -326,6 +341,14 @@ def _ensure_feedback_audit_link():
                 if "audit_log_id" not in fb_cols:
                     conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN audit_log_id INTEGER"))
                     logger.info("feedback 表添加 audit_log_id 列")
+                    # 为新列创建索引（与模型 index=True 一致）
+                    try:
+                        conn.execute(sa.text(
+                            "CREATE INDEX IF NOT EXISTS idx_feedback_audit_log "
+                            "ON feedback(audit_log_id)"
+                        ))
+                    except Exception:
+                        pass  # 索引可能已存在
                 if "feedback_role" not in fb_cols:
                     conn.execute(sa.text("ALTER TABLE feedback ADD COLUMN feedback_role VARCHAR(16) NOT NULL DEFAULT 'pregnant'"))
                     logger.info("feedback 表添加 feedback_role 列")
@@ -411,26 +434,21 @@ async def lifespan(app: FastAPI):
 
     if not db_exists:
         Base.metadata.create_all(bind=engine)
-        logger.info("数据库初始化完成")
+        logger.info("数据库初始化完成（{}）", settings.db_type)
     else:
-        logger.info("数据库已存在，跳过初始化")
-
-    # 对已有 SQLite 数据库添加 ScheduleNode 排期升级新列
-    _ensure_schedule_columns()
-    # 对已有 SQLite 数据库添加 Pregnant 基线数据新列
-    _ensure_pregnant_columns()
-    # 对已有 SQLite 数据库添加 FGR 新列
-    _ensure_fgr_columns()
-    # 对已有 SQLite 数据库添加 FollowUpRecord 归档新列
-    _ensure_followup_columns()
-    # 对已有 SQLite 数据库添加 MedicalOrder 签署增强新列
-    _ensure_order_columns()
-    # 对已有 SQLite 数据库添加 Alert 新列
-    _ensure_alert_columns()
-    _ensure_audit_log_table()
-    _ensure_feedback_audit_link()
-    _ensure_resource_tables()
-    _ensure_diary_table()
+        logger.info("数据库已存在，执行增量列迁移...")
+        # 对已有数据库执行增量列迁移（幂等），首次创建跳过以节省启动时间
+        _ensure_schedule_columns()
+        _ensure_pregnant_columns()
+        _ensure_fgr_columns()
+        _ensure_followup_columns()
+        _ensure_order_columns()
+        _ensure_alert_columns()
+        _ensure_audit_log_table()
+        _ensure_feedback_audit_link()
+        _ensure_resource_tables()
+        _ensure_diary_table()
+        logger.info("增量列迁移检查完成")
 
     # FGR 模式：按 .env 的 FGR_BACKEND 加载真实预测模型
     if settings.fgr_mode:

@@ -36,6 +36,7 @@ print("  表创建完成")
 # 2. 执行列迁移（幂等）
 print("\n[2/4] 执行列迁移...")
 from app.main import (
+    _ensure_schedule_columns,
     _ensure_pregnant_columns,
     _ensure_fgr_columns,
     _ensure_followup_columns,
@@ -46,6 +47,7 @@ from app.main import (
     _ensure_resource_tables,
     _ensure_diary_table,
 )
+_ensure_schedule_columns()
 _ensure_pregnant_columns()
 _ensure_fgr_columns()
 _ensure_followup_columns()
