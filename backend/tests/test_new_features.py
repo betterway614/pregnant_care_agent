@@ -516,8 +516,9 @@ class TestPregnantNotificationService:
     """三级联动预警 - get_notifications, mark_read, mark_all_read, get_unread_count"""
 
     def test_get_notifications_returns_list(self):
-        """返回通知列表"""
-        alert = _make_alert()
+        """返回通知列表（仅显示 vital 域非 RED 级别的预警）"""
+        alert = _make_alert(level="ORANGE")
+        alert.details = {"domain": "vital", "history": [{"action": "created"}], "source_role": "system"}
         db = MagicMock()
         query_mock = MagicMock()
         db.query.return_value = query_mock
@@ -528,10 +529,12 @@ class TestPregnantNotificationService:
         svc = PregnantNotificationService()
         result = svc.get_notifications(db, "P001")
         assert isinstance(result, list)
+        assert len(result) >= 1
 
-    def test_red_alert_has_correct_level(self):
-        """红色预警通知级别为 RED"""
+    def test_red_alert_filtered_from_pregnant_side(self):
+        """红色预警不在孕妇端显示（转给医生处理）"""
         alert = _make_alert(level="RED")
+        alert.details = {"domain": "vital", "history": [{"action": "created"}], "source_role": "system"}
         db = MagicMock()
         query_mock = MagicMock()
         db.query.return_value = query_mock
@@ -541,8 +544,23 @@ class TestPregnantNotificationService:
         svc = PregnantNotificationService()
         result = svc.get_notifications(db, "P001")
         red_notifs = [n for n in result if n.level == "RED"]
-        assert len(red_notifs) == 1
-        assert red_notifs[0].type == "alert"
+        assert len(red_notifs) == 0, "孕妇端不应显示RED级别预警"
+
+    def test_orange_vital_alert_visible_to_pregnant(self):
+        """vital域ORANGE级别预警在孕妇端以温馨提示显示"""
+        alert = _make_alert(level="ORANGE")
+        alert.details = {"domain": "vital", "history": [{"action": "created"}], "source_role": "system"}
+        db = MagicMock()
+        query_mock = MagicMock()
+        db.query.return_value = query_mock
+        query_mock.filter.return_value = query_mock
+        query_mock.all.return_value = [alert]
+
+        svc = PregnantNotificationService()
+        result = svc.get_notifications(db, "P001")
+        orange_notifs = [n for n in result if n.level == "ORANGE"]
+        assert len(orange_notifs) == 1
+        assert orange_notifs[0].title == "温馨提示"
 
     def test_mark_read_sets_flag(self):
         """标记已读设置 pregnant_read 标志"""
@@ -596,11 +614,28 @@ class TestPregnantNotificationService:
         result = svc.get_unread_count(db, "P001")
         assert isinstance(result, int)
 
+    def test_mental_domain_filtered_from_pregnant_side(self):
+        """心理域（抑郁等）预警不在孕妇端显示"""
+        alert = _make_alert(level="ORANGE", domain="mental")
+        alert.details = {"domain": "mental", "history": [{"action": "created"}], "source_role": "system"}
+        db = MagicMock()
+        query_mock = MagicMock()
+        db.query.return_value = query_mock
+        query_mock.filter.return_value = query_mock
+        query_mock.all.return_value = [alert]
+
+        svc = PregnantNotificationService()
+        result = svc.get_notifications(db, "P001")
+        # 过滤掉随访/医嘱等其他类型，只看预警类型
+        alert_notifs = [n for n in result if n.type == "alert"]
+        assert len(alert_notifs) == 0, "孕妇端不应显示心理域预警"
+
     def test_unread_only_filter(self):
         """unread_only=True 时只返回未读"""
-        read_alert = _make_alert()
-        read_alert.details["pregnant_read"] = True
-        unread_alert = _make_alert()
+        read_alert = _make_alert(level="YELLOW")
+        read_alert.details = {"domain": "vital", "pregnant_read": True, "source_role": "system"}
+        unread_alert = _make_alert(level="YELLOW")
+        unread_alert.details = {"domain": "vital", "source_role": "system"}
 
         db = MagicMock()
         query_mock = MagicMock()

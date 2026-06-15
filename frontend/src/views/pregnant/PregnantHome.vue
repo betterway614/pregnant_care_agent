@@ -110,15 +110,15 @@
 
       <!-- ==================== 通知消息列表 ==================== -->
       <div class="notifications-section" v-if="alertNotifications.length > 0 || proactiveNotifications.length > 0">
+        <!-- 温馨提示卡片（来自预警服务，已过滤高危项，仅显示体重/血压等基本指标） -->
         <div
           v-for="item in alertNotifications.slice(0, 3)"
           :key="'alert-' + item.id"
-          class="notice-card interactive-card"
-          :class="item.level === 'RED' ? 'notice-red' : item.level === 'ORANGE' ? 'notice-orange' : 'notice-yellow'"
+          class="notice-card notice-gentle interactive-card"
           @click="onAlertNoticeClick(item)"
         >
-          <div class="notice-icon-wrap">
-            <el-icon><Warning /></el-icon>
+          <div class="notice-icon-wrap notice-icon-gentle">
+            <el-icon><Sunny /></el-icon>
           </div>
           <div class="notice-content">
             <div class="notice-title">{{ item.title }}</div>
@@ -126,6 +126,7 @@
           </div>
           <el-icon class="notice-arrow"><ArrowRight /></el-icon>
         </div>
+        <!-- 主动提醒卡片（产检排期、血压异常提醒等） -->
         <div
           v-for="item in proactiveNotifications.slice(0, 3)"
           :key="'proactive-' + item.id"
@@ -1184,15 +1185,8 @@ onActivated(() => {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
 }
-.notice-red .notice-icon-wrap {
-  background: rgba(239, 68, 68, 0.12);
-  color: #EF4444;
-}
-.notice-orange .notice-icon-wrap {
-  background: rgba(251, 146, 60, 0.12);
-  color: var(--c-orange);
-}
-.notice-yellow .notice-icon-wrap {
+/* 温馨提示风格：柔和的粉橙色背景，友好图标 */
+.notice-icon-gentle {
   background: rgba(251, 191, 36, 0.12);
   color: var(--c-amber);
 }
@@ -1225,16 +1219,9 @@ onActivated(() => {
   font-size: 14px;
   flex-shrink: 0;
 }
-.notice-red {
-  background: linear-gradient(135deg, rgba(254, 226, 226, 0.85), rgba(255, 255, 255, 0.7));
-  border-color: rgba(239, 68, 68, 0.2);
-}
-.notice-orange {
-  background: linear-gradient(135deg, rgba(255, 247, 237, 0.85), rgba(255, 255, 255, 0.7));
-  border-color: rgba(251, 146, 60, 0.2);
-}
-.notice-yellow {
-  background: linear-gradient(135deg, rgba(254, 249, 195, 0.85), rgba(255, 255, 255, 0.7));
-  border-color: rgba(251, 191, 36, 0.2);
+/* 温馨提示卡片：柔和背景，无预警分级色 */
+.notice-gentle {
+  background: linear-gradient(135deg, rgba(254, 249, 195, 0.6), rgba(255, 255, 255, 0.7));
+  border-color: rgba(251, 191, 36, 0.15);
 }
 </style>

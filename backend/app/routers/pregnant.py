@@ -50,9 +50,15 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
 
-    # 计算孕周
+    # 实时计算孕周：优先从 lmp_date（末次月经）动态计算，兜底使用静态字段
     from datetime import date, datetime, timedelta
-    gest_days = pregnant.gestational_age_days or 0
+    today = date.today()
+    if pregnant.lmp_date:
+        delta = (today - pregnant.lmp_date).days
+        gest_days = max(0, delta)  # 不允许负数
+    else:
+        # 兜底：使用静态字段（首次录入时的值，不会自动增长）
+        gest_days = pregnant.gestational_age_days or 0
     gest_week = gest_days // 7
     gest_day = gest_days % 7
 

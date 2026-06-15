@@ -68,7 +68,10 @@ class PregnantNotificationService:
         now = beijing_now()
         notifications: list[PregnantNotification] = []
 
-        # ---- 1a. 预警通知 (PENDING / CONFIRMED，排除 FGR 算法预警) ----
+        # ---- 1a. 预警通知：仅保留基本生命体征(vital)域预警，过滤高危预警 ----
+        # FGR、抑郁等高危预警不应在孕妇端显示，避免引起焦虑
+        # 体重、血压等基本指标以温馨提示的口吻呈现
+        _PREGNANT_VISIBLE_DOMAINS = {"vital"}  # 仅显示生命体征域
         try:
             alerts = (
                 db.query(Alert)
@@ -81,16 +84,23 @@ class PregnantNotificationService:
             )
             for alert in alerts:
                 details = alert.details or {}
+                # 过滤非生命体征域的高危预警（fetal/mental域不展示给孕妇）
+                alert_domain = details.get("domain", "vital")
+                if alert_domain not in _PREGNANT_VISIBLE_DOMAINS:
+                    continue
                 is_read = bool(details.get("pregnant_read", False))
                 if unread_only and is_read:
                     continue
 
                 level = (alert.level or "YELLOW").upper()
+                # 孕妇端不显示RED级别（即使是vital域的RED也应转给医生处理）
+                if level == "RED":
+                    continue
                 notifications.append(PregnantNotification(
                     id=str(alert.id),
                     type="alert",
                     title=self._alert_title(level),
-                    body=alert.message or "",
+                    body=self._gentle_body(alert.message or "", level),
                     icon=self._alert_icon(level),
                     level=level,
                     is_read=is_read,
@@ -291,7 +301,8 @@ class PregnantNotificationService:
         """
         count = 0
 
-        # 预警未读
+        # 预警未读（与 get_notifications 过滤逻辑一致：仅 vital 域、排除 RED）
+        _PREGNANT_VISIBLE_DOMAINS = {"vital"}
         try:
             alerts = (
                 db.query(Alert)
@@ -304,6 +315,13 @@ class PregnantNotificationService:
             )
             for alert in alerts:
                 details = alert.details or {}
+                # 过滤非 vital 域和 RED 级别
+                alert_domain = details.get("domain", "vital")
+                if alert_domain not in _PREGNANT_VISIBLE_DOMAINS:
+                    continue
+                level = (alert.level or "YELLOW").upper()
+                if level == "RED":
+                    continue
                 if not details.get("pregnant_read", False):
                     count += 1
         except Exception as exc:
@@ -347,23 +365,21 @@ class PregnantNotificationService:
     # ------------------------------------------------------------------
     @staticmethod
     def _alert_title(level: str) -> str:
-        """根据预警级别生成通知标题"""
-        titles = {
-            "RED": "紧急预警",
-            "ORANGE": "重要预警",
-            "YELLOW": "健康提醒",
-        }
-        return titles.get(level, "健康提醒")
+        """孕妇端统一使用温馨提示语气，避免预警字样引起焦虑"""
+        return "温馨提示"
+
+    @staticmethod
+    def _gentle_body(message: str, level: str) -> str:
+        """将预警消息转换为温馨提示口吻"""
+        # 对体重/血压/血糖等基本指标消息，追加温馨建议
+        if level == "ORANGE":
+            return f"{message}。建议您多加关注，必要时联系您的护士或医生。"
+        return f"{message}。请注意日常监测，保持好心情～"
 
     @staticmethod
     def _alert_icon(level: str) -> str:
-        """根据预警级别返回前端图标标识"""
-        icons = {
-            "RED": "alert-circle",
-            "ORANGE": "alert-triangle",
-            "YELLOW": "info",
-        }
-        return icons.get(level, "info")
+        """孕妇端统一使用友好图标，不用警告图标"""
+        return "info"
 
 
 # ---------------------------------------------------------------------------

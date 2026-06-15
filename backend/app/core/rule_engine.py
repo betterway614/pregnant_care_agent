@@ -150,8 +150,8 @@ RULES = [
          "餐后血糖异常（>7.0mmol/L）", "ALERT_NURSE_AND_DOCTOR"),
     Rule("RULE_BS_FASTING_HIGH", "vital", 2, "blood_sugar_fasting >= 5.1", "ORANGE",
          "空腹血糖偏高（≥5.1mmol/L），符合GDM诊断标准，建议复查", "ALERT_NURSE"),
-    Rule("RULE_WEIGHT_GAIN_FAST", "vital", 2, "weight_gain_weekly > 2.0", "ORANGE",
-         "体重周增长过快（>2kg/周）", "ALERT_NURSE"),
+    Rule("RULE_WEIGHT_GAIN_FAST", "vital", 1, "weight_gain_weekly > 2.0", "YELLOW",
+         "体重周增长偏快（>2kg/周），建议咨询营养师", "NOTE_NURSE"),
     Rule("RULE_WEIGHT_GAIN_SLOW", "vital", 1, "weight_gain_weekly < 0.1 and gest_week > 16", "YELLOW",
          "体重增长过慢，需关注营养摄入", "NOTE_NURSE"),
 
