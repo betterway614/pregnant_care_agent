@@ -318,8 +318,6 @@ const TRIGGER_SOURCE_LABEL_MAP: Record<string, string> = {
   RULE_ENGINE: '规则引擎',
   FGR_ALGORITHM: 'FGR评估算法',
   MANUAL: '手动创建',
-  AI_ANALYSIS: 'AI分析',
-  FOLLOWUP_COMPLETE: '随访完成触发',
   EPDS_SCREENING: 'EPDS心理筛查',
   FOLLOWUP: '随访',
 }
@@ -420,4 +418,134 @@ export function hasRawDetails(details: Record<string, any> | undefined): boolean
   const raw = { ...details }
   delete raw.llm_analysis
   return Object.keys(raw).length > 0
+}
+
+// ==================== 详情结构化展示 ====================
+
+/** 需要在"相关数据"区域隐藏的字段（已有独立展示区域或为内部字段） */
+export const HIDDEN_DETAIL_KEYS = new Set([
+  'history',        // 处理记录 — 已有独立时间线展示
+  'source_role',    // 内部字段
+  'created_at',     // 与预警创建时间重复
+  'analyzed_at',    // 内部时间戳
+  'llm_analysis',   // 复杂嵌套对象，专用 AI 分析区域展示
+  'ai_workflow',    // 复杂嵌套对象，专用 AI 分析区域展示
+])
+
+/** 详情 key 中文映射（结构化 key-value 展示用） */
+export function formatDetailKey(key: string): string {
+  const map: Record<string, string> = {
+    // 风险相关
+    case_id: '病例编号',
+    risk_level: '风险等级',
+    risk_assessment: '风险评估',
+    risk_score: '风险评分',
+    deviation: '偏差',
+    // 指标相关
+    value: '测量值',
+    threshold: '阈值',
+    metric_code: '指标代码',
+    unit: '单位',
+    trend: '趋势',
+    // 时间与孕周
+    gestational_weeks: '孕周',
+    // 置信区间
+    confidence_interval: '置信区间',
+    // 规则与处理
+    action: '处理动作',
+    triggered_rules: '触发规则列表',
+    // FGR 相关
+    fgr_probability: 'FGR概率',
+    predicted_label: '预测标签',
+    model_confidence: '模型置信度',
+    explanation: '分析解释',
+    processing_time: '处理耗时(秒)',
+    hardware: '运行硬件',
+    fold_details: '交叉验证详情',
+    // 预警动作映射
+    ALERT_NURSE: '通知护士',
+    ALERT_NURSE_AND_DOCTOR: '通知护士和医生',
+    ALERT_DOCTOR: '通知医生',
+    NOTE_NURSE: '记录备注',
+    // 通用
+    note: '备注',
+    reason: '原因',
+    result: '结果',
+    summary: '摘要',
+  }
+  return map[key] || key
+}
+
+/** 详情值友好格式化 */
+export function formatDetailValue(key: string, value: any): string {
+  // 1. 处理 null/undefined
+  if (value === null || value === undefined) return '无'
+
+  // 2. 处理对象类型
+  if (typeof value === 'object') {
+    // 2a. 置信区间特殊处理
+    if (value.lowerBound !== undefined && value.upperBound !== undefined) {
+      return `${(value.lowerBound * 100).toFixed(1)}% ~ ${(value.upperBound * 100).toFixed(1)}%`
+    }
+
+    // 2b. 数组类型 — 根据 key 做友好展示
+    if (Array.isArray(value)) {
+      if (!value.length) return '无'
+      // 触发规则列表 — 用中文规则名展示
+      if (key === 'triggered_rules') {
+        return value.map((id: string) => ruleIdLabel(id)).join('、')
+      }
+      // 其他数组 — 检查是否全是简单值
+      if (value.every((v: any) => typeof v !== 'object' || v === null)) {
+        return value.map((v: any) => String(v)).join('、')
+      }
+      // 复杂对象数组 — 显示条数
+      return `共 ${value.length} 条记录`
+    }
+
+    // 2c. 普通对象 — 尝试提取可读摘要
+    const summaryKeys = ['summary', 'result', 'explanation', 'risk_assessment', 'message', 'content', 'text']
+    for (const sk of summaryKeys) {
+      if (value[sk] && typeof value[sk] === 'string') {
+        const s = value[sk]
+        return s.length > 80 ? s.slice(0, 80) + '…' : s
+      }
+    }
+    // 无法提取摘要 — 显示对象键数
+    const keys = Object.keys(value)
+    if (keys.length === 0) return '无'
+    return `[复杂数据，包含 ${keys.length} 个字段]`
+  }
+
+  // 3. 处理基本类型
+  const str = String(value)
+  const actionMap: Record<string, string> = {
+    ALERT_NURSE: '通知护士',
+    ALERT_NURSE_AND_DOCTOR: '通知护士和医生',
+    ALERT_DOCTOR: '通知医生',
+    NOTE_NURSE: '记录备注',
+  }
+  const riskLevelMap: Record<string, string> = {
+    critical: '极高风险',
+    high: '高风险',
+    medium: '中风险',
+    low: '低风险',
+  }
+  return actionMap[str] || riskLevelMap[str] || str
+}
+
+/** 处理记录动作中文映射 */
+export function historyActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    created: '创建预警',
+    downgrade: '降级',
+    nurse_escalate: '护士升级',
+    nurse_appeal: '护士复议',
+    confirm: '医生确认高危',
+    nurse_confirm: '护士确认',
+    dismiss: '解除',
+    nurse_dismiss: '护士解除',
+    auto_dismiss: '自动关闭',
+  }
+  return map[action] || action
 }

@@ -152,10 +152,10 @@
                   </div>
                   <p class="rule-card__desc">规则 ID: {{ selectedAlert.rule_id || 'N/A' }}</p>
                   <p class="rule-card__desc" style="margin-top: 6px">
-                    {{ ruleStandardMessage(selectedAlert.rule_id || '') || selectedAlert.message }}
+                    {{ selectedAlert.rule_standard_message || selectedAlert.message }}
                   </p>
                   <p
-                    v-if="ruleStandardMessage(selectedAlert.rule_id || '') && ruleStandardMessage(selectedAlert.rule_id || '') !== selectedAlert.message"
+                    v-if="selectedAlert.rule_standard_message && selectedAlert.rule_standard_message !== selectedAlert.message"
                     class="rule-card__desc"
                     style="margin-top: 4px; color: var(--warning); font-size: 12px"
                   >
@@ -944,9 +944,11 @@ async function selectAlert(alert: Alert) {
   // 加载孕妇随访信息
   try {
     const res = await followUpApi.list({ pregnant_id: alert.pregnant_id })
-    pregnantFollowUps.value = (res.data || []).sort(
-      (a, b) => new Date(b.follow_up_date || 0).getTime() - new Date(a.follow_up_date || 0).getTime()
-    )
+    pregnantFollowUps.value = (res.data || [])
+      .filter((r) => r.status !== 'draft' && r.status !== 'in_progress')
+      .sort(
+        (a, b) => new Date(b.follow_up_date || 0).getTime() - new Date(a.follow_up_date || 0).getTime()
+      )
   } catch (err) {
     console.error('加载孕妇随访信息失败:', err)
   } finally {
@@ -1189,31 +1191,6 @@ async function runDoctorAiAnalysis() {
   } finally {
     aiAnalyzing.value = false
   }
-}
-
-/** 规则ID对应的标准消息（与后端规则引擎保持一致） */
-function ruleStandardMessage(ruleId: string): string {
-  const map: Record<string, string> = {
-    RULE_BP_HIGH: '血压异常升高（≥140/90mmHg）',
-    RULE_BP_HIGH_ORANGE: '血压偏高（≥135/85mmHg），需要关注',
-    RULE_BP_LOW: '血压偏低，需关注',
-    RULE_LATE_PREGNANCY_BP: '孕晚期血压偏高，子痫前期风险',
-    RULE_BS_POSTPRANDIAL_HIGH: '餐后血糖异常（>7.0mmol/L）',
-    RULE_BS_FASTING_HIGH: '空腹血糖偏高（>5.3mmol/L），建议复查',
-    RULE_WEIGHT_GAIN_FAST: '体重周增长过快（>2kg/周）',
-    RULE_WEIGHT_GAIN_SLOW: '体重增长过慢，需关注营养摄入',
-    RULE_FETAL_DROP: '胎动显著减少（低于平均50%）',
-    RULE_FETAL_VERY_LOW: '胎动极少（<3次/小时），请立即就医',
-    RULE_EMOTION_CRITICAL: '近7日情绪评分持续偏低（平均≤1.5分），建议心理干预',
-    RULE_EMOTION_HIGH: '近7日情绪评分偏低（平均≤2.0分），需关注心理状态',
-    RULE_SLEEP_SHORT: '睡眠不足5小时，建议改善睡眠',
-    FGR_CRITICAL_RISK: 'FGR评估结果: 极高风险',
-    FGR_HIGH_RISK: 'FGR评估结果: 高风险',
-    FGR_MEDIUM_RISK: 'FGR评估结果: 中风险',
-    EPDS_HIGH_RISK: 'EPDS心理健康筛查高风险，建议心理干预',
-    NURSE_AI_ALERT: '护士AI分析预警',
-  }
-  return map[ruleId] || ''
 }
 
 /** WebSocket 预警回调 */

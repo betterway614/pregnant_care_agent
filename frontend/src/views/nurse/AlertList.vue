@@ -200,9 +200,36 @@
           </div>
         </template>
 
-        <div class="detail-section" v-if="hasRawDetails(selectedAlert.details)">
-          <h4 class="detail-section__title">原始数据</h4>
-          <pre class="detail-section__pre">{{ formatRawDetails(selectedAlert.details) }}</pre>
+        <!-- 相关数据（结构化展示） -->
+        <div class="detail-section" v-if="hasVisibleDetails">
+          <h4 class="detail-section__title">相关数据</h4>
+          <div class="data-table">
+            <div v-for="[key, value] in visibleDetailEntries" :key="key" class="data-row">
+              <span class="data-row__key">{{ formatDetailKey(key) }}</span>
+              <span class="data-row__value">{{ formatDetailValue(key, value) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 处理记录时间线 -->
+        <div class="detail-section" v-if="selectedAlert.details?.history?.length">
+          <h4 class="detail-section__title">处理记录</h4>
+          <el-timeline style="margin-top: 8px">
+            <el-timeline-item
+              v-for="entry in selectedAlert.details.history"
+              :key="entry.seq"
+              :timestamp="entry.timestamp"
+              :type="entry.action === 'created' ? 'primary' : entry.action.includes('escalate') ? 'danger' : entry.action.includes('downgrade') ? 'warning' : 'info'"
+            >
+              <p>
+                <el-tag size="small" :type="entry.source_role === 'system' ? '' : entry.source_role === 'doctor' ? 'success' : 'warning'">
+                  {{ entry.source_role === 'system' ? '系统' : entry.source_role === 'doctor' ? '医生' : '护士' }}
+                </el-tag>
+                {{ historyActionLabel(entry.action) }}
+              </p>
+              <p v-if="entry.reason" class="timeline-reason">{{ entry.reason }}</p>
+            </el-timeline-item>
+          </el-timeline>
         </div>
       </template>
     </el-drawer>
@@ -223,8 +250,10 @@ import {
   ruleIdLabel,
   alertStatusText,
   alertStatusTagType,
-  formatRawDetails,
-  hasRawDetails,
+  formatDetailKey,
+  formatDetailValue,
+  historyActionLabel,
+  HIDDEN_DETAIL_KEYS,
 } from '@/utils/labelMaps'
 import RiskBadge from '@/components/common/RiskBadge.vue'
 
@@ -267,6 +296,18 @@ function goPregnantDetail(row: Alert) {
 
 /** 是否有活跃筛选条件 */
 const hasActiveFilter = computed(() => !!(filterLevel.value || filterStatus.value))
+
+/** 是否有需要展示的详情数据（排除内部字段后） */
+const hasVisibleDetails = computed(() => {
+  if (!selectedAlert.value?.details) return false
+  return Object.keys(selectedAlert.value.details).some((k) => !HIDDEN_DETAIL_KEYS.has(k))
+})
+
+/** 过滤后的详情条目（排除已有独立展示区域的字段） */
+const visibleDetailEntries = computed(() => {
+  if (!selectedAlert.value?.details) return []
+  return Object.entries(selectedAlert.value.details).filter(([key]) => !HIDDEN_DETAIL_KEYS.has(key))
+})
 
 /** 判断预警是否为待处理状态 */
 function isAlertPending(status: string): boolean {
@@ -459,18 +500,46 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.detail-section__pre {
+/* 数据表格 */
+.data-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
   background: rgba(241, 245, 249, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-radius: var(--radius-sm);
-  padding: 14px;
+  transition: background var(--transition-fast);
+}
+
+.data-row:hover {
+  background: rgba(232, 245, 233, 0.3);
+}
+
+.data-row__key {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.data-row__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 处理记录时间线 */
+.timeline-reason {
   font-size: 12px;
-  line-height: 1.6;
-  overflow-x: auto;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  margin: 0;
-  border: 1px solid var(--border);
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 /* 操作列：表头与单元格居中，与全局 table-row-actions 左对齐区分 */
