@@ -921,7 +921,13 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
                 any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期"))
             ):
                 priority = "high"
-                urgency_note = "，且存在高危因素需立即跟进"
+                # 区分触发原因，避免孕晚期被误标为"高危因素"
+                urgency_reasons = []
+                if gest_week >= 28:
+                    urgency_reasons.append("已进入孕晚期需密切监测")
+                if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")):
+                    urgency_reasons.append("存在高危因素需立即跟进")
+                urgency_note = "，" + "；".join(urgency_reasons)
             else:
                 priority = "medium"
                 urgency_note = ""
