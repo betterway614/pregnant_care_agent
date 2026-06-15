@@ -64,7 +64,7 @@ def _patch_nlu_and_tools(intent_variant="complex"):
     """返回一组 patch 上下文管理器，用于 NLU 和 resolve_tools_by_intent"""
     mock_nlu_mod = MagicMock()
     mock_nlu_mod.nlu_engine.parse.return_value = _make_mock_nlu()
-    mock_resolve = MagicMock(return_value=(["agno_parse_nlu"], intent_variant))
+    mock_resolve = MagicMock(return_value=(["agno_get_nlu_result"], intent_variant))
     return (
         patch.dict("sys.modules", {"app.core.nlu_engine": mock_nlu_mod}),
         patch("app.core.agno_tools.resolve_tools_by_intent", mock_resolve),

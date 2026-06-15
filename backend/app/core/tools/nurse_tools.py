@@ -6,19 +6,21 @@
 from __future__ import annotations
 
 import asyncio
+import time as _time
 
 from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid, truncate_tool_result
+from .common import _resolve_pid, truncate_tool_result, tool_metrics
 
 
 @tool
 async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
-    """查询孕妇完整数据，包括基本信息、健康数据、预警、随访记录。
-    当护士需要了解孕妇整体情况时使用此工具。
+    """查询孕妇详细数据，包含基本信息、近期健康数据、活跃预警、随访记录、规则引擎自动评估。
+    比 agno_get_patient_context 返回更丰富（含预警+随访+规则评估），适合护士/医生端使用。
     查询结果会保存到 session_state，供后续工具使用。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
@@ -103,14 +105,16 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
             db.close()
 
     raw = await asyncio.to_thread(_query)
-    return truncate_tool_result(raw)
+    return truncate_tool_result(raw, tool_name="agno_query_patient_data", tool_start_time=_t0)
 
 
 @tool
 async def agno_list_patients(run_context: RunContext | None = None) -> dict:
-    """查询系统中所有孕妇的基本信息列表。
-    当护士需要查看当前管理的所有孕妇ID、姓名、孕周和风险标签时使用此工具。
-    不需要指定 pregnant_id，自动返回全部孕妇。异步安全。"""
+    """查询孕妇基本信息列表（最多返回20条，含总数）。
+    当护士需要浏览当前管理的孕妇概览时使用此工具。
+    不需要指定 pregnant_id，自动返回全部孕妇摘要。异步安全。"""
+    _t0 = _time.perf_counter()
+
     def _list():
         from ...database import SessionLocal
         from ...models import Pregnant
@@ -134,7 +138,7 @@ async def agno_list_patients(run_context: RunContext | None = None) -> dict:
             db.close()
 
     raw = await asyncio.to_thread(_list)
-    return truncate_tool_result(raw)
+    return truncate_tool_result(raw, tool_name="agno_list_patients", tool_start_time=_t0)
 
 
 @tool
@@ -144,6 +148,7 @@ async def agno_create_followup_record(
 ) -> dict:
     """创建随访记录草稿。
     当护士需要记录随访内容时使用此工具。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
@@ -168,7 +173,9 @@ async def agno_create_followup_record(
         finally:
             db.close()
 
-    return await asyncio.to_thread(_create)
+    result = await asyncio.to_thread(_create)
+    tool_metrics.record("agno_create_followup_record", (_time.perf_counter() - _t0) * 1000)
+    return result
 
 
 @tool
@@ -179,22 +186,31 @@ async def agno_report_issue_to_doctor(
     """上报问题给医生。
     当护士发现异常情况需要医生处理时使用此工具。
     如果之前调用过 agno_query_patient_data，可以不传 pregnant_id。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid and run_context and run_context.session_state:
         last_patient = run_context.session_state.get("last_queried_patient")
         if last_patient:
             pid = last_patient.get("pregnant_id", "")
     if not pid:
-        return {"error": "未指定孕妇，请先查询孕妇数据或指定 pregnant_id"}
+        return {
+            "error": "未指定孕妇",
+            "hint": "请先调用 agno_query_patient_data 获取孕妇数据，或直接传入 pregnant_id 参数",
+        }
 
     def _report():
         from ...database import SessionLocal
         from ...models import NurseDoctorIssue
 
+        # 从 run_context 获取实际操作护士 ID，用于审计追溯
+        reporter = "nurse_ai"
+        if run_context is not None and hasattr(run_context, "user_id") and run_context.user_id:
+            reporter = run_context.user_id
+
         db = SessionLocal()
         try:
             issue = NurseDoctorIssue(
-                pregnant_id=pid, reported_by="nurse_ai", issue_type="risk_alert",
+                pregnant_id=pid, reported_by=reporter, issue_type="risk_alert",
                 title=title, description=description, priority=priority, status="pending",
             )
             db.add(issue)
@@ -204,6 +220,7 @@ async def agno_report_issue_to_doctor(
             db.close()
 
     result = await asyncio.to_thread(_report)
+    tool_metrics.record("agno_report_issue_to_doctor", (_time.perf_counter() - _t0) * 1000)
     if run_context and run_context.session_state:
         run_context.session_state.pop("last_queried_patient", None)
     return result

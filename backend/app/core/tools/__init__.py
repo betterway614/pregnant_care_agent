@@ -4,12 +4,11 @@
 本模块从各子模块收集所有 @tool 函数并导出，
 供 agno_tools.py 重新导出以保持向后兼容。
 """
-from .nlu_tools import agno_parse_nlu, agno_get_nlu_result, agno_check_emergency
+from .nlu_tools import agno_get_nlu_result, agno_check_emergency
 from .health_data_tools import (
     agno_save_health_data,
     agno_get_patient_context,
-    agno_should_ask_weight,
-    agno_should_ask_bp,
+    agno_get_pending_prompts,
     agno_analyze_health_trends,
     agno_get_epds_result,
 )
@@ -28,15 +27,15 @@ from .routing import (
     INTENT_TO_GROUP,
     resolve_tools_by_intent, resolve_nurse_tools_by_intent, resolve_doctor_tools_by_intent,
 )
-from .common import _resolve_pid, truncate_tool_result
+from .common import _resolve_pid, truncate_tool_result, tool_metrics
 from .health_data_tools import _save_health_data_sync, _get_patient_context_sync, _analyze_health_trends_sync
 
 __all__ = [
     # NLU
-    "agno_parse_nlu", "agno_get_nlu_result", "agno_check_emergency",
+    "agno_get_nlu_result", "agno_check_emergency",
     # 健康数据
     "agno_save_health_data", "agno_get_patient_context",
-    "agno_should_ask_weight", "agno_should_ask_bp",
+    "agno_get_pending_prompts",
     "agno_analyze_health_trends", "agno_get_epds_result",
     # 规则引擎
     "agno_evaluate_vital_rules",
@@ -55,4 +54,5 @@ __all__ = [
     # 通用
     "_resolve_pid",
     "truncate_tool_result",
+    "tool_metrics",
 ]

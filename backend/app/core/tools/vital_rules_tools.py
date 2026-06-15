@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import time as _time
+
 from agno.run import RunContext
 from agno.tools import tool
 
@@ -30,6 +32,7 @@ def agno_evaluate_vital_rules(
     """评估生命体征规则，返回触发的告警列表。用于检测异常指标。
     未传入的指标不会参与评估（避免缺失数据被误判为异常值）。
     pregnant_id 可选，留空时自动使用当前登录用户。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     from ..rule_engine import rule_engine
 
@@ -62,4 +65,4 @@ def agno_evaluate_vital_rules(
         "alerts": alerts[:5],
         "alert_count": len(alerts),
         "has_critical": any(a["level"] == "RED" for a in alerts),
-    })
+    }, tool_name="agno_evaluate_vital_rules", tool_start_time=_t0)

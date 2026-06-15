@@ -19,9 +19,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - NLU 意图驱动动态工具注入: `Agent.tools` 可变属性，Router 层根据 NLU 结果选择工具子集
 - 流式输出: chat 变体无 `output_schema`，保持 SSE 逐 chunk 推送；结构化输出用 `arun(output_schema=...)` 运行时覆盖
 - Agent 工厂全部 `@lru_cache(maxsize=1)` 单例复用，session_state 按 session_id 隔离
-- 安全护栏: `agno_guardrails.py` (紧急检测 + 医学安全)
+- **安全护栏 (全角色)**: 所有 Agent 均注入 `pre_hooks=[EmergencyGuardrail()]` (紧急检测)，孕妇/护士 `post_hooks=[MedicalSafetyGuardrail/NurseSafetyGuardrail]` (输出拦截)，医生 `post_hooks=[DoctorDraftGuardrail]` (草稿安全)
 - 会话持久化: PostgreSQL 优先，回退 SQLite
 - SSE 前端自动重连: 最多重试 2 次，指数退避
+
+**智能体工具系统** (`backend/app/core/tools/`)
+- 子包拆分: `nlu_tools` / `health_data_tools` / `vital_rules_tools` / `nurse_tools` / `doctor_tools` / `routing` / `common`
+- 当前 **16 个 @tool** 函数，按角色硬隔离: `MEDICAL_TOOLS`(8) / `NURSE_TOOLS`(6) / `DOCTOR_TOOLS`(8)，共享 2 个通用工具 (`analyze_health_trends`, `evaluate_vital_rules`)
+- 工具路由: `routing.py` — NLU 意图 → 工具子集 + variant 名称，运行时 `agent.tools = subset` 动态注入
+- 知识检索 (RAG) 条件化: analyze/chat 变体开启 `search_knowledge=True`，followup/report/order/issue 变体关闭以减少 token 浪费
+- chat-full 变体 (NLU 兜底): nurse `tool_call_limit=5` (6 tools)，doctor `tool_call_limit=6` (8 tools)
+- **工具可观测性**: `common.py` → `ToolMetrics` 全局单例 `tool_metrics`；每个 @tool 函数入口 `_t0 = time.perf_counter()` + 出口 `record(name, duration_ms)`；per-session 增量通过 `start_session()`/`end_session()` → `AuditService.save_log(tool_metrics_session=…)` 持久化到 `AgentAuditLog.tool_metrics_json` + `ToolCallDetail.latency_ms`
+- **工作流**: 孕妇端 `prenatal_workflow` (症状/检查)；护士端 `nurse_workflow` (分析→评估上报)；医生端 `doctor_workflow` (分析→指南→医嘱)
 
 **前端 (Vue 3 + TypeScript + Element Plus)**
 - 四角色端: 孕妇端、护士端、医生端、管理端
@@ -106,6 +115,7 @@ pregnent_care_agent/pregnant_care_agent/
 ├── backend/
 │   ├── app/
 │   │   ├── core/           # AI 引擎 (Agent/RAG/NLU/LLM)
+│   │   │   ├── tools/       # 16 个 @tool 函数 (nlu/health/nurse/doctor/routing/common)
 │   │   ├── models/         # SQLAlchemy ORM 模型
 │   │   ├── routers/        # 22个 API 路由模块
 │   │   ├── schemas/        # Pydantic 数据校验
@@ -138,7 +148,9 @@ pregnent_care_agent/pregnant_care_agent/
 ## 测试结构
 
 **后端测试** (pytest): `backend/tests/`
-- Agent 测试: test_agno_agent, test_agno_tools, test_agno_team, test_agent_optimization
+- Agent 测试: test_agno_agent, test_agno_tools (含工具路由+计数), test_agno_team, test_agent_optimization (动态注入+NLU路由)
+- 工具测试: test_refactored_components (工具拆分验证), test_agno_medical_agents (护士/医生 Agent)
+- 审计测试: test_audit_log, test_audit_integration (含 tool_metrics 持久化验证)
 - 业务逻辑: test_followup_fixes, test_alert_service, test_order_service
 - API 测试: test_bugfix_routes, test_orders_router (含 RAG 辅助生成测试)
 

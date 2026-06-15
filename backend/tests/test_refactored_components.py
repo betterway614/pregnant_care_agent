@@ -239,9 +239,9 @@ class TestToolsSplit:
     """验证工具拆分后向后兼容"""
 
     def test_medical_tools_count(self):
-        """MEDICAL_TOOLS 应包含所有主对话工具"""
+        """MEDICAL_TOOLS 应包含所有主对话工具（合并 should_ask 为 get_pending_prompts 后为 8 个）"""
         from app.core.agno_tools import MEDICAL_TOOLS
-        assert len(MEDICAL_TOOLS) == 9
+        assert len(MEDICAL_TOOLS) == 8
 
     def test_nurse_tools_count(self):
         """NURSE_TOOLS 应包含护士工具"""
@@ -256,10 +256,10 @@ class TestToolsSplit:
     def test_tools_importable_from_facade(self):
         """所有工具应可从 agno_tools 门面模块导入"""
         from app.core.agno_tools import (
-            agno_parse_nlu, agno_check_emergency,
+            agno_check_emergency,
             agno_save_health_data, agno_get_patient_context,
             agno_evaluate_vital_rules, agno_analyze_health_trends,
-            agno_get_epds_result, agno_should_ask_weight, agno_should_ask_bp,
+            agno_get_epds_result, agno_get_pending_prompts,
             agno_query_patient_data, agno_create_followup_record,
             agno_analyze_patient_comprehensive, agno_generate_medical_order,
             agno_handle_issue, agno_query_clinical_guideline,

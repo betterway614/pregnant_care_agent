@@ -252,6 +252,9 @@ def _ensure_audit_log_table():
                 if "nlu_detail_json" not in audit_cols:
                     conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN nlu_detail_json JSON"))
                     logger.info("agent_audit_logs 添加 nlu_detail_json 列")
+                if "tool_metrics_json" not in audit_cols:
+                    conn.execute(sa.text("ALTER TABLE agent_audit_logs ADD COLUMN tool_metrics_json JSON"))
+                    logger.info("agent_audit_logs 添加 tool_metrics_json 列")
                 # 复合索引：加速 Dashboard 聚合查询
                 try:
                     conn.execute(sa.text(

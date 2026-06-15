@@ -377,7 +377,7 @@ def test_admin_session_endpoint():
     mock_log.input_tokens = 500
     mock_log.output_tokens = 100
     mock_log.total_tokens = 600
-    mock_log.tool_calls_json = [{"name": "agno_parse_nlu", "success": True}]
+    mock_log.tool_calls_json = [{"name": "agno_get_nlu_result", "success": True}]
     mock_log.model_id = "qwen3-30b"
     mock_log.total_latency_ms = 1200
     mock_log.guardrail_triggered = False

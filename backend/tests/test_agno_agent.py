@@ -79,7 +79,7 @@ def _get_factories():
     ("record", None, 4, 4),
     ("qa", None, 2, 4),
     ("emergency", None, 2, 1),
-    ("complex", None, 9, 8),
+    ("complex", None, 8, 8),  # MEDICAL_TOOLS 合并 should_ask 后从 9 减为 8
 ])
 def test_agent_variant_tool_count_and_limit(variant_name, factory, expected_tools, expected_limit):
     """验证各变体的工具数量和 tool_call_limit"""

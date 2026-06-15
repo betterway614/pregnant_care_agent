@@ -89,7 +89,7 @@ def test_agent_audit_log_tool_calls_json():
     from app.models import AgentAuditLog
 
     tool_calls = [
-        {"name": "agno_parse_nlu", "success": True},
+        {"name": "agno_get_nlu_result", "success": True},
         {"name": "agno_get_patient_context", "success": True, "duration_ms": 45},
     ]
 
@@ -108,7 +108,7 @@ def test_agent_audit_log_tool_calls_json():
         tool_calls_json=tool_calls,
     )
     assert len(log.tool_calls_json) == 2
-    assert log.tool_calls_json[0]["name"] == "agno_parse_nlu"
+    assert log.tool_calls_json[0]["name"] == "agno_get_nlu_result"
 
 
 def test_agent_audit_log_response_preview_truncation():
@@ -324,7 +324,7 @@ def test_tool_call_detail_defaults():
 
     detail = ToolCallDetail(
         audit_log_id=3,
-        tool_name="agno_parse_nlu",
+        tool_name="agno_get_nlu_result",
     )
     assert detail.tool_args_json is None
     assert detail.error_message is None

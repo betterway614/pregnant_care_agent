@@ -9,12 +9,13 @@ DIP 改进: 优先通过 run_context.dependencies 获取仓储实例，
 from __future__ import annotations
 
 import asyncio
+import time as _time
 
 from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid, truncate_tool_result
+from .common import _resolve_pid, truncate_tool_result, tool_metrics
 
 
 def _get_patient_repo(run_context: RunContext | None):
@@ -53,7 +54,7 @@ def _save_health_data_sync(
     db = SessionLocal()
     try:
         for key, value in values.items():
-            if value and value > 0:
+            if value is not None and value >= 0:
                 code, unit = metric_map[key]
                 point = HealthDataPoint(
                     pregnant_id=pregnant_id, metric_code=code,
@@ -74,31 +75,36 @@ def _save_health_data_sync(
 @tool
 async def agno_save_health_data(
     pregnant_id: str = "", run_context: RunContext | None = None,
-    weight: float = 0, sbp: float = 0, dbp: float = 0,
-    fetal_movement: float = 0, blood_sugar: float = 0,
-    heart_rate: float = 0, sleep_hours: float = 0, steps: float = 0,
+    weight: float | None = None, sbp: float | None = None, dbp: float | None = None,
+    fetal_movement: float | None = None, blood_sugar: float | None = None,
+    heart_rate: float | None = None, sleep_hours: float | None = None, steps: float | None = None,
 ) -> dict:
-    """保存孕妇健康数据到数据库。只传入有值的参数，0 表示未提供。
+    """保存孕妇健康数据到数据库。只传入有值的参数，None 表示未提供。
+    注意：fetal_movement=0 是合法的医学信号（提示胎儿宫内窘迫），不会被忽略。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     metrics = {}
     for name, val in [("weight", weight), ("sbp", sbp), ("dbp", dbp),
                        ("fetal_movement", fetal_movement), ("blood_sugar", blood_sugar),
                        ("heart_rate", heart_rate), ("sleep_hours", sleep_hours), ("steps", steps)]:
-        if val and val > 0:
+        if val is not None and val >= 0:
             metrics[name] = val
 
     # DIP: 优先使用仓储接口
     repo = _get_patient_repo(run_context)
     if repo is not None:
         saved = await asyncio.to_thread(repo.save_health_metrics, pid, metrics, "CHAT")
+        tool_metrics.record("agno_save_health_data", (_time.perf_counter() - _t0) * 1000)
         return {"saved_metrics": saved, "count": len(saved)}
 
     # 回退: 直接 DB 访问
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         _save_health_data_sync, pid, weight, sbp, dbp,
         fetal_movement, blood_sugar, heart_rate, sleep_hours, steps,
     )
+    tool_metrics.record("agno_save_health_data", (_time.perf_counter() - _t0) * 1000)
+    return result
 
 
 # ==================== 患者上下文查询 ====================
@@ -132,6 +138,7 @@ def _get_patient_context_sync(pregnant_id: str) -> dict:
 async def agno_get_patient_context(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
     """获取孕妇的完整上下文信息：孕周、风险标签、昵称、最近健康数据。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
 
     # DIP: 优先使用仓储接口
@@ -142,30 +149,48 @@ async def agno_get_patient_context(pregnant_id: str = "", run_context: RunContex
             return {"error": "孕妇不存在"}
         recent = await asyncio.to_thread(repo.get_recent_health_data, pid, 5)
         alerts = await asyncio.to_thread(repo.get_active_alerts, pid)
-        return truncate_tool_result({**basic, "recent_data": recent, "active_alerts": alerts})
+        return truncate_tool_result({**basic, "recent_data": recent, "active_alerts": alerts},
+                                    tool_name="agno_get_patient_context", tool_start_time=_t0)
 
     # 回退: 直接 DB 访问
     raw = await asyncio.to_thread(_get_patient_context_sync, pid)
-    return truncate_tool_result(raw)
+    return truncate_tool_result(raw, tool_name="agno_get_patient_context", tool_start_time=_t0)
 
 
-# ==================== 记忆查询 ====================
+# ==================== 待上报提醒 ====================
+
+
+# 待提醒的指标及其提示语配置（OCP：新增指标只需添加条目）
+_PENDING_METRIC_CONFIG: list[tuple[str, str, str]] = [
+    ("weight", "should_ask_weight", "请记录今天的体重（kg）"),
+    ("bp", "should_ask_bp", "请记录今天的血压（mmHg，如120/80）"),
+]
 
 
 @tool
-def agno_should_ask_weight(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
-    """检查今天是否需要询问孕妇体重。pregnant_id 可选，留空时自动使用当前登录用户。"""
+def agno_get_pending_prompts(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
+    """检查今天需要提醒孕妇上报哪些健康数据。返回待上报的指标列表和提示语。
+    pregnant_id 可选，留空时自动使用当前登录用户。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     from ..memory_manager import memory_manager
-    return {"pregnant_id": pid, "should_ask": memory_manager.should_ask_weight(pid)}
 
+    pending_metrics = []
+    prompts = []
+    for metric, method_name, prompt_text in _PENDING_METRIC_CONFIG:
+        should_ask = getattr(memory_manager, method_name)(pid)
+        if should_ask:
+            pending_metrics.append(metric)
+            prompts.append(prompt_text)
 
-@tool
-def agno_should_ask_bp(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
-    """检查今天是否需要询问孕妇血压。pregnant_id 可选，留空时自动使用当前登录用户。"""
-    pid = _resolve_pid(pregnant_id, run_context)
-    from ..memory_manager import memory_manager
-    return {"pregnant_id": pid, "should_ask": memory_manager.should_ask_bp(pid)}
+    result = {
+        "pregnant_id": pid,
+        "pending_metrics": pending_metrics,
+        "prompts": prompts,
+        "has_pending": len(pending_metrics) > 0,
+    }
+    tool_metrics.record("agno_get_pending_prompts", (_time.perf_counter() - _t0) * 1000)
+    return result
 
 
 # ==================== 趋势分析 ====================
@@ -210,9 +235,10 @@ def _analyze_health_trends_sync(pregnant_id: str) -> dict:
 async def agno_analyze_health_trends(pregnant_id: str = "", run_context: RunContext | None = None) -> dict:
     """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     raw = await asyncio.to_thread(_analyze_health_trends_sync, pid)
-    return truncate_tool_result(raw)
+    return truncate_tool_result(raw, tool_name="agno_analyze_health_trends", tool_start_time=_t0)
 
 
 # ==================== 心理筛查 ====================
@@ -233,8 +259,10 @@ _EPDS_THRESHOLDS: list[tuple[int, str, str, list[str]]] = [
 @tool
 def agno_get_epds_result(total_score: int) -> dict:
     """根据EPDS量表总分返回心理健康筛查结果和建议。分数范围0-30。"""
+    _t0 = _time.perf_counter()
     for threshold, level, desc, recs in _EPDS_THRESHOLDS:
         if total_score <= threshold:
+            tool_metrics.record("agno_get_epds_result", (_time.perf_counter() - _t0) * 1000)
             return {
                 "total_score": total_score,
                 "risk_level": level,
@@ -242,4 +270,5 @@ def agno_get_epds_result(total_score: int) -> dict:
                 "recommendations": recs,
             }
     _, level, desc, recs = _EPDS_THRESHOLDS[-1]
+    tool_metrics.record("agno_get_epds_result", (_time.perf_counter() - _t0) * 1000)
     return {"total_score": total_score, "risk_level": level, "risk_description": desc, "recommendations": recs}

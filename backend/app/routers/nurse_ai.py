@@ -209,10 +209,14 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             "提供护理分析。请先调用工具获取最新数据，再输出结构化分析结果。"
         )
 
+        from ..core.agno_tools import tool_metrics as _tm
+
         agent = get_nurse_analyze_agent()
+        _tm.start_session()
         t0 = time.time()
         response = await agent.arun(input=prompt, user_id=pregnant.pregnant_id)
         elapsed_ms = int((time.time() - t0) * 1000)
+        _metrics_snap = _tm.end_session()
         await asyncio.to_thread(
             AuditService.save_log,
             session_id=f"nurse_analyze_{pregnant.pregnant_id}",
@@ -223,6 +227,7 @@ async def _try_llm_nurse_analyze(pregnant: Pregnant, gest_week: int, gest_day: i
             user_message=None,
             run_response=response,
             total_latency_ms=elapsed_ms,
+            tool_metrics_session=_metrics_snap,
         )
         data = extract_structured_content(response.content)
         if not data:
@@ -478,8 +483,8 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    from ..core.agno_medical_agents import get_nurse_chat_variant_agent
-    from ..core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS
+    from ..core.agno_medical_agents import get_nurse_chat_variant_agent, get_nurse_agent
+    from ..core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS, tool_metrics
     from ..core.agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 
     # 1. NLU 意图解析 — 结果用于动态工具选择 + 上下文注入
@@ -521,6 +526,11 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
         agent = get_nurse_chat_variant_agent()
         agent.tools = NURSE_TOOLS
 
+    # 复杂意图：升级到全量工具 Agent，支持多步工具链（查询→分析→上报→随访）
+    if intent_variant == "complex":
+        logger.info("护士端复杂意图，升级到全量工具 Agent")
+        agent = get_nurse_agent()
+
     # 会话 ID：前端传入或自动生成（用于 Agent 多轮对话上下文管理）
     # 安全校验：前端传入的 session_id 必须匹配当前 pregnant_id，防止越权访问他人对话
     if req.session_id:
@@ -544,8 +554,11 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             done_source="NURSE_AI",
         )
 
+        tool_metrics.start_session()
         async for event in agno_sse_event_generator(config, state):
             yield event
+
+        metrics_snap = tool_metrics.end_session()
 
         # 审计日志（后台异步写入，不阻塞响应）
         _bg_task = asyncio.create_task(asyncio.to_thread(
@@ -558,6 +571,7 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             user_message=message,
             run_response=state.run_response,
             total_latency_ms=state.elapsed_ms,
+            tool_metrics_session=metrics_snap,
         ))
         _bg_task.add_done_callback(_audit_tasks.discard)
         _audit_tasks.add(_bg_task)

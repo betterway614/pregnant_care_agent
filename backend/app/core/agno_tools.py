@@ -18,10 +18,10 @@ from __future__ import annotations
 # 从子包重新导出所有内容，保持向后兼容
 from .tools import (
     # NLU
-    agno_parse_nlu, agno_get_nlu_result, agno_check_emergency,
+    agno_get_nlu_result, agno_check_emergency,
     # 健康数据
     agno_save_health_data, agno_get_patient_context,
-    agno_should_ask_weight, agno_should_ask_bp,
+    agno_get_pending_prompts,
     agno_analyze_health_trends, agno_get_epds_result,
     # 规则引擎
     agno_evaluate_vital_rules,
@@ -40,6 +40,7 @@ from .tools import (
     # 通用
     _resolve_pid,
     truncate_tool_result,
+    tool_metrics,
 )
 
 # 重新导出内部辅助函数和模块级变量（测试可能直接导入）
@@ -55,10 +56,10 @@ from .tools.nlu_context import (
 )
 
 __all__ = [
-    "agno_parse_nlu", "agno_get_nlu_result", "agno_check_emergency",
+    "agno_get_nlu_result", "agno_check_emergency",
     "agno_evaluate_vital_rules",
     "agno_save_health_data", "agno_get_patient_context",
-    "agno_should_ask_weight", "agno_should_ask_bp",
+    "agno_get_pending_prompts",
     "agno_analyze_health_trends", "agno_get_epds_result",
     "agno_list_patients", "agno_query_patient_data", "agno_create_followup_record", "agno_report_issue_to_doctor",
     "agno_analyze_patient_comprehensive", "agno_generate_medical_order",
@@ -70,4 +71,5 @@ __all__ = [
     "resolve_tools_by_intent", "resolve_nurse_tools_by_intent", "resolve_doctor_tools_by_intent",
     "_resolve_pid",
     "truncate_tool_result",
+    "tool_metrics",
 ]

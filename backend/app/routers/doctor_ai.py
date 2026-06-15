@@ -209,13 +209,17 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             f"{alert_context}{extra}"
         )
 
+        from ..core.agno_tools import tool_metrics as _tm
+
         agent = get_doctor_analyze_agent()
+        _tm.start_session()
         t0 = time.time()
         response = await asyncio.wait_for(
             agent.arun(input=prompt, user_id=pregnant.pregnant_id),
             timeout=120,
         )
         elapsed_ms = int((time.time() - t0) * 1000)
+        _metrics_snap = _tm.end_session()
         await asyncio.to_thread(
             AuditService.save_log,
             session_id=f"doctor_analyze_{pregnant.pregnant_id}",
@@ -226,6 +230,7 @@ async def _try_llm_doctor_analyze(pregnant: Pregnant, gest_week: int, gest_day: 
             user_message=None,
             run_response=response,
             total_latency_ms=elapsed_ms,
+            tool_metrics_session=_metrics_snap,
         )
         data = extract_structured_content(response.content)
         if not data:
@@ -579,8 +584,8 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    from ..core.agno_medical_agents import get_doctor_chat_variant_agent
-    from ..core.agno_tools import resolve_doctor_tools_by_intent, DOCTOR_TOOLS
+    from ..core.agno_medical_agents import get_doctor_chat_variant_agent, get_doctor_agent
+    from ..core.agno_tools import resolve_doctor_tools_by_intent, DOCTOR_TOOLS, tool_metrics
     from ..core.agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 
     # 1. NLU 意图解析 — 结果用于动态工具选择 + 上下文注入
@@ -622,6 +627,11 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
         agent = get_doctor_chat_variant_agent()
         agent.tools = DOCTOR_TOOLS
 
+    # 复杂意图：升级到全量工具 Agent，支持多步工具链（分析→指南检索→医嘱建议）
+    if intent_variant == "complex":
+        logger.info("医生端复杂意图，升级到全量工具 Agent")
+        agent = get_doctor_agent()
+
     # 会话 ID：前端传入或自动生成
     # 安全校验：前端传入的 session_id 必须匹配当前 pregnant_id
     if req.session_id:
@@ -645,8 +655,11 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             done_source="DOCTOR_AI",
         )
 
+        tool_metrics.start_session()
         async for event in agno_sse_event_generator(config, state):
             yield event
+
+        metrics_snap = tool_metrics.end_session()
 
         # 审计日志（后台异步写入，不阻塞响应）
         def _on_audit_done(task):
@@ -665,6 +678,7 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             user_message=message,
             run_response=state.run_response,
             total_latency_ms=state.elapsed_ms,
+            tool_metrics_session=metrics_snap,
         ))
         _bg_task.add_done_callback(_on_audit_done)
         _audit_tasks.add(_bg_task)

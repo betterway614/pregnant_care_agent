@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time as _time
 from uuid import UUID
 
 from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid, truncate_tool_result
+from .common import _resolve_pid, truncate_tool_result, tool_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context:
     """综合分析孕妇数据，包括健康指标趋势、风险评估、医嘱评价。
     当医生需要全面了解孕妇情况时使用此工具。
     分析结果会保存到 session_state，供后续工具使用。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid:
         return {"error": "未指定孕妇"}
@@ -108,7 +110,7 @@ async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context:
             # session_state 保留完整数据供后续工具链使用
             run_context.session_state["last_analyzed_patient"] = {"pregnant_id": pid, "analysis": result}
     # 返回给 LLM 的结果做截断，防止对话历史上下文膨胀
-    return truncate_tool_result(result)
+    return truncate_tool_result(result, tool_name="agno_analyze_patient_comprehensive", tool_start_time=_t0)
 
 
 @tool
@@ -119,13 +121,17 @@ async def agno_generate_medical_order(
     """生成医嘱草稿。
     当医生需要开具医嘱时使用此工具。
     如果之前调用过 agno_analyze_patient_comprehensive，可以不传 pregnant_id。异步安全。"""
+    _t0 = _time.perf_counter()
     pid = _resolve_pid(pregnant_id, run_context)
     if not pid and run_context and run_context.session_state:
         last_analyzed = run_context.session_state.get("last_analyzed_patient")
         if last_analyzed:
             pid = last_analyzed.get("pregnant_id", "")
     if not pid:
-        return {"error": "未指定孕妇，请先分析患者数据或指定 pregnant_id"}
+        return {
+            "error": "未指定孕妇",
+            "hint": "请先调用 agno_analyze_patient_comprehensive 获取患者数据，或直接传入 pregnant_id 参数",
+        }
 
     def _generate():
         from ...database import SessionLocal
@@ -144,6 +150,7 @@ async def agno_generate_medical_order(
             db.close()
 
     result = await asyncio.to_thread(_generate)
+    tool_metrics.record("agno_generate_medical_order", (_time.perf_counter() - _t0) * 1000)
     if run_context and run_context.session_state:
         run_context.session_state.pop("last_analyzed_patient", None)
     return result
@@ -153,6 +160,7 @@ async def agno_generate_medical_order(
 async def agno_handle_issue(issue_id: str = "", resolution: str = "", run_context: RunContext | None = None) -> dict:
     """处理护士上报的问题。
     当医生需要处理问题时使用此工具。异步安全。"""
+    _t0 = _time.perf_counter()
 
     def _handle():
         from ...database import SessionLocal
@@ -175,7 +183,9 @@ async def agno_handle_issue(issue_id: str = "", resolution: str = "", run_contex
         finally:
             db.close()
 
-    return await asyncio.to_thread(_handle)
+    result = await asyncio.to_thread(_handle)
+    tool_metrics.record("agno_handle_issue", (_time.perf_counter() - _t0) * 1000)
+    return result
 
 
 @tool
@@ -187,6 +197,7 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
     2. 回退: 硬编码临床指南库 (clinical_guidelines_fallback.py)，
        包含 12 个核心主题的完整临床关键点，内容提取自 knowledge_docs/
     """
+    _t0 = _time.perf_counter()
     # ── 优先路径: RAG 知识库检索 ──
     try:
         from ..agno_knowledge import knowledge
@@ -199,11 +210,12 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             filters=[IN("audience", ["doctor", "nurse", "all"])],
         )
         if results:
-            return truncate_tool_result({
+            tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)
+            return {
                 "topic": topic,
                 "guidelines": [doc.content[:300] if hasattr(doc, "content") else str(doc)[:300] for doc in results],
                 "source": "knowledge_base",
-            })
+            }
     except Exception:
         pass
 
@@ -217,13 +229,15 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             header = f"【{entry['title']}】(来源: {entry['source']})"
             points = "\n".join(f"  {p}" for p in entry.get("key_points", [])[:5])
             guidelines_text.append(f"{header}\n{points}")
-        return truncate_tool_result({
+        tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)
+        return {
             "topic": topic,
             "guidelines": guidelines_text,
             "source": "hardcoded_fallback",
-        })
+        }
 
     # 完全无匹配时返回通用提示
+    tool_metrics.record("agno_query_clinical_guideline", (_time.perf_counter() - _t0) * 1000)
     return {
         "topic": topic,
         "guidelines": [

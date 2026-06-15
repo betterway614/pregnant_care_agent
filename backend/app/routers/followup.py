@@ -26,8 +26,8 @@ from ..database import SessionLocal
 from ..schemas import (
     FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
     FollowUpSignatureRequest, FollowUpRecordUpdateRequest,
-    FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_IN_PROGRESS,
-    FOLLOWUP_STATUS_COMPLETED,
+    FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_DRAFT,
+    FOLLOWUP_STATUS_IN_PROGRESS, FOLLOWUP_STATUS_COMPLETED,
 )
 from ..services import followup_service
 from ..core.auth import get_current_user, TokenPayload

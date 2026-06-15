@@ -26,14 +26,13 @@ from ..schemas import ChatSendRequest, ChatResponse
 from ..core.conversation_store import conversation_store
 from ..config import settings, get_asr_mode
 from ..services.audit_service import AuditService
-from .agno_tools import set_nlu_context, pop_nlu_context
+from .agno_tools import set_nlu_context, pop_nlu_context, tool_metrics
 
 # 保持后台审计任务引用，防止 fire-and-forget 被 GC 回收
 _audit_tasks: set = set()
 
 # 工具名称 → 用户友好的中文描述（用于前端 thinking 步骤展示）
 TOOL_THINKING_MAP: dict[str, str] = {
-    "agno_parse_nlu": "正在理解您的需求...",
     "agno_get_nlu_result": "正在理解您的需求...",
     "agno_check_emergency": "正在进行安全检查...",
     "search_knowledge_base": "正在查阅孕期知识库...",
@@ -41,8 +40,7 @@ TOOL_THINKING_MAP: dict[str, str] = {
     "agno_analyze_health_trends": "正在分析您的健康趋势...",
     "agno_evaluate_vital_rules": "正在评估健康指标...",
     "agno_save_health_data": "正在保存您的健康数据...",
-    "agno_should_ask_weight": "正在检查今日记录状态...",
-    "agno_should_ask_bp": "正在检查今日记录状态...",
+    "agno_get_pending_prompts": "正在检查今日记录状态...",
     "agno_get_epds_result": "正在分析心理评估结果...",
 }
 
@@ -251,7 +249,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         except Exception as e:
             logger.warning("工作流路由失败，回退到单Agent: {}", e)
 
-    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复调用 agno_parse_nlu
+    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复解析
     if nlu_result:
         nlu_context = (
             f"[系统预分析] 意图:{nlu_result.intent} "
@@ -267,6 +265,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
     agent = agent_factory()
 
     # 4. arun
+    tool_metrics.start_session()
     response = await agent.arun(
         input=agent_input,
         images=agent_images,
@@ -276,6 +275,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
 
     elapsed_ms = int((time.time() - start_time) * 1000)
     content = response.content or ""
+    metrics_snap = tool_metrics.end_session()
 
     # 5. 审计日志（通过线程池执行同步 DB 写入，避免阻塞事件循环）
     import asyncio
@@ -290,6 +290,7 @@ async def handle_chat_with_agno(req: ChatSendRequest) -> ChatResponse:
         nlu_detail=nlu_dict if nlu_result else None,
         run_response=response,
         total_latency_ms=elapsed_ms,
+        tool_metrics_session=metrics_snap,
     )
 
     # 6. 对话持久化
@@ -420,7 +421,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
         except Exception as e:
             logger.warning("工作流路由失败，回退到单Agent: {}", e)
 
-    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复调用 agno_parse_nlu
+    # 2. 注入 NLU 预分析结果到 agent_input，避免 Agent 内重复解析
     if nlu_result:
         nlu_context = (
             f"[系统预分析] 意图:{nlu_result.intent} "
@@ -455,8 +456,11 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
     )
 
     try:
+        tool_metrics.start_session()
         async for event in agno_sse_event_generator(config, state):
             yield event
+
+        metrics_snap = tool_metrics.end_session()
 
         # 审计日志（后台异步写入，不阻塞 SSE 响应）
         import asyncio
@@ -471,6 +475,7 @@ async def handle_chat_with_agno_stream(req: ChatSendRequest) -> AsyncGenerator[d
             nlu_detail=nlu_dict if nlu_result else None,
             run_response=state.run_response,
             total_latency_ms=state.elapsed_ms,
+            tool_metrics_session=metrics_snap,
         ))
         _bg_audit_task.add_done_callback(_audit_tasks.discard)
         _audit_tasks.add(_bg_audit_task)

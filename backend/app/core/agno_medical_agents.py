@@ -14,7 +14,7 @@ from agno.agent import Agent
 from agno.filters import IN
 from ..config import settings
 from .agno_client import get_agno_model
-from .agno_guardrails import NurseSafetyGuardrail, DoctorDraftGuardrail
+from .agno_guardrails import EmergencyGuardrail, NurseSafetyGuardrail, DoctorDraftGuardrail
 from .agno_knowledge import knowledge as medical_knowledge
 from .agno_tools import (
     NURSE_TOOLS, DOCTOR_TOOLS, NURSE_TOOL_GROUPS, DOCTOR_TOOL_GROUPS,
@@ -74,13 +74,18 @@ def _create_doctor_db():
     return _create_db("agent_sessions_doctor", _doctor_db_path)
 
 
-def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
+def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None, enable_knowledge: bool = True) -> Agent:
     """护士 Agent 通用构造器
 
     知识检索机制:
+        enable_knowledge=False 时关闭 RAG，减少非必要场景的误触发和 token 消耗。
         search_knowledge=True 触发 Agno 框架自动注入 search_knowledge_base 工具。
         角色级过滤通过 knowledge_filters=_NURSE_KNOWLEDGE_FILTERS 控制，
         仅返回 audience 为 'nurse' 或 'all' 的知识条目。
+
+    安全护栏:
+        pre_hooks=[EmergencyGuardrail()] 确保紧急消息在 LLM 推理前被拦截，
+        与孕妇端行为一致。
     """
     kwargs = dict(
         name=f"小护-{variant_name}",
@@ -93,14 +98,17 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
         num_history_runs=4,
         add_datetime_to_context=True,
         markdown=True,
+        pre_hooks=[EmergencyGuardrail()],
         post_hooks=[NurseSafetyGuardrail()],
         tool_call_limit=tool_call_limit,
         max_tool_calls_from_history=2,
     )
-    if medical_knowledge is not None:
+    if medical_knowledge is not None and enable_knowledge:
         kwargs["knowledge"] = medical_knowledge
         kwargs["search_knowledge"] = True
         kwargs["knowledge_filters"] = _NURSE_KNOWLEDGE_FILTERS
+    elif medical_knowledge is not None and not enable_knowledge:
+        logger.debug("[RAG] Nurse Agent '%s': knowledge 可用但主动关闭检索 (非知识场景)", variant_name)
     else:
         logger.warning("[RAG] Nurse Agent '%s': medical_knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
     if use_schema:
@@ -108,8 +116,15 @@ def _build_nurse_agent_variant(variant_name: str, tools: list, tool_call_limit: 
     return Agent(**kwargs)
 
 
-def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None) -> Agent:
-    """医生 Agent 通用构造器"""
+def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit: int, use_schema: bool = True, instructions: list[str] | None = None, enable_knowledge: bool = True) -> Agent:
+    """医生 Agent 通用构造器
+
+    知识检索机制:
+        enable_knowledge=False 时关闭 RAG，减少非必要场景的误触发和 token 消耗。
+
+    安全护栏:
+        pre_hooks=[EmergencyGuardrail()] 确保紧急消息在 LLM 推理前被拦截。
+    """
     kwargs = dict(
         name=f"智医-{variant_name}",
         model=get_agno_model(role="doctor"),
@@ -121,14 +136,17 @@ def _build_doctor_agent_variant(variant_name: str, tools: list, tool_call_limit:
         num_history_runs=4,
         add_datetime_to_context=True,
         markdown=True,
+        pre_hooks=[EmergencyGuardrail()],
         post_hooks=[DoctorDraftGuardrail()],
         tool_call_limit=tool_call_limit,
         max_tool_calls_from_history=2,
     )
-    if medical_knowledge is not None:
+    if medical_knowledge is not None and enable_knowledge:
         kwargs["knowledge"] = medical_knowledge
         kwargs["search_knowledge"] = True
         kwargs["knowledge_filters"] = _DOCTOR_KNOWLEDGE_FILTERS
+    elif medical_knowledge is not None and not enable_knowledge:
+        logger.debug("[RAG] Doctor Agent '%s': knowledge 可用但主动关闭检索 (非知识场景)", variant_name)
     else:
         logger.warning("[RAG] Doctor Agent '%s': medical_knowledge 不可用，禁用知识库检索。请检查 RAG_ENABLED 和 DB_TYPE 配置。", variant_name)
     if use_schema:
@@ -159,14 +177,14 @@ def get_nurse_analyze_agent() -> Agent:
 
 @lru_cache(maxsize=1)
 def get_nurse_followup_agent() -> Agent:
-    """护士随访变体（2 tools: create_followup + query）"""
-    return _build_nurse_agent_variant("followup", NURSE_TOOL_GROUPS["followup"], tool_call_limit=2, instructions=get_nurse_followup_prompt_instructions())
+    """护士随访变体（2 tools: create_followup + query，无需知识检索）"""
+    return _build_nurse_agent_variant("followup", NURSE_TOOL_GROUPS["followup"], tool_call_limit=2, instructions=get_nurse_followup_prompt_instructions(), enable_knowledge=False)
 
 
 @lru_cache(maxsize=1)
 def get_nurse_report_agent() -> Agent:
-    """护士上报变体（2 tools: report_issue + query）"""
-    return _build_nurse_agent_variant("report", NURSE_TOOL_GROUPS["report"], tool_call_limit=2, instructions=get_nurse_report_prompt_instructions())
+    """护士上报变体（2 tools: report_issue + query，无需知识检索）"""
+    return _build_nurse_agent_variant("report", NURSE_TOOL_GROUPS["report"], tool_call_limit=2, instructions=get_nurse_report_prompt_instructions(), enable_knowledge=False)
 
 
 @lru_cache(maxsize=1)
@@ -185,14 +203,14 @@ def get_doctor_analyze_agent() -> Agent:
 
 @lru_cache(maxsize=1)
 def get_doctor_order_agent() -> Agent:
-    """医生医嘱变体（2 tools: generate_order + comprehensive）"""
-    return _build_doctor_agent_variant("order", DOCTOR_TOOL_GROUPS["order"], tool_call_limit=2)
+    """医生医嘱变体（2 tools: generate_order + comprehensive，无需知识检索）"""
+    return _build_doctor_agent_variant("order", DOCTOR_TOOL_GROUPS["order"], tool_call_limit=2, enable_knowledge=False)
 
 
 @lru_cache(maxsize=1)
 def get_doctor_issue_agent() -> Agent:
-    """医生问题处理变体（2 tools: handle_issue + comprehensive）"""
-    return _build_doctor_agent_variant("issue", DOCTOR_TOOL_GROUPS["issue"], tool_call_limit=2, instructions=get_doctor_issue_prompt_instructions())
+    """医生问题处理变体（2 tools: handle_issue + comprehensive，无需知识检索）"""
+    return _build_doctor_agent_variant("issue", DOCTOR_TOOL_GROUPS["issue"], tool_call_limit=2, instructions=get_doctor_issue_prompt_instructions(), enable_knowledge=False)
 
 
 @lru_cache(maxsize=1)
@@ -217,26 +235,26 @@ def get_doctor_agent() -> Agent:
 
 @lru_cache(maxsize=1)
 def get_nurse_chat_agent() -> Agent:
-    """获取护士对话 Agent（全量兜底，向后兼容）"""
-    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
+    """获取护士对话 Agent（全量兜底，6 tools，tool_call_limit=5 匹配工具数）"""
+    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=5, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
 
 
 @lru_cache(maxsize=1)
 def get_doctor_chat_agent() -> Agent:
-    """获取医生对话 Agent（全量兜底，向后兼容）"""
-    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
+    """获取医生对话 Agent（全量兜底，8 tools，tool_call_limit=6 匹配工具数）"""
+    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=6, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
 
 
-# ---- 向后兼容的 create_* 工厂函数 ----
+# ---- 向后兼容别名（委托到 get_* 单例） ----
 
 def create_nurse_chat_agent() -> Agent:
-    """创建护士对话 Agent（向后兼容别名）"""
-    return _build_nurse_agent_variant("chat-full", NURSE_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_nurse_chat_system_prompt_instructions())
+    """创建护士对话 Agent（向后兼容别名，委托到 get_nurse_chat_agent）"""
+    return get_nurse_chat_agent()
 
 
 def create_doctor_chat_agent() -> Agent:
-    """创建医生对话 Agent（向后兼容别名）"""
-    return _build_doctor_agent_variant("chat-full", DOCTOR_TOOLS, tool_call_limit=3, use_schema=False, instructions=get_doctor_chat_system_prompt_instructions())
+    """创建医生对话 Agent（向后兼容别名，委托到 get_doctor_chat_agent）"""
+    return get_doctor_chat_agent()
 
 
 # ---- 变体路由映射 ----

@@ -16,7 +16,7 @@ from __future__ import annotations
 from .nlu_tools import agno_check_emergency, agno_get_nlu_result
 from .health_data_tools import (
     agno_save_health_data, agno_get_patient_context,
-    agno_should_ask_weight, agno_should_ask_bp,
+    agno_get_pending_prompts,
     agno_analyze_health_trends, agno_get_epds_result,
 )
 from .vital_rules_tools import agno_evaluate_vital_rules
@@ -31,7 +31,7 @@ from .doctor_tools import (
 MEDICAL_TOOLS = [
     agno_get_nlu_result, agno_check_emergency,
     agno_evaluate_vital_rules, agno_save_health_data, agno_get_patient_context,
-    agno_should_ask_weight, agno_should_ask_bp,
+    agno_get_pending_prompts,
     agno_analyze_health_trends, agno_get_epds_result,
 ]
 
@@ -56,7 +56,7 @@ DOCTOR_TOOLS = [
 # 知识检索工具 search_knowledge_base 由 Agno 框架根据 search_knowledge=True 自动注入，不在此处显式列出
 
 TOOL_GROUPS: dict[str, list] = {
-    "chat": [agno_check_emergency, agno_get_patient_context, agno_get_epds_result, agno_save_health_data],
+    "chat": [agno_get_patient_context, agno_get_pending_prompts, agno_get_epds_result, agno_save_health_data],
     "record": [agno_get_nlu_result, agno_save_health_data, agno_evaluate_vital_rules, agno_get_patient_context],
     "qa": [agno_get_patient_context, agno_analyze_health_trends],
     "emergency": [agno_check_emergency, agno_get_patient_context],

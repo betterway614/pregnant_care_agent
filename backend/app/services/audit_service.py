@@ -128,6 +128,7 @@ class AuditService:
         include_tool_details: bool = True,
         nlu_detail: dict | None = None,
         operator_id: str | None = None,
+        tool_metrics_session: dict | None = None,
     ) -> int | None:
         """写入一条 AgentAuditLog（+ 可选 ToolCallDetail）
 
@@ -178,6 +179,7 @@ class AuditService:
                     include_tool_details=include_tool_details,
                     nlu_detail=nlu_detail,
                     operator_id=operator_id,
+                    tool_metrics_session=tool_metrics_session,
                 )
             except Exception as exc:
                 last_error = exc
@@ -205,6 +207,7 @@ class AuditService:
         include_tool_details: bool,
         nlu_detail: dict | None,
         operator_id: str | None,
+        tool_metrics_session: dict | None = None,
     ) -> int | None:
         """实际写入逻辑（无重试）"""
         # 守卫：流式异常时 run_response 可能为 None
@@ -278,6 +281,34 @@ class AuditService:
                         call_order=call_order,
                     ))
 
+        # ── 从 tool_metrics 填充 per-tool latency_ms ──
+        if tool_metrics_session and tool_call_details:
+            metrics_tools = tool_metrics_session.get("tools", {})
+            # 按 tool_name 匹配：同一次 session 中同一工具可能被调用多次，
+            # 按 call_order 顺序匹配 metrics 中的平均耗时作为近似值
+            for detail in tool_call_details:
+                if detail.tool_name in metrics_tools:
+                    mt = metrics_tools[detail.tool_name]
+                    # 优先使用单次 avg_ms 作为该调用的近似耗时
+                    detail.latency_ms = int(mt.get("avg_ms", 0))
+                    # 将 metrics 中的 call_count 标记到 result_preview 后面（不覆盖已有 preview）
+                    if detail.result_preview:
+                        detail.result_preview = (
+                            f"[{mt['call_count']}×{mt['avg_ms']}ms] {detail.result_preview}"[:200]
+                        )
+
+        # ── 工具调用指标摘要（写入专用列 tool_metrics_json）──
+        tool_metrics_payload = None
+        if tool_metrics_session:
+            tool_metrics_payload = {
+                "total_tool_calls": tool_metrics_session.get("total_tool_calls", 0),
+                "total_tool_ms": tool_metrics_session.get("total_tool_ms", 0),
+                "tools": {
+                    name: {"call_count": m["call_count"], "avg_ms": m["avg_ms"]}
+                    for name, m in tool_metrics_session.get("tools", {}).items()
+                },
+            }
+
         # ── 解析模型信息 ──
         model_id = ""
         provider = ""
@@ -346,6 +377,7 @@ class AuditService:
                 response_preview=response_preview,
                 user_message_preview=user_msg_preview,
                 nlu_detail_json=nlu_detail,
+                tool_metrics_json=tool_metrics_payload,
             )
             db.add(log_entry)
             db.flush()
