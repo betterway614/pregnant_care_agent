@@ -314,9 +314,9 @@ async def ai_review_followup(record_id: str, db: Session = Depends(get_db),
     # 尝试1: Agno Agent（120s 超时保护）
     try:
         import asyncio as _asyncio
-        from ..core.agno_medical_agents import create_followup_review_agent
+        from ..core.agno_medical_agents import get_followup_review_agent
         from ..core.agno_structured import extract_structured_content
-        agent = create_followup_review_agent()
+        agent = get_followup_review_agent()
         t0 = time.time()
         response = await _asyncio.wait_for(
             agent.arun(input=f"请审核以下随访记录，给出审核建议。\n\n{context}"),
@@ -899,8 +899,8 @@ async def _stream_followup_analysis(
     # 尝试1: Agno Agent 流式输出
     agno_success = False
     try:
-        from ..core.agno_medical_agents import create_followup_analysis_agent
-        agent = create_followup_analysis_agent()
+        from ..core.agno_medical_agents import get_followup_analysis_agent
+        agent = get_followup_analysis_agent()
         prompt = (
             f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
             f"孕妇：{patient_name}，孕{gest_week}周\n"
@@ -1133,9 +1133,9 @@ async def _generate_llm_summary(
 
     # 尝试1: Agno Agent 结构化输出
     try:
-        from ..core.agno_medical_agents import create_followup_analysis_agent
+        from ..core.agno_medical_agents import get_followup_analysis_agent
         from ..core.agno_structured import extract_structured_content
-        agent = create_followup_analysis_agent()
+        agent = get_followup_analysis_agent()
         prompt = (
             f"请分析以下孕妇的随访数据，生成结构化分析报告。\n\n"
             f"孕妇：{patient_name}，孕{gest_week}周\n"

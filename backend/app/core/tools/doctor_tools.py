@@ -13,7 +13,7 @@ from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid
+from .common import _resolve_pid, truncate_tool_result
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context:
             all_points = db.query(HealthDataPoint).filter(
                 HealthDataPoint.pregnant_id == pid,
                 HealthDataPoint.metric_code.in_(metrics),
-            ).order_by(desc(HealthDataPoint.recorded_at)).limit(40).all()
+            ).order_by(desc(HealthDataPoint.recorded_at)).limit(15).all()
             trends = {}
             for p in all_points:
                 m = p.metric_code
@@ -105,8 +105,10 @@ async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context:
         if run_context is not None:
             if run_context.session_state is None:
                 run_context.session_state = {}
+            # session_state 保留完整数据供后续工具链使用
             run_context.session_state["last_analyzed_patient"] = {"pregnant_id": pid, "analysis": result}
-    return result
+    # 返回给 LLM 的结果做截断，防止对话历史上下文膨胀
+    return truncate_tool_result(result)
 
 
 @tool
@@ -193,33 +195,33 @@ def agno_query_clinical_guideline(topic: str = "") -> dict:
             raise RuntimeError("knowledge is None")
         from agno.filters import IN
         results = knowledge.search(
-            query=topic, max_results=3,
+            query=topic, max_results=2,
             filters=[IN("audience", ["doctor", "nurse", "all"])],
         )
         if results:
-            return {
+            return truncate_tool_result({
                 "topic": topic,
-                "guidelines": [doc.content[:500] if hasattr(doc, "content") else str(doc)[:500] for doc in results],
+                "guidelines": [doc.content[:300] if hasattr(doc, "content") else str(doc)[:300] for doc in results],
                 "source": "knowledge_base",
-            }
+            })
     except Exception:
         pass
 
     # ── 回退路径: 硬编码临床指南库 ──
     from .clinical_guidelines_fallback import search_guidelines
 
-    matched = search_guidelines(topic, max_results=3)
+    matched = search_guidelines(topic, max_results=2)
     if matched:
         guidelines_text = []
         for entry in matched:
             header = f"【{entry['title']}】(来源: {entry['source']})"
-            points = "\n".join(f"  {p}" for p in entry.get("key_points", []))
+            points = "\n".join(f"  {p}" for p in entry.get("key_points", [])[:5])
             guidelines_text.append(f"{header}\n{points}")
-        return {
+        return truncate_tool_result({
             "topic": topic,
             "guidelines": guidelines_text,
             "source": "hardcoded_fallback",
-        }
+        })
 
     # 完全无匹配时返回通用提示
     return {

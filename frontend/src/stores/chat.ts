@@ -3,6 +3,11 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { chatApi } from '@/api/endpoints'
 
+export interface ToolResult {
+  toolName: string
+  result: any
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -14,6 +19,7 @@ export interface ChatMessage {
   thinkingMessage?: string
   toolSteps?: string[]  // Agent 工具调用步骤（已完成的中文描述列表）
   currentStep?: string  // 当前正在执行的步骤描述
+  toolResults?: ToolResult[]  // 工具返回的结构化数据（前端直接渲染）
   feedback?: 'thumbs_up' | 'thumbs_down' | null
   // 音频消息
   audioUrl?: string       // blob URL，用于播放录音

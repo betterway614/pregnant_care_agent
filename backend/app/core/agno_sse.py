@@ -74,7 +74,10 @@ async def agno_sse_event_generator(
     """Agno Agent SSE 流式事件生成器 — 三端共用。
 
     事件顺序:
-        thinking (初始) → (tool thinking)* → chunk* → [fallback chunk] → done
+        thinking (初始) → (tool thinking + tool_result)* → chunk* → [fallback chunk] → done
+
+    tool_result 事件: 工具执行完成后立即推送结构化数据，前端可直接渲染，
+    无需等待 LLM 将数据转为文本复述，显著减少用户感知延迟。
 
     state 在生成过程中被逐步填充：tool_steps, full_response, run_response,
     content_streamed, elapsed_ms。调用方在 async for 循环结束后读取。
@@ -115,6 +118,21 @@ async def agno_sse_event_generator(
                 step_desc = config.thinking_map.get(tool_name, "")
                 if step_desc and step_desc not in tool_steps:
                     tool_steps.append(step_desc)
+
+                # 将工具结构化结果推送给前端，前端可直接渲染，无需等待 LLM 转述
+                raw_result = getattr(chunk.tool, "result", None)
+                if raw_result:
+                    try:
+                        parsed = json.loads(raw_result)
+                    except (json.JSONDecodeError, TypeError):
+                        parsed = raw_result
+                    yield {
+                        "event": "tool_result",
+                        "data": json.dumps(
+                            {"tool_name": tool_name, "result": parsed},
+                            ensure_ascii=False,
+                        ),
+                    }
 
             elif event == RunEvent.run_content:
                 if chunk.content and isinstance(chunk.content, str):

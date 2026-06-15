@@ -306,6 +306,8 @@ export interface SSEStreamCallbacks {
   onDone?: (metadata: any) => void
   onError?: (err: Error) => void
   onThinking?: (message: string) => void
+  /** 工具执行完成时推送结构化数据，前端可直接渲染 */
+  onToolResult?: (toolName: string, result: any) => void
 }
 
 /**
@@ -313,7 +315,7 @@ export interface SSEStreamCallbacks {
  *
  * 关键设计：
  * - 收到 done 事件后禁止自动重连（防止 POST 重复触发 Agent）
- * - 连接异常断开时仍允许一次重连（应对网络抖动）
+ * - 连接异常断开时自动重试（应对网络抖动，最多重试 2 次）
  */
 async function _sseFetch(
   url: string,
@@ -321,71 +323,108 @@ async function _sseFetch(
   callbacks: SSEStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
+  const MAX_RETRIES = 2
   const token = localStorage.getItem('token')
-  let doneReceived = false
-  await fetchEventSource(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-    signal,
-    async onopen(response) {
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '')
-        throw new Error(`HTTP ${response.status}: ${errText}`)
-      }
-      const ct = response.headers.get('content-type') || ''
-      const hasBody = !!response.body
-      console.log('[SSE] onopen content-type:', ct, 'hasBody:', hasBody, 'url:', url)
-      if (!ct.includes('text/event-stream') || !response.body) {
-        const text = await response.text()
-        if (text) {
-          try {
-            const json = JSON.parse(text)
-            if (json.content) callbacks.onChunk?.(json.content)
-            callbacks.onDone?.(json)
-          } catch {
-            if (text) callbacks.onChunk?.(text)
-            callbacks.onDone?.({})
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    let doneReceived = false
+    try {
+      await fetchEventSource(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+        signal,
+        async onopen(response) {
+          if (!response.ok) {
+            const errText = await response.text().catch(() => '')
+            throw new Error(`HTTP ${response.status}: ${errText}`)
           }
-        } else {
-          callbacks.onDone?.({})
-        }
-        throw new Error('HANDLED_NON_SSE')
+          const ct = response.headers.get('content-type') || ''
+          console.log('[SSE] onopen content-type:', ct, 'url:', url)
+          if (!ct.includes('text/event-stream') || !response.body) {
+            const text = await response.text()
+            if (text) {
+              try {
+                const json = JSON.parse(text)
+                if (json.content) callbacks.onChunk?.(json.content)
+                callbacks.onDone?.(json)
+              } catch {
+                if (text) callbacks.onChunk?.(text)
+                callbacks.onDone?.({})
+              }
+            } else {
+              callbacks.onDone?.({})
+            }
+            throw new Error('HANDLED_NON_SSE')
+          }
+        },
+        onmessage(msg) {
+          if (msg.event === 'thinking' || msg.event === 'phase') callbacks.onThinking?.(msg.data)
+          else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
+          else if (msg.event === 'error') callbacks.onError?.(new Error(msg.data))
+          else if (msg.event === 'tool_result') {
+            try {
+              const parsed = JSON.parse(msg.data)
+              callbacks.onToolResult?.(parsed.tool_name, parsed.result)
+            } catch { /* ignore malformed tool_result */ }
+          }
+          else if (msg.event === 'done') {
+            doneReceived = true
+            try { callbacks.onDone?.(JSON.parse(msg.data)) } catch { callbacks.onDone?.({}) }
+          }
+        },
+        onclose() {
+          if (!doneReceived) {
+            throw new Error('SSE_UNEXPECTED_CLOSE')
+          }
+        },
+        onerror(err) {
+          if ((err as Error).message === 'HANDLED_NON_SSE') {
+            class FatalError extends Error { }
+            throw new FatalError(String(err))
+          }
+          // 网络异常且还有重试机会：抛出让外层 catch 处理重试
+          if (attempt < MAX_RETRIES && _isRetryableSSEError(err)) {
+            throw err
+          }
+          // 超过重试次数或不可重试的错误：通知上层并终止
+          callbacks.onError?.(err as Error)
+          class FatalError extends Error { }
+          throw new FatalError(String(err))
+        },
+      })
+      return // 成功，退出重试循环
+    } catch (err) {
+      // 非 SSE 响应（降级处理）：已处理，直接抛出
+      if ((err as Error).message === 'HANDLED_NON_SSE') throw err
+      // AbortSignal 取消：不重试
+      if (signal?.aborted) throw err
+      // 可重试的网络异常 + 还有重试机会
+      if (attempt < MAX_RETRIES && _isRetryableSSEError(err)) {
+        console.warn(`[SSE] 连接异常，正在重连(${attempt + 1}/${MAX_RETRIES})...`, (err as Error).message)
+        callbacks.onThinking?.(`网络波动，正在重连(${attempt + 1}/${MAX_RETRIES})...`)
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
       }
-    },
-    onmessage(msg) {
-      if (msg.event === 'thinking' || msg.event === 'phase') callbacks.onThinking?.(msg.data)
-      else if (msg.event === 'chunk') callbacks.onChunk?.(msg.data)
-      else if (msg.event === 'error') callbacks.onError?.(new Error(msg.data))
-      else if (msg.event === 'done') {
-        doneReceived = true
-        try { callbacks.onDone?.(JSON.parse(msg.data)) } catch { callbacks.onDone?.({}) }
-      }
-    },
-    onclose() {
-      // 收到 done 后服务器正常关闭：不抛错，让 fetchEventSource 正常 resolve
-      // 未收到 done 的连接断开：抛出以触发 onerror，按网络错误处理
-      if (!doneReceived) {
-        throw new Error('SSE_UNEXPECTED_CLOSE')
-      }
-      // doneReceived === true: 正常结束，静默返回
-    },
-    onerror(err) {
-      // 非 SSE 响应（降级处理）：已手动读取 response body，无需重连
-      if ((err as Error).message === 'HANDLED_NON_SSE') {
-        class FatalError extends Error { }
-        throw new FatalError(String(err))
-      }
-      // 其他错误（网络异常、服务端 5xx 等）：通知上层并终止
-      callbacks.onError?.(err as Error)
-      class FatalError extends Error { }
-      throw new FatalError(String(err))
-    },
-  })
+      throw err
+    }
+  }
+}
+
+/** 判断 SSE 错误是否可重试（网络抖动、连接意外关闭等） */
+function _isRetryableSSEError(err: any): boolean {
+  const msg = (err?.message || '').toLowerCase()
+  return msg.includes('sse_unexpected_close') ||
+         msg.includes('fetch') ||
+         msg.includes('network') ||
+         msg.includes('failed to fetch') ||
+         msg.includes('connection') ||
+         msg.includes('econnreset') ||
+         msg.includes('etimedout')
 }
 
 /** 孕妇聊天流式接口 */

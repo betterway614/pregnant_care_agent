@@ -346,12 +346,12 @@ async def _try_llm_followup_generate(pregnant: Pregnant, gest_week: int, gest_da
                                       template_id: str) -> FollowUpGenerateResponse | None:
     """Agno Agent 生成随访脚本，失败返回 None（由模板兜底）"""
     try:
-        from ..core.agno_medical_agents import create_followup_generate_agent
+        from ..core.agno_medical_agents import get_followup_generate_agent
         from ..core.agno_structured import extract_structured_content
 
         prompt = _build_followup_generate_prompt(pregnant, gest_week, gest_day, risk_tags,
                                                   patient_data, template_id)
-        agent = create_followup_generate_agent()
+        agent = get_followup_generate_agent()
         t0 = time.time()
         response = await agent.arun(prompt)
         elapsed_ms = int((time.time() - t0) * 1000)
@@ -450,7 +450,13 @@ async def _transcribe_audio_with_llm(audio_data: str, audio_format: str, role: s
 
 @router.post("/chat/stream")
 async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends(get_current_user)):
-    """护士 AI 持续对话（SSE 流式）— 使用 Agno Agent 自动工具路由"""
+    """护士 AI 持续对话（SSE 流式）— 意图感知动态工具注入
+
+    优化点：
+    1. NLU 意图驱动工具子集选择（不再丢弃意图分类结果）
+    2. 利用 Agno Agent.tools 可变属性动态注入工具
+    3. NLU 上下文作为前缀注入，避免 Agent 重复调用 NLU 工具
+    """
     if user.role != "nurse":
         raise HTTPException(status_code=403, detail="需要护士权限")
     message = req.message
@@ -472,36 +478,48 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    from ..core.agno_medical_agents import get_nurse_chat_agent, NURSE_AGENT_VARIANT_MAP
-    from ..core.agno_tools import resolve_nurse_tools_by_intent
+    from ..core.agno_medical_agents import get_nurse_chat_variant_agent
+    from ..core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS
     from ..core.agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 
-    # 意图分类
-    # 注意：chat/stream 端点必须使用无 output_schema 的 Agent，否则 agno 的
-    # RunEvent.run_content 不会触发，导致前端无法收到流式内容。
-    # analyze / followup / report / complex 等变体启用了 output_schema，仅适合非流式的
-    # /analyze 类端点；chat 端点只允许 "chat" 变体以保持流式输出。
-    _STREAMING_SAFE_VARIANTS = {"chat"}
+    # 1. NLU 意图解析 — 结果用于动态工具选择 + 上下文注入
     intent_variant = "chat"
     intent_classification = None
+    input_text = message
     if message.strip():
         try:
             from ..core.nlu_engine import nlu_engine
             nlu_result = nlu_engine.parse(message.strip())
             intent_classification = nlu_result.intent
-            _, resolved_variant = resolve_nurse_tools_by_intent({
+
+            # 根据意图选择工具子集
+            tools, intent_variant = resolve_nurse_tools_by_intent({
                 "intent": nlu_result.intent,
                 "entities": nlu_result.entities,
             })
-            # 只有已知流式安全的变体才直接使用；其余（analyze/followup/report/complex）
-            # 均回退到 "chat" 变体，因为那些变体启用了 output_schema，会阻止 SSE 流式输出。
-            if resolved_variant in _STREAMING_SAFE_VARIANTS:
-                intent_variant = resolved_variant
+
+            # NLU 上下文注入：将预分析结果作为前缀，避免 Agent 重复调用 NLU 工具
+            nlu_prefix = (
+                f"[系统预分析] 意图:{nlu_result.intent} "
+                f"实体:{nlu_result.entities} "
+                f"情绪:{nlu_result.emotion.get('level', 'neutral')}"
+            )
+            if nlu_result.suggested_tools:
+                nlu_prefix += f" 建议工具:{','.join(nlu_result.suggested_tools)}"
+            input_text = f"{nlu_prefix}\n{message}"
+
+            # 利用 Agno Agent.tools 可变属性动态注入工具子集
+            agent = get_nurse_chat_variant_agent()
+            agent.tools = tools
+            logger.info("护士端NLU: intent=%s, variant=%s, tools=%d",
+                       nlu_result.intent, intent_variant, len(tools))
         except Exception as e:
             logger.warning("护士端意图分类降级: %s", e)
-
-    agent_factory = NURSE_AGENT_VARIANT_MAP.get(intent_variant, get_nurse_chat_agent)
-    agent = agent_factory()
+            agent = get_nurse_chat_variant_agent()
+            agent.tools = NURSE_TOOLS
+    else:
+        agent = get_nurse_chat_variant_agent()
+        agent.tools = NURSE_TOOLS
 
     # 会话 ID：前端传入或自动生成（用于 Agent 多轮对话上下文管理）
     # 安全校验：前端传入的 session_id 必须匹配当前 pregnant_id，防止越权访问他人对话
@@ -516,7 +534,7 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
         state = AgnoSseState()
         config = AgnoSseConfig(
             agent=agent,
-            input_text=message,
+            input_text=input_text,
             user_id=pregnant_id or "anonymous",
             session_id=session_id,
             thinking_map=NURSE_TOOL_THINKING_MAP,

@@ -260,7 +260,10 @@ start_ai_services() {
         return 0
     fi
     log_step "启动 AI 服务..."
-    bash "${AI_SERVICES_SCRIPT}" start
+    if ! bash "${AI_SERVICES_SCRIPT}" start; then
+        log_error "AI 服务启动过程中出现错误"
+        return 1
+    fi
 }
 
 # ── 停止 ──
@@ -272,7 +275,9 @@ stop_project() {
     for name in backend frontend; do
         for suffix in real.pid pid; do
             local pf="${PID_DIR}/${name}.${suffix}"
-            [ -f "${pf}" ] && graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
+            if [ -f "${pf}" ]; then
+                graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
+            fi
         done
     done
 
@@ -323,7 +328,9 @@ stop_app() {
     for name in backend frontend; do
         for suffix in real.pid pid; do
             local pf="${PID_DIR}/${name}.${suffix}"
-            [ -f "${pf}" ] && graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
+            if [ -f "${pf}" ]; then
+                graceful_kill "$(cat "${pf}")" "${name}" && rm -f "${pf}"
+            fi
         done
     done
     log_info "应用服务已停止"
@@ -851,7 +858,9 @@ main() {
     start_backend  || exit 1
     start_frontend || exit 1
 
-    [ "${skip_ai}" = false ] && start_ai_services
+    if [ "${skip_ai}" = false ]; then
+        start_ai_services
+    fi
 
     show_status
 

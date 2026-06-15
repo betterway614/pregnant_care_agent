@@ -28,7 +28,7 @@ from .routing import (
     INTENT_TO_GROUP,
     resolve_tools_by_intent, resolve_nurse_tools_by_intent, resolve_doctor_tools_by_intent,
 )
-from .common import _resolve_pid
+from .common import _resolve_pid, truncate_tool_result
 from .health_data_tools import _save_health_data_sync, _get_patient_context_sync, _analyze_health_trends_sync
 
 __all__ = [
@@ -54,4 +54,5 @@ __all__ = [
     "resolve_tools_by_intent", "resolve_nurse_tools_by_intent", "resolve_doctor_tools_by_intent",
     # 通用
     "_resolve_pid",
+    "truncate_tool_result",
 ]

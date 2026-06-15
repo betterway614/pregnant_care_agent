@@ -1,5 +1,5 @@
 <template>
-  <div class="doctor-chat">
+  <div class="doctor-chat" :class="{ 'doctor-chat--fullscreen': isFullscreen }">
     <!-- 顶部工具栏 -->
     <div class="doctor-chat__toolbar">
       <span class="toolbar-title">Dr.智 AI 助手</span>
@@ -9,6 +9,9 @@
         </button>
         <button class="toolbar-action-btn" :class="{ 'toolbar-action-btn--active': isMuted }" @click="toggleMute" :title="isMuted ? '取消静音' : '静音'">
           <el-icon :size="14"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
+        </button>
+        <button class="toolbar-action-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '放大全屏'">
+          <el-icon :size="14"><FullScreen v-if="!isFullscreen" /><Aim v-else /></el-icon>
         </button>
       </div>
     </div>
@@ -65,6 +68,122 @@
               role="doctor"
             />
             <div v-else v-html="renderMarkdown(msg.content)" />
+          </div>
+          <!-- 工具结果卡片（仅在流式过程中展示，完成后隐藏避免与最终回复重复） -->
+          <div v-if="msg.toolResults?.length && msg.loading" class="tool-results">
+            <div
+              v-for="(tr, idx) in msg.toolResults"
+              :key="idx"
+              class="tool-result-card"
+              :class="'tool-result-card--' + tr.toolName"
+            >
+              <!-- 患者数据 -->
+              <template v-if="tr.toolName === 'agno_query_patient_data' && tr.result?.basic_info">
+                <div class="tr-header">
+                  <span class="tr-icon">📋</span>
+                  <span class="tr-title">患者数据</span>
+                </div>
+                <div class="tr-body">
+                  <div class="tr-row">
+                    <span class="tr-label">姓名</span>
+                    <span class="tr-value">{{ tr.result.basic_info.name || tr.result.basic_info.display_name }}</span>
+                  </div>
+                  <div v-if="tr.result.basic_info.gestational_age" class="tr-row">
+                    <span class="tr-label">孕周</span>
+                    <span class="tr-value">{{ tr.result.basic_info.gestational_age }}</span>
+                  </div>
+                  <div v-if="tr.result.recent_health?.length" class="tr-chips">
+                    <span v-for="h in tr.result.recent_health.slice(0, 5)" :key="h.metric"
+                          class="tr-chip" :class="{ 'tr-chip--alert': h.is_abnormal }">
+                      {{ h.metric }}: {{ h.value }}{{ h.unit }}
+                    </span>
+                  </div>
+                  <div v-if="tr.result.active_alerts?.length" class="tr-alerts">
+                    <span v-for="a in tr.result.active_alerts.slice(0, 3)" :key="a.id"
+                          class="tr-alert" :class="'tr-alert--' + (a.level || 'yellow').toLowerCase()">
+                      [{{ a.level }}] {{ a.message }}
+                    </span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 趋势分析 -->
+              <template v-else-if="tr.toolName === 'agno_analyze_health_trends' && tr.result?.trends">
+                <div class="tr-header">
+                  <span class="tr-icon">📈</span>
+                  <span class="tr-title">趋势分析</span>
+                </div>
+                <div class="tr-body">
+                  <div v-for="t in tr.result.trends.slice(0, 4)" :key="t.metric" class="tr-trend-row">
+                    <span class="tr-metric">{{ t.metric }}</span>
+                    <span class="tr-trend" :class="'tr-trend--' + (t.trend || 'stable')">
+                      {{ trendArrow(t.trend) }}
+                    </span>
+                    <span class="tr-summary">{{ t.summary }}</span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 体征评估 -->
+              <template v-else-if="tr.toolName === 'agno_evaluate_vital_rules' && tr.result">
+                <div class="tr-header">
+                  <span class="tr-icon">🩺</span>
+                  <span class="tr-title">体征评估</span>
+                </div>
+                <div class="tr-body">
+                  <div v-if="tr.result.triggered_rules?.length" class="tr-rules">
+                    <span v-for="r in tr.result.triggered_rules.slice(0, 3)" :key="r.rule_id"
+                          class="tr-rule" :class="'tr-rule--' + (r.severity || 'info')">
+                      {{ r.message || r.rule_id }}
+                    </span>
+                  </div>
+                  <div v-else class="tr-empty">各项指标正常</div>
+                </div>
+              </template>
+
+              <!-- 综合分析 -->
+              <template v-else-if="tr.toolName === 'agno_analyze_patient_comprehensive' && tr.result">
+                <div class="tr-header">
+                  <span class="tr-icon">🔍</span>
+                  <span class="tr-title">综合分析</span>
+                </div>
+                <div class="tr-body">
+                  <div v-if="tr.result.risk_level" class="tr-row">
+                    <span class="tr-label">风险等级</span>
+                    <span class="tr-value" :class="'tr-value--' + tr.result.risk_level">{{ tr.result.risk_level }}</span>
+                  </div>
+                  <div v-if="tr.result.summary" class="tr-summary-text">{{ tr.result.summary }}</div>
+                </div>
+              </template>
+
+              <!-- 知识检索 -->
+              <template v-else-if="tr.toolName === 'search_knowledge_base' && tr.result">
+                <div class="tr-header">
+                  <span class="tr-icon">📚</span>
+                  <span class="tr-title">知识检索</span>
+                </div>
+                <div class="tr-body">
+                  <div v-if="Array.isArray(tr.result)" class="tr-knowledge">
+                    <div v-for="(item, i) in tr.result.slice(0, 2)" :key="i" class="tr-knowledge-item">
+                      <span class="tr-knowledge-title">{{ item.title || item.name || '参考条目' }}</span>
+                      <span class="tr-knowledge-snippet">{{ (item.content || item.text || '').substring(0, 80) }}...</span>
+                    </div>
+                  </div>
+                  <div v-else class="tr-empty">已检索相关知识</div>
+                </div>
+              </template>
+
+              <!-- 通用兜底 -->
+              <template v-else>
+                <div class="tr-header">
+                  <span class="tr-icon">⚙️</span>
+                  <span class="tr-title">{{ toolNameToLabel(tr.toolName) }}</span>
+                </div>
+                <div class="tr-body">
+                  <span class="tr-done">✓ 已完成</span>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
         <!-- 消息操作按钮组（助手消息） -->
@@ -170,7 +289,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, Loading, Microphone, VideoPlay, VideoPause, Mute, Document } from '@element-plus/icons-vue'
+import { Promotion, Loading, Microphone, VideoPlay, VideoPause, Mute, Document, FullScreen, Aim } from '@element-plus/icons-vue'
 import { doctorAiApi, chatApi, feedbackApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
@@ -187,6 +306,7 @@ interface ChatMsg {
   thinkingMessage?: string
   toolSteps?: string[]
   currentStep?: string
+  toolResults?: { toolName: string; result: any }[]
   messageType?: 'text' | 'audio'
   audioUrl?: string
   audioDuration?: number
@@ -201,6 +321,7 @@ const messages = ref<ChatMsg[]>([])
 const inputText = ref('')
 const isStreaming = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
+const isFullscreen = ref(false)
 
 // 工具调用状态
 const currentToolStep = ref<string | null>(null)
@@ -236,6 +357,34 @@ function clearStreamSafetyTimer() {
 
 let msgCounter = 0
 function genId() { return `doctor_${Date.now()}_${++msgCounter}` }
+
+/** 趋势方向 → 箭头符号 */
+function trendArrow(trend: string): string {
+  const map: Record<string, string> = { rising: '↑', falling: '↓', stable: '→', increasing: '↑', decreasing: '↓' }
+  return map[trend] || '→'
+}
+
+/** 工具名称 → 中文标签 */
+function toolNameToLabel(name: string): string {
+  const map: Record<string, string> = {
+    agno_query_patient_data: '患者数据',
+    agno_analyze_health_trends: '趋势分析',
+    agno_evaluate_vital_rules: '体征评估',
+    agno_list_patients: '患者列表',
+    agno_create_followup_record: '随访记录',
+    agno_report_issue_to_doctor: '问题上报',
+    agno_analyze_patient_comprehensive: '综合分析',
+    agno_generate_medical_order: '医嘱生成',
+    agno_handle_issue: '问题处理',
+    agno_query_clinical_guideline: '临床指南',
+    agno_save_health_data: '数据保存',
+    agno_get_patient_context: '患者信息',
+    agno_get_nlu_result: '意图分析',
+    agno_check_emergency: '紧急检测',
+    search_knowledge_base: '知识检索',
+  }
+  return map[name] || name
+}
 
 // ---- 语音录制 ----
 const { isRecording, isInCancelZone, recordingText, startRecording } = useAudioRecorder({
@@ -280,6 +429,10 @@ function toggleAutoPlayTTS() {
 
 function toggleMute() {
   isMuted.value = !isMuted.value
+}
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
 }
 
 /** 自动播报助手消息 */
@@ -424,6 +577,10 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
           currentToolStep.value = message
           scrollToBottom()
         },
+        onToolResult(toolName: string, result: any) {
+          if (!assistantMsg.toolResults) assistantMsg.toolResults = []
+          assistantMsg.toolResults.push({ toolName, result })
+        },
         onChunk(chunk: string) {
           assistantMsg.content += chunk
           assistantMsg.thinking = false
@@ -524,6 +681,10 @@ async function handleSend() {
           currentToolStep.value = message
           scrollToBottom()
         },
+        onToolResult(toolName: string, result: any) {
+          if (!assistantMsg.toolResults) assistantMsg.toolResults = []
+          assistantMsg.toolResults.push({ toolName, result })
+        },
         onChunk(chunk: string) {
           assistantMsg.content += chunk
           assistantMsg.thinking = false
@@ -583,6 +744,19 @@ onMounted(() => {
   height: 100%;
   background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
   position: relative;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 全屏模式 */
+.doctor-chat--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  border-radius: 0;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100vw;
+  max-height: 100vh;
 }
 
 .doctor-chat__messages {
@@ -1168,6 +1342,201 @@ onMounted(() => {
   border-top-color: #10b981;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* ---- 工具结果卡片 ---- */
+.tool-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  animation: toolCardIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toolCardIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tool-result-card {
+  background: rgba(16, 185, 129, 0.04);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.tr-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(16, 185, 129, 0.06);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.08);
+}
+
+.tr-icon { font-size: 12px; }
+.tr-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+}
+
+.tr-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tr-label {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.tr-value {
+  color: #1e293b;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.tr-value--high, .tr-value--critical { color: #ef4444; }
+.tr-value--medium, .tr-value--moderate { color: #f59e0b; }
+.tr-value--low { color: #22c55e; }
+
+.tr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.tr-chip {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-chip--alert {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
+.tr-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.tr-alert {
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tr-alert--red { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
+.tr-alert--orange { background: rgba(249, 115, 22, 0.08); color: #f97316; }
+.tr-alert--yellow { background: rgba(245, 158, 11, 0.08); color: #d97706; }
+
+.tr-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tr-metric {
+  color: #475569;
+  font-size: 11px;
+  min-width: 60px;
+}
+
+.tr-trend {
+  font-weight: 600;
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+}
+
+.tr-trend--rising, .tr-trend--increasing { color: #ef4444; }
+.tr-trend--falling, .tr-trend--decreasing { color: #3b82f6; }
+.tr-trend--stable { color: #22c55e; }
+
+.tr-summary {
+  color: #64748b;
+  font-size: 11px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tr-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tr-rule {
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.tr-rule--critical, .tr-rule--high { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
+.tr-rule--medium, .tr-rule--warning { background: rgba(245, 158, 11, 0.08); color: #d97706; }
+.tr-rule--info, .tr-rule--low { background: rgba(59, 130, 246, 0.06); color: #3b82f6; }
+
+.tr-empty {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.tr-summary-text {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tr-knowledge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-knowledge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tr-knowledge-title {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 11px;
+}
+
+.tr-knowledge-snippet {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.tr-done {
+  color: #22c55e;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* Responsive */

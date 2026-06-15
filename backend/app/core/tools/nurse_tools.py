@@ -11,7 +11,7 @@ from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid
+from .common import _resolve_pid, truncate_tool_result
 
 
 @tool
@@ -45,7 +45,7 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
 
             recent_data = db.query(HealthDataPoint).filter(
                 HealthDataPoint.pregnant_id == pid
-            ).order_by(desc(HealthDataPoint.recorded_at)).limit(10).all()
+            ).order_by(desc(HealthDataPoint.recorded_at)).limit(5).all()
             result["recent_health_data"] = [
                 {"metric": d.metric_code, "value": d.value, "unit": d.unit, "time": d.recorded_at.isoformat()}
                 for d in recent_data
@@ -53,7 +53,7 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
 
             active_alerts = db.query(Alert).filter(
                 Alert.pregnant_id == pid, Alert.status == "PENDING"
-            ).all()
+            ).limit(5).all()
             result["active_alerts"] = [
                 {"level": a.level, "message": a.message, "time": a.created_at.isoformat()}
                 for a in active_alerts
@@ -89,7 +89,7 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
                 auto_alerts = rule_engine.evaluate_all(rule_ctx)
             except Exception:
                 auto_alerts = []
-            result["auto_alerts"] = [{"level": a["level"], "message": a["message"]} for a in auto_alerts]
+            result["auto_alerts"] = [{"level": a["level"], "message": a["message"]} for a in auto_alerts[:3]]
             result["has_abnormal"] = len(auto_alerts) > 0
 
             # 保存到 session_state
@@ -102,7 +102,8 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
         finally:
             db.close()
 
-    return await asyncio.to_thread(_query)
+    raw = await asyncio.to_thread(_query)
+    return truncate_tool_result(raw)
 
 
 @tool
@@ -116,7 +117,8 @@ async def agno_list_patients(run_context: RunContext | None = None) -> dict:
 
         db = SessionLocal()
         try:
-            patients = db.query(Pregnant).all()
+            total = db.query(Pregnant).count()
+            patients = db.query(Pregnant).limit(20).all()
             result = [
                 {
                     "pregnant_id": p.pregnant_id,
@@ -127,11 +129,12 @@ async def agno_list_patients(run_context: RunContext | None = None) -> dict:
                 }
                 for p in patients
             ]
-            return {"patients": result, "total": len(result)}
+            return {"patients": result, "total": total, "returned": len(result)}
         finally:
             db.close()
 
-    return await asyncio.to_thread(_list)
+    raw = await asyncio.to_thread(_list)
+    return truncate_tool_result(raw)
 
 
 @tool

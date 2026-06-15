@@ -39,6 +39,7 @@ from .tools import (
     resolve_tools_by_intent, resolve_nurse_tools_by_intent, resolve_doctor_tools_by_intent,
     # 通用
     _resolve_pid,
+    truncate_tool_result,
 )
 
 # 重新导出内部辅助函数和模块级变量（测试可能直接导入）
@@ -68,4 +69,5 @@ __all__ = [
     "INTENT_TO_GROUP",
     "resolve_tools_by_intent", "resolve_nurse_tools_by_intent", "resolve_doctor_tools_by_intent",
     "_resolve_pid",
+    "truncate_tool_result",
 ]

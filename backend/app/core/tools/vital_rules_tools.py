@@ -8,7 +8,7 @@ from __future__ import annotations
 from agno.run import RunContext
 from agno.tools import tool
 
-from .common import _resolve_pid
+from .common import _resolve_pid, truncate_tool_result
 
 
 @tool
@@ -57,9 +57,9 @@ def agno_evaluate_vital_rules(
     if sleep_hours is not None:
         ctx["sleep_hours"] = sleep_hours
     alerts = rule_engine.evaluate_all(ctx)
-    return {
+    return truncate_tool_result({
         "pregnant_id": pid,
-        "alerts": alerts,
+        "alerts": alerts[:5],
         "alert_count": len(alerts),
         "has_critical": any(a["level"] == "RED" for a in alerts),
-    }
+    })

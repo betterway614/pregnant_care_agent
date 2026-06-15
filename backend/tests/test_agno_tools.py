@@ -89,7 +89,7 @@ def test_agno_get_epds_high():
 
 @pytest.mark.asyncio
 async def test_agno_get_patient_context():
-    """验证 agno_get_patient_context 异步工具"""
+    """验证 agno_get_patient_context 异步工具（返回截断字符串）"""
     from app.core.agno_tools import agno_get_patient_context
 
     mock_pregnant = MagicMock()
@@ -108,9 +108,11 @@ async def test_agno_get_patient_context():
 
     with patch("app.database.SessionLocal", return_value=mock_db):
         result = await agno_get_patient_context.entrypoint("test-pid")
-        assert result["pregnant_id"] == "test-pid"
-        assert result["gestational_week"] == "30+0"
-        assert "GDM" in result["risk_tags"]
+        # 优化后返回 truncate_tool_result 字符串
+        assert isinstance(result, str)
+        assert "test-pid" in result
+        assert "30+0" in result
+        assert "GDM" in result
 
 
 # ==================== TOOL_GROUPS 与工具路由测试 ====================
@@ -173,18 +175,23 @@ def test_tool_groups_are_disjoint_from_nurse_doctor():
     ("record_fetal_movement", "record"),
     # qa 场景
     ("ask_knowledge", "qa"),
-    ("ask_symptom", "qa"),
-    ("ask_exam", "qa"),
+    # complex 场景（症状/检查需全量工具+知识检索）
+    ("ask_symptom", "complex"),
+    ("ask_exam", "complex"),
     # emergency
     ("emergency", "emergency"),
 ])
 def test_resolve_tools_by_intent_known(intent, expected_variant):
     """验证已知意图正确路由到对应变体"""
-    from app.core.agno_tools import resolve_tools_by_intent, MEDICAL_TOOLS
+    from app.core.agno_tools import resolve_tools_by_intent, MEDICAL_TOOLS, TOOL_GROUPS
 
     tools, variant = resolve_tools_by_intent({"intent": intent})
     assert variant == expected_variant
-    assert tools != MEDICAL_TOOLS  # 非兜底
+    # complex 变体使用全量工具集（兜底），其他变体使用子集
+    if expected_variant == "complex":
+        assert tools == MEDICAL_TOOLS
+    else:
+        assert tools == TOOL_GROUPS[expected_variant]
 
 
 @pytest.mark.parametrize("intent", [

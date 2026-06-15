@@ -90,18 +90,33 @@ def _check_embedding_service(timeout: float = 3.0) -> dict:
         return {"status": "error", "detail": str(e)[:200], "latency_ms": round(latency_ms, 1)}
 
 
-def _check_pgvector(timeout: float = 5.0) -> dict:
+def _check_pgvector(timeout: float = 5.0, embedding_ok: bool = True) -> dict:
     """探测 pgvector 连接和检索可用性
 
     通过尝试 knowledge.search() 验证完整的向量检索链路:
     pgvector 连接 + 表存在 + 向量检索能力。
 
+    Args:
+        timeout: 超时秒数
+        embedding_ok: 嵌入服务是否可用。若为 False，跳过 search() 避免
+                      embedding 不可达时 agno hybrid_search 因 0 维度向量
+                      抛出 "expected N dimensions, not 0" 的级联错误。
+
     Returns:
-        {"status": "healthy"|"unreachable"|"empty", "detail": str, "latency_ms": float}
+        {"status": "healthy"|"unreachable"|"empty"|"degraded", "detail": str, "latency_ms": float}
     """
     import time
 
     start = time.monotonic()
+
+    if not embedding_ok:
+        latency_ms = (time.monotonic() - start) * 1000
+        return {
+            "status": "degraded",
+            "detail": "skipped: embedding service unreachable, cannot perform vector search",
+            "latency_ms": round(latency_ms, 1),
+        }
+
     try:
         from .agno_knowledge import knowledge
 
@@ -132,69 +147,81 @@ def _health_check_job():
     """定时健康检查任务 — 由 APScheduler 调用"""
     global _latest_health
 
-    # 嵌入服务检查
-    embedding = _check_embedding_service()
-
-    # pgvector 检查
-    pgvector = _check_pgvector()
-
-    # 判定降级状态
-    embedding_ok = embedding["status"] == "healthy"
-    pgvector_ok = pgvector["status"] in ("healthy", "empty")  # empty 也算可用 (表存在只是无数据)
-
-    was_degraded = _latest_health.get("degraded", False)
-    is_degraded = not (embedding_ok and pgvector_ok)
-
-    if is_degraded:
-        _latest_health["consecutive_failures"] += 1
-        reasons = []
-        if not embedding_ok:
-            reasons.append(f"embedding_service: {embedding['status']} ({embedding['detail']})")
-        if not pgvector_ok:
-            reasons.append(f"pgvector: {pgvector['status']} ({pgvector['detail']})")
-        reason_str = "; ".join(reasons)
-
-        if not was_degraded:
-            logger.warning("[RAG Health] 进入降级状态: %s", reason_str)
-        elif _latest_health["consecutive_failures"] % 12 == 0:
-            # 每 1 小时 (12次 × 5分钟) 重复警告一次，避免日志泛滥
-            logger.warning(
-                "[RAG Health] 持续降级 (连续%d次检查失败): %s",
-                _latest_health["consecutive_failures"], reason_str,
-            )
-    else:
-        _latest_health["consecutive_failures"] = 0
-        if was_degraded:
-            logger.info("[RAG Health] 恢复正常: embedding=%s pgvector=%s", embedding["status"], pgvector["status"])
-
-    _latest_health.update({
-        "embedding_service": embedding["status"],
-        "pgvector": pgvector["status"],
-        "last_check_time": datetime.now(timezone.utc).isoformat(),
-        "degraded": is_degraded,
-        "degraded_reason": (
-            ""
-            if not is_degraded
-            else "; ".join(
-                f"{s}: {d}" for s, d in [
-                    ("embedding", embedding["detail"]) if not embedding_ok else None,
-                    ("pgvector", pgvector["detail"]) if not pgvector_ok else None,
-                ] if s is not None
-            )
-        ),
-        "_detail": {
-            "embedding": embedding,
-            "pgvector": pgvector,
-        },
-    })
-
-    # 同步更新 agno_knowledge 模块的降级标志
     try:
-        import app.core.agno_knowledge as kb_module
-        kb_module._rag_degraded = is_degraded
-        kb_module._rag_degraded_reason = _latest_health["degraded_reason"]
-    except Exception:
-        pass
+        # 嵌入服务检查
+        embedding = _check_embedding_service()
+
+        # pgvector 检查 — embedding 不可用时跳过 search，避免 0 维度向量级联错误
+        embedding_ok = embedding["status"] == "healthy"
+        pgvector = _check_pgvector(embedding_ok=embedding_ok)
+
+        # 判定降级状态
+        pgvector_ok = pgvector["status"] in ("healthy", "empty")  # empty 也算可用 (表存在只是无数据)
+
+        was_degraded = _latest_health.get("degraded", False)
+        is_degraded = not (embedding_ok and pgvector_ok)
+
+        if is_degraded:
+            _latest_health["consecutive_failures"] += 1
+            reasons = []
+            if not embedding_ok:
+                reasons.append(f"embedding_service: {embedding['status']} ({embedding['detail']})")
+            if not pgvector_ok:
+                reasons.append(f"pgvector: {pgvector['status']} ({pgvector['detail']})")
+            reason_str = "; ".join(reasons)
+
+            if not was_degraded:
+                logger.warning("[RAG Health] 进入降级状态: %s", reason_str)
+            elif _latest_health["consecutive_failures"] % 12 == 0:
+                # 每 1 小时 (12次 × 5分钟) 重复警告一次，避免日志泛滥
+                logger.warning(
+                    "[RAG Health] 持续降级 (连续%d次检查失败): %s",
+                    _latest_health["consecutive_failures"], reason_str,
+                )
+        else:
+            _latest_health["consecutive_failures"] = 0
+            if was_degraded:
+                logger.info("[RAG Health] 恢复正常: embedding=%s pgvector=%s", embedding["status"], pgvector["status"])
+
+        _latest_health.update({
+            "embedding_service": embedding["status"],
+            "pgvector": pgvector["status"],
+            "last_check_time": datetime.now(timezone.utc).isoformat(),
+            "degraded": is_degraded,
+            "degraded_reason": (
+                ""
+                if not is_degraded
+                else "; ".join(
+                    f"{s}: {d}" for s, d in [
+                        ("embedding", embedding["detail"]) if not embedding_ok else None,
+                        ("pgvector", pgvector["detail"]) if not pgvector_ok else None,
+                    ] if s is not None
+                )
+            ),
+            "_detail": {
+                "embedding": embedding,
+                "pgvector": pgvector,
+            },
+        })
+
+        # 同步更新 agno_knowledge 模块的降级标志
+        try:
+            import app.core.agno_knowledge as kb_module
+            kb_module._rag_degraded = is_degraded
+            kb_module._rag_degraded_reason = _latest_health["degraded_reason"]
+        except Exception:
+            pass
+
+    except Exception as e:
+        # 整个健康检查任务的兜底保护，防止任何未预期异常导致调度器停止
+        logger.warning("[RAG Health] 健康检查任务异常: %s", e)
+        _latest_health.update({
+            "embedding_service": "error",
+            "pgvector": "error",
+            "last_check_time": datetime.now(timezone.utc).isoformat(),
+            "degraded": True,
+            "degraded_reason": f"health_check_job error: {e}",
+        })
 
 
 def start_monitor(interval_minutes: int = 5) -> Optional[BackgroundScheduler]:

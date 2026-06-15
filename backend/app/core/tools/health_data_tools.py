@@ -14,7 +14,7 @@ from agno.run import RunContext
 from agno.tools import tool
 
 from ...utils.timezone import beijing_now
-from .common import _resolve_pid
+from .common import _resolve_pid, truncate_tool_result
 
 
 def _get_patient_repo(run_context: RunContext | None):
@@ -114,7 +114,7 @@ def _get_patient_context_sync(pregnant_id: str) -> dict:
         basic = get_patient_basic(db, pregnant_id)
         if not basic:
             return {"error": "孕妇不存在"}
-        recent = get_recent_health_data(db, pregnant_id, limit=10)
+        recent = get_recent_health_data(db, pregnant_id, limit=5)
         return {
             "pregnant_id": pregnant_id,
             "display_name": basic["display_name"],
@@ -140,12 +140,13 @@ async def agno_get_patient_context(pregnant_id: str = "", run_context: RunContex
         basic = await asyncio.to_thread(repo.get_by_id, pid)
         if not basic:
             return {"error": "孕妇不存在"}
-        recent = await asyncio.to_thread(repo.get_recent_health_data, pid, 7)
+        recent = await asyncio.to_thread(repo.get_recent_health_data, pid, 5)
         alerts = await asyncio.to_thread(repo.get_active_alerts, pid)
-        return {**basic, "recent_data": recent, "active_alerts": alerts}
+        return truncate_tool_result({**basic, "recent_data": recent, "active_alerts": alerts})
 
     # 回退: 直接 DB 访问
-    return await asyncio.to_thread(_get_patient_context_sync, pid)
+    raw = await asyncio.to_thread(_get_patient_context_sync, pid)
+    return truncate_tool_result(raw)
 
 
 # ==================== 记忆查询 ====================
@@ -210,7 +211,8 @@ async def agno_analyze_health_trends(pregnant_id: str = "", run_context: RunCont
     """分析孕妇近14天健康数据趋势，返回各指标的变化趋势和摘要。
     pregnant_id 可选，留空时自动使用当前登录用户。异步安全。"""
     pid = _resolve_pid(pregnant_id, run_context)
-    return await asyncio.to_thread(_analyze_health_trends_sync, pid)
+    raw = await asyncio.to_thread(_analyze_health_trends_sync, pid)
+    return truncate_tool_result(raw)
 
 
 # ==================== 心理筛查 ====================
