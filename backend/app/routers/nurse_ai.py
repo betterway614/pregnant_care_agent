@@ -857,11 +857,19 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
         no_followup_priority = "high" if (
             any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")) or gest_week >= 28
         ) else "medium"
+        # 区分触发原因
+        no_followup_reasons = []
+        if gest_week >= 28:
+            no_followup_reasons.append("已进入孕晚期")
+        if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")):
+            matched = [t for t in ("FGR高危", "高血压", "子痫前期") if t in risk_tags]
+            no_followup_reasons.append(f"存在高危因素（{'/'.join(matched)}）")
+        urgency_suffix = "，" + "；".join(no_followup_reasons) if no_followup_reasons else ""
         recommendations.append({
             "recommended_date": "immediate",
             "gestational_week": f"{gest_week}+{gest_day}",
             "template_id": template,
-            "reason": f"该孕妇尚无随访记录（已孕{gest_week}周），建议尽快安排首次随访",
+            "reason": f"该孕妇尚无随访记录（已孕{gest_week}周），建议尽快安排首次随访{urgency_suffix}",
             "priority": no_followup_priority,
             "is_overdue": True,
             "suggested_actions": ["安排首次随访", "建立随访档案"],
@@ -883,6 +891,14 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
         no_data_priority = "high" if (
             any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期", "GDM")) or gest_week >= 28
         ) else "medium"
+        # 区分触发原因
+        no_data_reasons = []
+        if gest_week >= 28:
+            no_data_reasons.append("已进入孕晚期")
+        if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期", "GDM")):
+            matched = [t for t in ("FGR高危", "高血压", "子痫前期", "GDM") if t in risk_tags]
+            no_data_reasons.append(f"存在高危因素（{'/'.join(matched)}）")
+        urgency_suffix = "，" + "；".join(no_data_reasons) if no_data_reasons else ""
         reason = f"该孕妇从未上报任何健康数据（已孕{gest_week}周）"
         if not has_basic_info:
             reason += "，且基础信息（孕周/身高/孕前体重）缺失"
@@ -890,7 +906,7 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
             "recommended_date": "immediate",
             "gestational_week": f"{gest_week}+{gest_day}",
             "template_id": template,
-            "reason": reason + "，需联系确认情况并督促数据上报",
+            "reason": reason + "，需联系确认情况并督促数据上报" + urgency_suffix,
             "priority": no_data_priority,
             "is_overdue": False,
             "suggested_actions": [
@@ -980,8 +996,12 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
         if future_gest_week >= 38:
             reason_parts.append(f"孕{future_gest_week}周已足月，需每周随访密切关注")
         elif future_gest_week >= 36:
-            reason_parts.append(f"孕{future_gest_week}周进入孕晚期，建议加密随访")
-        if any(t in risk_tags for t in ("FGR高危", "高血压")):
+            if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期", "GDM")):
+                reason_parts.append(f"孕{future_gest_week}周孕晚期合并高危因素，需加密随访")
+            else:
+                reason_parts.append(f"孕{future_gest_week}周进入孕晚期，建议加密随访")
+        # 高危因素：与 priority 判定保持一致
+        if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")):
             reason_parts.append("高危孕妇需加密随访")
         if "GDM" in risk_tags:
             reason_parts.append("妊娠期糖尿病需定期监测")
