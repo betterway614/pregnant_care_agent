@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 依赖注入: `backend/app/container.py` 管理服务实例
 - 配置: pydantic-settings，支持 `.env` 文件
 - **医嘱生命周期管理**: 生成（`POST /orders/generate` REST 直调 LLM+模板+RAG，或 Agent `doctor/chat/stream` NLU 路由+工具链）、签署（`PUT /{id}/sign` 含手写签名+归档快照）、软删除（`DELETE /{id}` 仅设 `status=cancelled`，禁止物理删除，保障医疗记录完整性）。已签署/已执行的医嘱不可删除；默认列表排除已取消医嘱，需主动筛选"已取消"查看。
+- **产检排期引擎** (`services/schedule_engine.py` → `ScheduleEngine.generate()`): **纯硬编码规则**（非LLM/非向量库），基于 ACOG/中华医学会指南的完整产检时间表 — 13次标准产检（附录一，含必查/备查/注意事项/孕周范围）+ 5个超声里程碑（附录二，自动去重）+ 8项速查参考（附录三）；风险联动：FGR/GDM/高血压自动加密监测。LMP动态推算计划日期；前端通过 `schedule.py` 路由 CRUD，护士生成→发布→孕妇端查看。设计决策：确定性医学参照不适合向量库/LLM（见 memory/schedule-engine-architecture）。
 
 **多智能体系统 (Agno v2.6.9)**
 - 三角色 Agent: 小安(孕妇) / 小护(护士) / Dr.智(医生)
@@ -125,7 +126,7 @@ pregnent_care_agent/pregnant_care_agent/
 │   │   └── main.py         # FastAPI 应用入口
 │   ├── fgr_compete/        # FGR 专病评估 (nnU-Net + ONNX)
 │   ├── alembic/            # 数据库迁移
-│   └── tests/              # 后端测试 (46个测试文件)
+│   └── tests/              # 后端测试 (47个测试文件)
 ├── frontend/
 │   └── src/
 │       ├── api/            # API 请求层
@@ -153,7 +154,7 @@ pregnent_care_agent/pregnant_care_agent/
 - Agent 测试: test_agno_agent, test_agno_tools (含工具路由+计数), test_agno_team, test_agent_optimization (动态注入+NLU路由)
 - 工具测试: test_refactored_components (工具拆分验证), test_agno_medical_agents (护士/医生 Agent)
 - 审计测试: test_audit_log, test_audit_integration (含 tool_metrics 持久化验证)
-- 业务逻辑: test_followup_fixes, test_alert_service, test_order_service
+- 业务逻辑: test_followup_fixes, test_alert_service, test_order_service, test_schedule (排期引擎20用例)
 - API 测试: test_bugfix_routes, test_orders_router (含 RAG 辅助生成测试)
 
 **前端测试** (Vitest): 各组件目录的 `__tests__/` 子目录
@@ -174,7 +175,7 @@ npm run test
 - 开发: SQLite (自动创建)
 - 生产: PostgreSQL 16 + pgvector
 - 迁移: Alembic (`backend/alembic/`)
-- 双模式兼容: `main.py` 中的 `_ensure_*()` 函数处理已有数据库的表/列增量迁移
+- 双模式兼容: `main.py` 中的 `_ensure_*()` 函数（含 `_ensure_schedule_columns` 等10个）处理已有数据库的表/列增量迁移；PostgreSQL ALTER COLUMN TYPE 在专用分支中处理
 - 孕期日记缓存: `pregnancy_diary_entries` 表，每人每周一条，LLM 叙事 + 模板兜底
 
 ## 环境变量
