@@ -29,7 +29,7 @@
             <el-icon :size="32" color="#FB7185"><Moon /></el-icon>
           </div>
           <div class="baby-text">
-            <div class="baby-size">宝宝像一颗 <span class="highlight">{{ babySize }}</span> 大小</div>
+            <div class="baby-size">宝宝像一颗 <span class="highlight">{{ babySize }}</span></div>
             <div class="baby-desc">{{ babyDesc }}</div>
           </div>
         </div>

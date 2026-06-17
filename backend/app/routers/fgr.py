@@ -235,15 +235,16 @@ def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> list[dict]:
 def get_all_patient_images(
     pregnant_ids: str | None = Query(None, description="Comma-separated pregnant IDs to filter; omit for all mapped"),
     current_user: TokenPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Batch: return image binding status for all mapped patients (or filtered subset).
 
     When pregnant_ids is provided, only those IDs are returned.
-    IDs not found in the map return has_image=False.
+    IDs not found in the map attempt display_name fallback before returning has_image=False.
     NOTE: Must be defined BEFORE /patient-images/{{pregnant_id}} to avoid route shadowing.
     """
     try:
-        from fgr_compete.image_registry import load_patient_map
+        from fgr_compete.image_registry import load_patient_map, remap_patient_ids
     except ImportError:
         return {"data": []}
 
@@ -254,7 +255,9 @@ def get_all_patient_images(
     else:
         ids = list(mapping.keys())
 
+    # ── 第一轮：直接按 ID 匹配 ──
     result = []
+    unmatched_ids: list[str] = []
     for pid in ids:
         entry = mapping.get(pid)
         if entry:
@@ -265,12 +268,62 @@ def get_all_patient_images(
                 "display_name": entry.get("display_name", ""),
             })
         else:
+            unmatched_ids.append(pid)
+
+    # ── 第二轮：display_name 回退匹配（防止 DB 重置后 ID 漂移） ──
+    if unmatched_ids and mapping:
+        # 构建 display_name -> map_entry 索引
+        name_to_entry: dict[str, dict] = {}
+        for _entry in mapping.values():
+            dn = _entry.get("display_name", "")
+            if dn:
+                name_to_entry[dn] = _entry
+
+        # 查询 DB 中这些 ID 对应的 display_name
+        db_patients = db.query(Pregnant).filter(
+            Pregnant.pregnant_id.in_(unmatched_ids)
+        ).all()
+
+        remaining_ids = list(unmatched_ids)
+        for patient in db_patients:
+            entry = name_to_entry.get(patient.display_name)
+            if entry:
+                # display_name 匹配成功 — 自动修复映射文件
+                result.append({
+                    "pregnant_id": patient.pregnant_id,
+                    "has_image": True,
+                    "image_url": f"/api/v1/fgr/image/{patient.pregnant_id}",
+                    "display_name": patient.display_name,
+                })
+                logger.info("[FGR] display_name 回退匹配: {} ({}) -> {}",
+                            patient.pregnant_id, patient.display_name,
+                            entry.get("raw_path", ""))
+            else:
+                result.append({
+                    "pregnant_id": patient.pregnant_id,
+                    "has_image": False,
+                    "image_url": "",
+                    "display_name": patient.display_name,
+                })
+            remaining_ids.remove(patient.pregnant_id)
+
+        # 不在 DB 中的 ID 兜底
+        for pid in remaining_ids:
             result.append({
                 "pregnant_id": pid,
                 "has_image": False,
                 "image_url": "",
                 "display_name": "",
             })
+
+        # 异步触发映射文件修复（不阻塞当前请求）
+        if any(
+            e["has_image"] for e in result if e["pregnant_id"] in unmatched_ids
+        ):
+            try:
+                remap_patient_ids(db)
+            except Exception as e:
+                logger.warning("[FGR] 自动修复 patient_image_map 失败: {}", e)
 
     return {"data": result}
 
@@ -458,8 +511,6 @@ def _upload_assess_sync(
     db.commit()
 
     return FgrAssessResponse(**result, hardware=_get_fgr_hardware()), alerts_data
-
-    return FgrAssessResponse(**result, hardware=_get_fgr_hardware())
 
 
 @router.get("/trend/{pregnant_id}", response_model=list[FgrTrendPoint])

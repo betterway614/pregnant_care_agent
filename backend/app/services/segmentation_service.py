@@ -67,6 +67,7 @@ class SegmentationService:
             "-tr", "nnUNetTrainer",
             "-c", "2d",
             "-p", "nnUNetPlans",
+            "-device", "cpu",
         ]
 
         logger.info("[分割] 执行 nnU-Net 5折集成推理...")

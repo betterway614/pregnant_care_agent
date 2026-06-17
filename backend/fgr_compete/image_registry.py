@@ -72,6 +72,50 @@ def get_patient_group(pregnant_id: str) -> str | None:
     return None
 
 
+def remap_patient_ids(db_session) -> int:
+    """自动修复 patient_image_map.json 中的 ID 漂移（DB 重置后 ID 变化但 display_name 不变）。
+
+    通过 display_name 匹配 DB 记录与映射条目，将旧 ID 替换为当前 DB ID。
+
+    Args:
+        db_session: SQLAlchemy Session 实例
+
+    Returns:
+        重映射的条目数
+    """
+    mapping = load_patient_map()
+    if not mapping:
+        return 0
+
+    # 导入 Pregnant 模型
+    from app.models import Pregnant
+    patients = db_session.query(Pregnant.pregnant_id, Pregnant.display_name).all()
+    db_name_to_id: dict[str, str] = {name: pid for pid, name in patients}
+
+    new_map: dict[str, dict] = {}
+    remapped = 0
+    for old_id, entry in mapping.items():
+        # 如果旧 ID 已在 DB 中，保持不变
+        if old_id in {p.pregnant_id for p in patients}:
+            new_map[old_id] = entry
+            continue
+
+        # 尝试通过 display_name 匹配
+        name = entry.get("display_name", "")
+        db_id = db_name_to_id.get(name)
+        if db_id:
+            new_map[db_id] = entry
+            remapped += 1
+        else:
+            # 无法匹配，保留旧条目
+            new_map[old_id] = entry
+
+    if remapped > 0:
+        save_patient_map(new_map)
+
+    return remapped
+
+
 def register_uploaded_images(pregnant_id: str, display_name: str,
                              image_bytes: bytes, mask_bytes: bytes) -> tuple[str, str]:
     """上传超声图像并注册到映射表，返回 (raw_path, mask_path)"""

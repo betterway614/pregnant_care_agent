@@ -171,13 +171,14 @@ onMounted(() => { fetchDiary() })
 
 <style scoped>
 .diary-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(180deg, #FFF1F2 0%, #F8FAFC 30%);
   padding-bottom: 32px;
 }
 
 .diary-nav {
   padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top));
   position: sticky;
   top: 0;
   z-index: 10;
@@ -384,5 +385,83 @@ onMounted(() => { fetchDiary() })
   padding: 24px 16px;
   font-size: 12px;
   color: #CBD5E1;
+}
+
+/* -------------------- 移动端适配 -------------------- */
+@media (max-width: 768px) {
+  .diary-page {
+    padding-bottom: max(32px, env(safe-area-inset-bottom));
+  }
+
+  .diary-nav {
+    padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .diary-nav-title {
+    font-size: 16px;
+  }
+
+  .diary-hero {
+    padding: 16px 12px 12px;
+  }
+  .diary-hero-week {
+    font-size: 22px;
+  }
+  .diary-hero-desc {
+    font-size: 13px;
+  }
+
+  .diary-timeline {
+    padding: 0 12px;
+  }
+  .diary-timeline::before {
+    left: 15px;
+  }
+
+  .diary-entry {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .timeline-dot {
+    width: 28px;
+    height: 28px;
+    margin-top: 12px;
+  }
+  .timeline-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .diary-card {
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .diary-card-header {
+    margin-bottom: 10px;
+  }
+  .diary-week-label {
+    font-size: 15px;
+  }
+  .diary-date-range {
+    font-size: 11px;
+  }
+
+  .diary-narrative {
+    font-size: 13px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .metric-item {
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .highlight-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
 }
 </style>

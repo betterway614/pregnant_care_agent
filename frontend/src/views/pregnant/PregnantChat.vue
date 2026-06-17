@@ -590,9 +590,33 @@ const fetusData = computed(() => {
 const fetusSize = computed(() => fetusData.value.size)
 
 /* ==================== 工具函数 ==================== */
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate()
+}
+
+function formatChatDateTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+
+  const now = new Date()
+  const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  if (isSameCalendarDay(d, now)) return `今天 ${time}`
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (isSameCalendarDay(d, yesterday)) return `昨天 ${time}`
+
+  const date = d.getFullYear() === now.getFullYear()
+    ? `${d.getMonth() + 1}月${d.getDate()}日`
+    : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+  return `${date} ${time}`
+}
+
 function formatTime(ts: string): string {
-  const d = new Date(ts)
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  return formatChatDateTime(ts)
 }
 
 function checkUrgent(content: string): boolean {
@@ -683,18 +707,7 @@ async function handleLoadSession(targetSessionId: string) {
 }
 
 function formatSessionDate(dateStr: string): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const isYesterday = d.toDateString() === yesterday.toDateString()
-
-  const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-  if (isToday) return `今天 ${time}`
-  if (isYesterday) return `昨天 ${time}`
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${time}`
+  return formatChatDateTime(dateStr)
 }
 
 /* ==================== 消息操作 ==================== */

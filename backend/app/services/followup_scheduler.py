@@ -78,27 +78,26 @@ def _cleanup_zombie_followups(db: Session) -> int:
     draft_timeout = now - timedelta(days=settings.followup_zombie_draft_timeout_days)
     inprogress_timeout = now - timedelta(days=settings.followup_zombie_inprogress_timeout_days)
 
+    # 用 OR 条件在一条查询中同时捕获 draft 和 in_progress 僵尸
     zombies = db.query(FollowUpRecord).filter(
         FollowUpRecord.status.in_(["draft", "in_progress"]),
-        FollowUpRecord.created_at < draft_timeout,
+        (FollowUpRecord.created_at < draft_timeout)
+        | (
+            (FollowUpRecord.status == "in_progress")
+            & (FollowUpRecord.created_at < inprogress_timeout)
+        ),
     ).all()
 
-    # 对 in_progress 使用更长的超时时间
-    inprogress_zombies = db.query(FollowUpRecord).filter(
-        FollowUpRecord.status == "in_progress",
-        FollowUpRecord.created_at >= draft_timeout,  # 未被上面查询覆盖的
-        FollowUpRecord.created_at < inprogress_timeout,
-    ).all()
-
-    all_zombies = zombies + inprogress_zombies
     cleaned = 0
-    for record in all_zombies:
+    for record in zombies:
         if _archive_zombie_followup(db, record):
             cleaned += 1
 
     if cleaned:
-        db.flush()
+        db.commit()  # 必须 commit，否则归档变更不会持久化
         logger.info("僵尸随访清理完成: 共归档 {} 条", cleaned)
+    else:
+        db.rollback()  # 无变更时回滚，避免长事务
     return cleaned
 
 

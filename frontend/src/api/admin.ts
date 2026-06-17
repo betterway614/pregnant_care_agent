@@ -6,6 +6,7 @@ import type {
   AdminTokenByAgent,
   AdminSessionListResponse,
   AdminSessionDetail,
+  ToolCallSessionRun,
   KnowledgeStats,
   KnowledgeDocListResponse,
   KnowledgeUploadResponse,
@@ -50,6 +51,11 @@ export const adminApi = {
 
   getSessionDetail: (sessionId: string) =>
     client.get<AdminSessionDetail>(`/admin/audit/sessions/${sessionId}`),
+
+  getToolCallsBySession: (sessionId: string) =>
+    client.get<{ session_id: string; runs: ToolCallSessionRun[] }>(
+      `/admin/audit/tool-calls/by-session/${sessionId}`,
+    ),
 
   // ── 知识库管理 ──
   getKnowledgeStats: () =>

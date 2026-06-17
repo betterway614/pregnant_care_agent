@@ -1,0 +1,67 @@
+<svg id="pregnancy-care-background" role="img" aria-labelledby="pregnancy-care-title pregnancy-care-desc" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900">
+  <title id="pregnancy-care-title">Pregnancy care background</title>
+  <desc id="pregnancy-care-desc">Soft vector artwork with maternal care, fetal health, schedule, and heartbeat motifs.</desc>
+  <defs>
+    <linearGradient id="wash" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff7fb"/>
+      <stop offset="0.45" stop-color="#fdf2f8"/>
+      <stop offset="1" stop-color="#eef7ff"/>
+    </linearGradient>
+    <linearGradient id="roseLine" x1="260" y1="120" x2="930" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fb7185"/>
+      <stop offset="0.58" stop-color="#c084fc"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <radialGradient id="pearl" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fbcfe8" stop-opacity="0.12"/>
+    </radialGradient>
+    <pattern id="careDots" width="52" height="52" patternUnits="userSpaceOnUse">
+      <circle cx="8" cy="8" r="2.5" fill="#fb7185" opacity="0.16"/>
+      <circle cx="36" cy="30" r="1.8" fill="#38bdf8" opacity="0.13"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="900" fill="url(#wash)"/>
+  <rect width="1200" height="900" fill="url(#careDots)" opacity="0.62"/>
+
+  <g opacity="0.9">
+    <path d="M-20 678C134 596 228 598 336 666c122 76 250 89 390-8 139-96 257-122 494-24" fill="none" stroke="#f9a8d4" stroke-width="2.4" stroke-linecap="round" opacity="0.38"/>
+    <path d="M-28 735c178-88 303-83 420 8 121 94 274 79 414-26 112-83 228-111 422-45" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" opacity="0.28"/>
+  </g>
+
+  <g transform="translate(690 126)" opacity="0.82">
+    <circle cx="182" cy="188" r="166" fill="url(#pearl)"/>
+    <path d="M184 64c-62 0-112 50-112 112 0 42 22 78 56 98 14 9 22 25 19 41l-9 48c-3 18 11 34 29 34h58c18 0 31-17 27-35l-12-51c-3-14 4-29 17-37 34-20 56-57 56-98 0-62-51-112-113-112h-16Z" fill="#ffffff" opacity="0.6"/>
+    <path d="M184 66c-64 0-116 52-116 116 0 40 20 76 52 97 22 14 34 40 29 65l-9 45h108l-11-50c-5-24 6-48 27-61 33-21 54-57 54-98 0-63-51-114-114-114" fill="none" stroke="url(#roseLine)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.58"/>
+    <path d="M173 226c-34-28-35-80-1-109 24-21 61-16 78 11 21 33 6 76-28 96-16 10-33 12-49 2Z" fill="#fce7f3" opacity="0.82"/>
+    <path d="M203 140c29 8 45 40 36 68-10 32-46 49-77 36-25-10-42-34-42-61 0-21 10-40 27-52" fill="none" stroke="#fb7185" stroke-width="5.5" stroke-linecap="round" opacity="0.54"/>
+    <circle cx="206" cy="190" r="8" fill="#fb7185" opacity="0.42"/>
+  </g>
+
+  <g transform="translate(115 156)" opacity="0.7">
+    <rect x="0" y="0" width="214" height="174" rx="34" fill="#ffffff" opacity="0.58"/>
+    <rect x="23" y="34" width="168" height="112" rx="18" fill="#fdf2f8" opacity="0.72"/>
+    <path d="M44 86h27l16-31 28 66 19-35h39" fill="none" stroke="#fb7185" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.62"/>
+    <path d="M47 124h104" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" opacity="0.38"/>
+  </g>
+
+  <g transform="translate(141 532)" opacity="0.66">
+    <rect x="0" y="0" width="188" height="154" rx="32" fill="#ffffff" opacity="0.6"/>
+    <path d="M39 45h111M39 75h111M39 105h76" stroke="#c4b5fd" stroke-width="8" stroke-linecap="round" opacity="0.52"/>
+    <circle cx="43" cy="27" r="9" fill="#fb7185" opacity="0.48"/>
+    <circle cx="145" cy="27" r="9" fill="#38bdf8" opacity="0.42"/>
+  </g>
+
+  <g opacity="0.58" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M453 196c56-54 136-52 187 0" fill="none" stroke="#a7f3d0" stroke-width="6"/>
+    <path d="M515 219c-10-48 21-83 62-102 19 49-4 89-47 113" fill="#d1fae5" stroke="#34d399" stroke-width="4" opacity="0.64"/>
+    <path d="M988 541c-42-12-75 5-97 41 42 16 78 5 104-31" fill="#e0f2fe" stroke="#38bdf8" stroke-width="4" opacity="0.6"/>
+    <path d="M936 625c-44 3-72 28-83 70 45 1 76-20 89-61" fill="#fce7f3" stroke="#fb7185" stroke-width="4" opacity="0.55"/>
+  </g>
+
+  <g opacity="0.72">
+    <path d="M462 566c0-21 17-38 38-38 14 0 26 7 33 18 7-11 19-18 33-18 21 0 38 17 38 38 0 46-71 86-71 86s-71-40-71-86Z" fill="#fff1f2" stroke="#fb7185" stroke-width="5" opacity="0.58"/>
+    <path d="M502 593h36l13-24 19 43 12-19h34" fill="none" stroke="#fb7185" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.58"/>
+  </g>
+</svg>

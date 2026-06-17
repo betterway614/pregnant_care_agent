@@ -94,9 +94,56 @@
               <p><b>路由:</b> {{ run.routed_agent }} | <b>意图:</b> {{ run.intent_classification || '-' }}</p>
               <p><b>Token:</b> 输入={{ run.input_tokens }} 输出={{ run.output_tokens }} 总计={{ run.total_tokens }}</p>
               <p><b>延迟:</b> {{ run.total_latency_ms }}ms | <b>模型:</b> {{ run.model_id }}</p>
-              <p v-if="run.tool_calls?.length">
-                <b>工具调用:</b> {{ run.tool_calls.map(t => t.name).join('  →  ') }}
-              </p>
+              <div v-if="run.tool_call_count || run.tool_calls?.length" class="tool-call-section">
+                <div class="tool-call-summary" @click.stop="toggleToolCalls(run)">
+                  <b>工具调用 ({{ run.tool_call_count || run.tool_calls?.length }})</b>
+                  <span v-if="run.tool_error_count" style="color: #ff4d4f; margin-left: 8px;">
+                    错误={{ run.tool_error_count }}
+                  </span>
+                  <span class="tool-call-names">{{ (run.tool_calls || []).map((t: any) => t.name).join('  →  ') }}</span>
+                  <el-button type="primary" link size="small" style="margin-left: auto;">
+                    {{ expandedRuns.has(run.id) ? '收起 ▲' : '详情 ▼' }}
+                  </el-button>
+                </div>
+
+                <transition name="el-fade-in">
+                  <div v-if="expandedRuns.has(run.id)" class="tool-call-details" @click.stop>
+                    <div v-if="loadingToolCalls.has(run.id)" style="text-align: center; padding: 12px;">
+                      <el-icon class="is-loading"><Loading /></el-icon> 加载中...
+                    </div>
+                    <template v-else-if="toolCallData.get(run.id)?.length">
+                      <div
+                        v-for="tc in toolCallData.get(run.id)"
+                        :key="tc.call_order"
+                        class="tool-call-card"
+                        :class="{ 'is-error': !tc.success }"
+                      >
+                        <div class="tc-header">
+                          <span class="tc-order">#{{ tc.call_order + 1 }}</span>
+                          <span class="tc-name">{{ tc.tool_name }}</span>
+                          <el-tag :type="tc.success ? 'success' : 'danger'" size="small" style="margin-left: auto;">
+                            {{ tc.success ? '成功' : '失败' }}
+                          </el-tag>
+                          <span v-if="tc.latency_ms != null" class="tc-latency">{{ tc.latency_ms }}ms</span>
+                        </div>
+                        <div v-if="tc.tool_args && Object.keys(tc.tool_args).length" class="tc-block">
+                          <div class="tc-label">调用参数</div>
+                          <pre class="tc-pre">{{ JSON.stringify(tc.tool_args, null, 2) }}</pre>
+                        </div>
+                        <div v-if="tc.result_preview" class="tc-block">
+                          <div class="tc-label">返回结果</div>
+                          <pre class="tc-pre">{{ tc.result_preview }}</pre>
+                        </div>
+                        <div v-if="tc.error_message" class="tc-block tc-error">
+                          <div class="tc-label">错误信息</div>
+                          <pre class="tc-pre">{{ tc.error_message }}</pre>
+                        </div>
+                      </div>
+                    </template>
+                    <div v-else style="color: #bbb; padding: 8px; font-size: 12px;">无工具调用详情数据</div>
+                  </div>
+                </transition>
+              </div>
               <p v-if="run.response_preview" style="color: #8c8c8c;">
                 <b>回复预览:</b> {{ run.response_preview }}
               </p>
@@ -113,8 +160,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, inject } from 'vue'
+import { Loading } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/admin'
-import type { AdminSessionItem, AdminSessionDetail } from '@/types'
+import type { AdminSessionItem, AdminSessionDetail, AdminSessionRun, ToolCallDetailItem } from '@/types'
 
 const dateRange = inject<{ from: { value: string }; to: { value: string } }>('dateRange')!
 
@@ -171,6 +219,30 @@ const filters = reactive({ user_id: '', agent_role: '', agent_variant: '' })
 const drawerVisible = ref(false)
 const detail = ref<AdminSessionDetail | null>(null)
 
+// ── 工具调用详情展开状态 ──
+const expandedRuns = ref<Set<number>>(new Set())
+const loadingToolCalls = ref<Set<number>>(new Set())
+const toolCallData = ref<Map<number, ToolCallDetailItem[]>>(new Map())
+
+async function toggleToolCalls(run: AdminSessionRun) {
+  if (expandedRuns.value.has(run.id)) {
+    expandedRuns.value.delete(run.id)
+    return
+  }
+  expandedRuns.value.add(run.id)
+  if (toolCallData.value.has(run.id)) return  // 已缓存
+  loadingToolCalls.value.add(run.id)
+  try {
+    const res = await adminApi.getToolCallsBySession(detail.value!.session_id)
+    const runData = res.data.runs.find(r => r.audit_log_id === run.id)
+    toolCallData.value.set(run.id, runData?.tool_calls ?? [])
+  } catch {
+    toolCallData.value.set(run.id, [])
+  } finally {
+    loadingToolCalls.value.delete(run.id)
+  }
+}
+
 function onRoleChange() {
   filters.agent_variant = ''
 }
@@ -198,6 +270,10 @@ function search() { pagination.page = 1; fetchData() }
 function reset() { filters.user_id = ''; filters.agent_role = ''; filters.agent_variant = ''; pagination.page = 1; fetchData() }
 
 async function showDetail(row: AdminSessionItem) {
+  // 重置工具调用展开状态
+  expandedRuns.value = new Set()
+  loadingToolCalls.value = new Set()
+  toolCallData.value = new Map()
   try {
     const res = await adminApi.getSessionDetail(row.session_id)
     detail.value = res.data
@@ -210,4 +286,60 @@ fetchData()
 
 <style scoped>
 .filter-card :deep(.el-card__body) { padding: 16px 20px 0; }
+
+/* ── 工具调用面板 ── */
+.tool-call-section { margin: 8px 0 4px; border: 1px solid #f0f0f0; border-radius: 6px; overflow: hidden; }
+
+.tool-call-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fafafa;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+  transition: background 0.15s;
+}
+.tool-call-summary:hover { background: #f0f5ff; }
+.tool-call-names { color: #8c8c8c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+.tool-call-details { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.tool-call-card {
+  margin-top: 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff;
+  font-size: 12px;
+}
+.tool-call-card.is-error { border-color: #ffccc7; background: #fff2f0; }
+
+.tc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.tc-order { color: #bbb; font-size: 11px; min-width: 22px; }
+.tc-name { font-weight: 600; color: #262626; word-break: break-all; }
+.tc-latency { color: #8c8c8c; font-size: 11px; white-space: nowrap; }
+
+.tc-block { margin-top: 6px; }
+.tc-label { font-size: 11px; color: #8c8c8c; margin-bottom: 3px; }
+.tc-pre {
+  margin: 0;
+  padding: 6px 8px;
+  background: #f6f8fa;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #434343;
+}
+.tc-error .tc-pre { background: #fff1f0; color: #cf1322; }
 </style>

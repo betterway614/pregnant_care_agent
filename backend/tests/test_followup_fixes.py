@@ -357,12 +357,16 @@ class TestZombieFollowup:
     """Fix 4: 僵尸随访超时归档"""
 
     def test_fresh_draft_blocks_recommendations(self):
-        """新鲜的 draft 随访（1天前）应正常阻塞推荐"""
+        """新鲜的 draft 随访（1天前）+ 有数据 + 低风险 → 应正常阻塞推荐"""
         db = TestSessionLocal()
         try:
-            p = _make_pregnant("P_FRESH_DRAFT", gest_days=140, risk_tags=["GDM"])
+            # 低风险 + 有近期数据：不满足旁路条件（无预警/无高危/数据活跃）
+            p = _make_pregnant("P_FRESH_DRAFT", gest_days=140, risk_tags=[])
             db.add(p)
             db.add(_make_followup("P_FRESH_DRAFT", status="draft", created_days_ago=1))
+            # 添加近期数据，避免触发"14天零数据"旁路
+            db.add(_make_health_data_point("P_FRESH_DRAFT", "bp_systolic", 120.0, days_ago=3))
+            db.add(_make_health_data_point("P_FRESH_DRAFT", "weight", 60.0, days_ago=5))
             db.commit()
 
             result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_FRESH_DRAFT")
@@ -434,13 +438,16 @@ class TestZombieFollowup:
             db.close()
 
     def test_fresh_in_progress_not_archived(self):
-        """未超时的 in_progress（3天）不应被归档"""
+        """未超时的 in_progress（3天）+ 有数据 + 低风险 → 不应被归档"""
         db = TestSessionLocal()
         try:
-            p = _make_pregnant("P_FRESH_IP", gest_days=200, risk_tags=["GDM"])
+            # 低风险 + 有近期数据：不满足旁路条件
+            p = _make_pregnant("P_FRESH_IP", gest_days=200, risk_tags=[])
             db.add(p)
             active = _make_followup("P_FRESH_IP", status="in_progress", created_days_ago=3)
             db.add(active)
+            db.add(_make_health_data_point("P_FRESH_IP", "bp_systolic", 120.0, days_ago=2))
+            db.add(_make_health_data_point("P_FRESH_IP", "weight", 65.0, days_ago=4))
             db.commit()
 
             result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_FRESH_IP")
@@ -519,7 +526,7 @@ class TestSchedulerScan:
             db.close()
 
     def test_scan_skips_fresh_active_followup(self):
-        """扫描应跳过有新鲜活跃随访的孕妇"""
+        """扫描应跳过有新鲜活跃随访且有近期数据的孕妇（不满足旁路条件）"""
         db = TestSessionLocal()
         try:
             from app.models import Pregnant, FollowUpRecord
@@ -527,9 +534,12 @@ class TestSchedulerScan:
             db.query(Pregnant).delete()
             db.commit()
 
-            p = _make_pregnant("P_FRESH_BLOCK", gest_days=200, risk_tags=["GDM"])
+            # 低风险 + 有近期数据：不触发旁路，原有 draft 正常阻塞
+            p = _make_pregnant("P_FRESH_BLOCK", gest_days=200, risk_tags=[])
             db.add(p)
             db.add(_make_followup("P_FRESH_BLOCK", status="draft", created_days_ago=1))
+            db.add(_make_health_data_point("P_FRESH_BLOCK", "bp_systolic", 120.0, days_ago=2))
+            db.add(_make_health_data_point("P_FRESH_BLOCK", "weight", 65.0, days_ago=4))
             db.commit()
 
             stats = sched_mod._scan_and_create_followups(db)
@@ -574,6 +584,73 @@ class TestSchedulerScan:
                 FollowUpRecord.status == "draft",
             ).all()
             assert len(drafts) >= 1, f"清理僵尸后应为无数据GDM孕妇创建新随访: {stats}"
+        finally:
+            db.rollback()
+            db.close()
+
+
+class TestActiveFollowupBypass:
+    """活跃随访旁路：高危/预警/数据不活跃时不被 draft 阻塞"""
+
+    def test_critical_alert_bypasses_active_draft(self):
+        """存在高级别预警（RED/ORANGE）→ 即使有活跃 draft 也生成推荐"""
+        db = TestSessionLocal()
+        try:
+            from app.models import Alert
+            p = _make_pregnant("P_ALERT_BYPASS", gest_days=140, risk_tags=[])
+            db.add(p)
+            db.add(_make_followup("P_ALERT_BYPASS", status="draft", created_days_ago=1))
+            # 添加一个 ORANGE 预警
+            db.add(Alert(
+                id=str(uuid.uuid4()),
+                pregnant_id="P_ALERT_BYPASS",
+                level="ORANGE",
+                message="测试预警",
+                status="PENDING",
+                created_at=datetime.now(),
+            ))
+            db.commit()
+
+            result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_ALERT_BYPASS")
+            recs = result.get("recommendations", [])
+            assert len(recs) > 0, "有高级别预警时不应被活跃draft阻塞"
+            # 应有 immediate 推荐
+            immediate = [r for r in recs if r.get("recommended_date") == "immediate"]
+            assert len(immediate) > 0, f"应有immediate推荐: {recs}"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_high_risk_inactive_bypasses_active_draft(self):
+        """高危标签 + 14天零数据 → 即使有活跃 draft 也生成推荐"""
+        db = TestSessionLocal()
+        try:
+            p = _make_pregnant("P_RISK_BYPASS", gest_days=140, risk_tags=["FGR高危"])
+            db.add(p)
+            db.add(_make_followup("P_RISK_BYPASS", status="draft", created_days_ago=1))
+            # 不添加任何近期数据 → 14天零数据
+            db.commit()
+
+            result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_RISK_BYPASS")
+            recs = result.get("recommendations", [])
+            assert len(recs) > 0, "FGR高危+零数据时不应被活跃draft阻塞"
+            assert "skip_reason" not in result, "应绕过skip_reason"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_late_pregnancy_inactive_bypasses_active_draft(self):
+        """孕晚期(≥28周) + 14天零数据 → 即使有活跃 draft 也生成推荐"""
+        db = TestSessionLocal()
+        try:
+            p = _make_pregnant("P_LATE_BYPASS", gest_days=210, risk_tags=[])  # 30周
+            db.add(p)
+            db.add(_make_followup("P_LATE_BYPASS", status="draft", created_days_ago=1))
+            db.commit()
+
+            result = nurse_ai_mod.tool_recommend_followup_schedule(db, "P_LATE_BYPASS")
+            recs = result.get("recommendations", [])
+            assert len(recs) > 0, "孕晚期+零数据时不应被活跃draft阻塞"
         finally:
             db.rollback()
             db.close()

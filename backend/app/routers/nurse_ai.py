@@ -734,8 +734,21 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
     risk_tags = pregnant.risk_tags or []
     current_date = beijing_now().date()
 
-    # 1.5 检查是否有进行中的随访任务
-    # 超时僵尸随访自动归档后继续推荐；未超时的活跃随访跳过推荐以避免重复
+    # 1.5a 预先查询活跃预警和健康数据（用于后续阻止旁路判断）
+    active_alerts_pre = db.query(Alert).filter(
+        Alert.pregnant_id == pregnant_id,
+        Alert.status == "PENDING"
+    ).all()
+    has_critical_pre = any(a.level in ("RED", "ORANGE") for a in active_alerts_pre)
+
+    fourteen_days_ago_pre = beijing_now() - timedelta(days=14)
+    data_count_14d_pre = db.query(func.count(HealthDataPoint.id)).filter(
+        HealthDataPoint.pregnant_id == pregnant_id,
+        HealthDataPoint.recorded_at >= fourteen_days_ago_pre,
+    ).scalar() or 0
+
+    # 1.5b 检查是否有进行中的随访任务
+    # 超时僵尸随访自动归档后继续推荐；未超时的活跃随访在特定条件下可旁路
     active_followup = db.query(FollowUpRecord).filter(
         FollowUpRecord.pregnant_id == pregnant_id,
         FollowUpRecord.status.in_(["draft", "in_progress"]),
@@ -751,22 +764,45 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
             is_zombie = True
 
         if not is_zombie:
-            return {
-                "pregnant_id": pregnant_id,
-                "current_gestational_week": f"{gest_week}+{gest_day}",
-                "recommendations": [],
-                "context_summary": {
-                    "days_since_last_followup": age_days,
-                    "last_followup_date": active_followup.created_at.strftime("%Y-%m-%d") if active_followup.created_at else None,
-                    "last_followup_status": old_status,
-                    "health_data_frequency": "active",
-                    "health_data_count_14d": 0,
-                    "active_alert_count": 0,
-                    "has_critical_alerts": False,
-                    "risk_tags": risk_tags,
-                },
-                "skip_reason": f"该孕妇已有进行中的随访任务（{old_status}, {age_days}天），请先处理完成后再推荐",
-            }
+            # ── 旁路条件：即使有活跃 draft，以下情况仍生成推荐 ──
+            # ① 存在高级别预警（RED / ORANGE）→ 安全优先，必须暴露
+            # ② 数据严重不活跃：14 天零数据 +（高危孕妇 或 孕 ≥28 周）
+            risk_tag_set = set(risk_tags)
+            _high_risk_tags = {"FGR高危", "高血压", "子痫前期", "GDM"}
+            is_high_risk = bool(risk_tag_set & _high_risk_tags)
+            is_late_inactive = (data_count_14d_pre == 0 and gest_week >= 28)
+
+            bypass_reasons: list[str] = []
+            if has_critical_pre:
+                bypass_reasons.append("存在高级别预警需立即处理")
+            if data_count_14d_pre == 0 and (is_high_risk or is_late_inactive):
+                bypass_reasons.append("14天零数据且属高风险/孕晚期")
+
+            if not bypass_reasons:
+                return {
+                    "pregnant_id": pregnant_id,
+                    "current_gestational_week": f"{gest_week}+{gest_day}",
+                    "recommendations": [],
+                    "context_summary": {
+                        "days_since_last_followup": age_days,
+                        "last_followup_date": str(active_followup.created_at.date()) if active_followup.created_at else None,
+                        "last_followup_status": old_status,
+                        "health_data_frequency": "active",
+                        "health_data_count_14d": data_count_14d_pre,
+                        "active_alert_count": len(active_alerts_pre),
+                        "has_critical_alerts": has_critical_pre,
+                        "risk_tags": risk_tags,
+                    },
+                    "skip_reason": (
+                        f"该孕妇已有进行中的随访任务（{old_status}, {age_days}天），"
+                        f"请先处理完成后再推荐"
+                    ),
+                }
+            else:
+                logger.info(
+                    "活跃随访旁路: pregnant_id={} bypass_reasons={} old_status={} age_days={}",
+                    pregnant_id, bypass_reasons, old_status, age_days,
+                )
         else:
             if read_only:
                 # GET 请求不修改 DB，仅记录日志，仍然继续推荐
@@ -800,20 +836,13 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
         days_since_last = (current_date - last_followup_date).days
         last_followup_status = last_followup.status
 
-    # 3. 查询活跃预警
-    active_alerts = db.query(Alert).filter(
-        Alert.pregnant_id == pregnant_id,
-        Alert.status == "PENDING"
-    ).all()
-    has_critical = any(a.level in ("RED", "ORANGE") for a in active_alerts)
+    # 3. 查询活跃预警（复用 1.5a 预查询结果）
+    active_alerts = active_alerts_pre
+    has_critical = has_critical_pre
     alert_count = len(active_alerts)
 
-    # 4. 查询14天健康数据量
-    fourteen_days_ago = beijing_now() - timedelta(days=14)
-    data_count_14d = db.query(func.count(HealthDataPoint.id)).filter(
-        HealthDataPoint.pregnant_id == pregnant_id,
-        HealthDataPoint.recorded_at >= fourteen_days_ago
-    ).scalar() or 0
+    # 4. 14天健康数据量（复用 1.5a 预查询结果）
+    data_count_14d = data_count_14d_pre
 
     if data_count_14d >= 5:
         data_freq = "active"
@@ -852,8 +881,8 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
             "is_overdue": True,
             "suggested_actions": ["尽快安排随访", "了解未随访原因"],
         })
-    elif interval > 0 and days_since_last is None and gest_week >= 20:
-        # 孕20周以上从未随访：需关注但仅高危或孕晚期标high
+    elif interval > 0 and days_since_last is None and gest_week >= 16:
+        # 孕16周以上从未随访：需关注但仅高危或孕晚期标high
         no_followup_priority = "high" if (
             any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")) or gest_week >= 28
         ) else "medium"
@@ -886,8 +915,8 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
         pregnant.pre_pregnancy_weight_kg
     )
 
-    if total_data_count == 0 and gest_week >= 20:
-        # 孕20周以上从未上报数据：需联系但仅高危或孕晚期标high
+    if total_data_count == 0 and gest_week >= 16:
+        # 孕16周以上从未上报数据：需联系但仅高危或孕晚期标high
         no_data_priority = "high" if (
             any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期", "GDM")) or gest_week >= 28
         ) else "medium"
@@ -915,7 +944,7 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
                 "了解未上报数据的原因（技术障碍/认知不足/健康问题）",
             ],
         })
-    elif not has_basic_info and gest_week >= 20:
+    elif not has_basic_info and gest_week >= 16:
         # 有部分数据但基础信息缺失
         recommendations.append({
             "recommended_date": "immediate",
@@ -942,7 +971,8 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
                 if gest_week >= 28:
                     urgency_reasons.append("已进入孕晚期需密切监测")
                 if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")):
-                    urgency_reasons.append("存在高危因素需立即跟进")
+                    matched_risks = [t for t in ("FGR高危", "高血压", "子痫前期") if t in risk_tags]
+                    urgency_reasons.append(f"存在{'/'.join(matched_risks)}，需立即跟进")
                 urgency_note = "，" + "；".join(urgency_reasons)
             else:
                 priority = "medium"
@@ -997,12 +1027,14 @@ def tool_recommend_followup_schedule(db, pregnant_id: str, *, read_only: bool = 
             reason_parts.append(f"孕{future_gest_week}周已足月，需每周随访密切关注")
         elif future_gest_week >= 36:
             if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期", "GDM")):
-                reason_parts.append(f"孕{future_gest_week}周孕晚期合并高危因素，需加密随访")
+                matched_future = [t for t in ("FGR高危", "高血压", "子痫前期", "GDM") if t in risk_tags]
+                reason_parts.append(f"孕{future_gest_week}周孕晚期合并{'/'.join(matched_future)}，需加密随访")
             else:
                 reason_parts.append(f"孕{future_gest_week}周进入孕晚期，建议加密随访")
         # 高危因素：与 priority 判定保持一致
         if any(t in risk_tags for t in ("FGR高危", "高血压", "子痫前期")):
-            reason_parts.append("高危孕妇需加密随访")
+            matched_high = [t for t in ("FGR高危", "高血压", "子痫前期") if t in risk_tags]
+            reason_parts.append(f"{'/'.join(matched_high)}孕妇需加密随访")
         if "GDM" in risk_tags:
             reason_parts.append("妊娠期糖尿病需定期监测")
         if not reason_parts:

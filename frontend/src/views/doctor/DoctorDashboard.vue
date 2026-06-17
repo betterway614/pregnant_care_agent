@@ -317,18 +317,33 @@ function formatTime(t?: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/** 加载所有数据 */
+/** 加载所有数据 — 各模块独立加载，避免一个失败导致全部丢失 */
 async function loadAllData() {
   loading.value = true
   try {
-    const [statsRes, alertsRes, ordersRes] = await Promise.all([
+    const [statsResult, alertsResult, ordersResult] = await Promise.allSettled([
       dashboardApi.stats(),
       alertApi.list({ status: 'pending,escalated' }),
       orderApi.list({ status: 'draft,pending_sign' }),
     ])
-    stats.value = statsRes.data
-    recentAlerts.value = (alertsRes.data || []).slice(0, 10)
-    pendingOrders.value = (ordersRes.data || []).slice(0, 8)
+
+    if (statsResult.status === 'fulfilled') {
+      stats.value = statsResult.value.data
+    } else {
+      console.error('加载统计数据失败:', statsResult.reason)
+    }
+
+    if (alertsResult.status === 'fulfilled') {
+      recentAlerts.value = (alertsResult.value.data || []).slice(0, 10)
+    } else {
+      console.error('加载预警列表失败:', alertsResult.reason)
+    }
+
+    if (ordersResult.status === 'fulfilled') {
+      pendingOrders.value = (ordersResult.value.data || []).slice(0, 8)
+    } else {
+      console.error('加载医嘱列表失败:', ordersResult.reason)
+    }
   } catch (err) {
     console.error('加载工作台数据失败:', err)
   } finally {

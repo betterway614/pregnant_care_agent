@@ -24,8 +24,41 @@
 .patient-theme {
   font-family: 'Noto Sans', -apple-system, sans-serif;
   color: var(--pt-text);
-  background: var(--pt-gradient);
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 241, 242, 0.92), transparent 34%),
+    radial-gradient(circle at 92% 24%, rgba(224, 242, 254, 0.64), transparent 31%),
+    linear-gradient(160deg, #fff7fb 0%, #fdf2f8 45%, #eef7ff 100%);
   min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.patient-theme::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("../assets/pregnancy-care-bg.svg");
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: min(980px, 155vw) auto;
+  opacity: 0.82;
+}
+
+.patient-theme > * {
+  position: relative;
+  z-index: 1;
+}
+
+.patient-theme .page-container,
+.patient-theme .tools-layout {
+  background: transparent !important;
+}
+
+.patient-theme .halo-bg {
+  opacity: 0.5;
 }
 
 .patient-theme .page-container {

@@ -12,6 +12,7 @@ from ..utils.timezone import beijing_now
 from ..models import Alert, Pregnant
 from ..schemas import AlertResponse, AlertReviewRequest
 from ..core import rule_engine
+from ..core.rule_engine import get_rule_message as _get_rule_message
 from ..core.websocket_manager import ws_manager
 from ..core.auth import get_current_user, TokenPayload
 
@@ -61,20 +62,15 @@ def get_alerts(status: Optional[str] = None,
     alerts = query.order_by(Alert.created_at.desc()).limit(100).all()
 
     # 医生端过滤：
-    # 1. 隐藏 NOTE_NURSE + YELLOW 的护士专属预警（未升级的仅护士关注项）
-    # 2. 隐藏医生已降级处理的预警（医生已做判断，不应继续出现在待处理列表）
+    # 隐藏 NOTE_NURSE + YELLOW 的护士专属预警（未升级的仅护士关注项）
+    # 已降级预警：降级到 GREEN 的会自动 DISMISSED（已被 status 过滤排除），
+    # 降级到非 GREEN 的仍是 PENDING 状态，医生需要继续可见以便进一步处理
     if current_user.role == "doctor":
         alerts = [
             a for a in alerts
             if not (
-                # 规则 1: 仅护士关注的未升级预警
-                ((a.details or {}).get("action") == "NOTE_NURSE"
-                 and a.level == "YELLOW")
-                # 规则 2: 医生已降级处理过的预警
-                or any(
-                    h.get("action") == "downgrade" and h.get("source_role") == "doctor"
-                    for h in (a.details or {}).get("history", [])
-                )
+                (a.details or {}).get("action") == "NOTE_NURSE"
+                and a.level == "YELLOW"
             )
         ]
 
@@ -92,7 +88,7 @@ def get_alerts(status: Optional[str] = None,
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
             patient_name=pregnant.display_name if pregnant else "未知",
             gestational_age_days=pregnant.gestational_age_days if pregnant else None,
-            rule_standard_message=rule_engine.get_rule_message(a.rule_id),
+            rule_standard_message=_get_rule_message(a.rule_id),
         ))
     return result
 
@@ -160,7 +156,7 @@ async def create_alert(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name,
         gestational_age_days=pregnant.gestational_age_days,
-        rule_standard_message=rule_engine.get_rule_message(req.rule_id),
+        rule_standard_message=_get_rule_message(req.rule_id),
     )
 
 
@@ -178,7 +174,7 @@ def evaluate_alerts(pregnant_id: str, req: AlertEvaluateRequest, db: Session = D
         "alerts": [AlertResponse(
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
             patient_name="",
-            rule_standard_message=rule_engine.get_rule_message(a.rule_id),
+            rule_standard_message=_get_rule_message(a.rule_id),
         ) for a in created]
     }
 
@@ -336,7 +332,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",
         gestational_age_days=pregnant.gestational_age_days if pregnant else None,
-        rule_standard_message=rule_engine.get_rule_message(alert.rule_id),
+        rule_standard_message=_get_rule_message(alert.rule_id),
     )
 
 

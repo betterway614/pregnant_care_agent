@@ -492,9 +492,9 @@ const distributionCards = computed(() => {
 
   return [
     { icon: 'User', value: total, label: '全部孕妇', color: 'var(--primary)', bgColor: 'var(--primary-bg)', subLabel: `${withImage} 已绑定影像 · ${assessed.length} 已评估` },
-    { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${assessed.length ? ((highCount / assessed.length) * 100).toFixed(0) : 0}%` },
-    { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${assessed.length ? ((mediumCount / assessed.length) * 100).toFixed(0) : 0}%` },
-    { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${assessed.length ? ((lowCount / assessed.length) * 100).toFixed(0) : 0}%` },
+    { icon: 'WarningFilled', value: highCount, label: '高风险', color: '#D32F2F', bgColor: '#FFEBEE', subLabel: `占比 ${total ? ((highCount / total) * 100).toFixed(0) : 0}%` },
+    { icon: 'WarningFilled', value: mediumCount, label: '中风险', color: '#E65100', bgColor: '#FFF3E0', subLabel: `占比 ${total ? ((mediumCount / total) * 100).toFixed(0) : 0}%` },
+    { icon: 'CircleCheck', value: lowCount, label: '低风险', color: '#2E7D32', bgColor: '#E8F5E9', subLabel: `占比 ${total ? ((lowCount / total) * 100).toFixed(0) : 0}%` },
   ]
 })
 
@@ -640,16 +640,30 @@ async function loadPatientImages() {
   }
 }
 
-/** 加载数据 */
+/** 加载数据 — 孕妇列表与预警数据独立加载，避免一个失败导致另一个也丢失 */
 async function loadData() {
   loading.value = true
   try {
-    const [pregnantRes, alertsRes] = await Promise.all([
+    // 使用 allSettled 替代 all：孕妇列表和预警数据相互独立，一个失败不影响另一个
+    const [pregnantResult, alertsResult] = await Promise.allSettled([
       dashboardApi.pregnant(),
       alertApi.list({ status: 'pending,escalated,confirmed' }),
     ])
-    pregnant.value = pregnantRes.data?.data || []
-    alertList.value = alertsRes.data || []
+
+    if (pregnantResult.status === 'fulfilled') {
+      pregnant.value = pregnantResult.value.data?.data || []
+    } else {
+      console.error('加载孕妇列表失败:', pregnantResult.reason)
+      ElMessage.error('加载孕妇列表失败，请刷新重试')
+    }
+
+    if (alertsResult.status === 'fulfilled') {
+      alertList.value = alertsResult.value.data || []
+    } else {
+      console.error('加载FGR预警数据失败:', alertsResult.reason)
+      ElMessage.warning('FGR预警数据加载失败，部分功能可能不可用')
+    }
+
     await loadPatientImages()
   } catch (err) {
     console.error('加载FGR看板数据失败:', err)

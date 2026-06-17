@@ -458,16 +458,50 @@ export interface AdminSessionRun {
   output_tokens: number
   total_tokens: number
   tool_calls: Array<{ name: string; success: boolean; result_preview: string }> | null
+  tool_call_count: number
+  tool_error_count: number
+  feedback_rating: string | null
+  feedback_comment: string | null
   model_id: string
   total_latency_ms: number
+  llm_latency_ms: number | null
   guardrail_triggered: boolean
   response_preview: string | null
   created_at: string
 }
 
+/** 专用工具调用详情接口返回的单个 tool call */
+export interface ToolCallDetailItem {
+  tool_name: string
+  success: boolean
+  error_message: string | null
+  tool_args: Record<string, unknown> | null
+  result_preview: string | null
+  call_order: number
+  latency_ms: number | null
+}
+
+/** /audit/tool-calls/by-session/{session_id} 返回的单个 run */
+export interface ToolCallSessionRun {
+  audit_log_id: number
+  agent_role: string
+  agent_variant: string
+  intent: string | null
+  tool_call_count: number
+  tool_error_count: number
+  total_tokens: number
+  total_latency_ms: number
+  llm_latency_ms: number | null
+  feedback_rating: string | null
+  tool_calls: ToolCallDetailItem[]
+  created_at: string | null
+}
+
 export interface AdminSessionDetail {
   session_id: string
   run_count: number
+  total_tool_calls: number
+  total_tool_errors: number
   runs: AdminSessionRun[]
 }
 
