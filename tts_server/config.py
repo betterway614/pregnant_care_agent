@@ -33,7 +33,16 @@ if os.path.exists(_model_prompt):
     _DEFAULT_PROMPT_WAV = _model_prompt
 
 ZERO_SHOT_PROMPT_WAV = os.getenv("TTS_ZERO_SHOT_PROMPT_WAV", _DEFAULT_PROMPT_WAV)
-ZERO_SHOT_PROMPT_TEXT = os.getenv("TTS_ZERO_SHOT_PROMPT_TEXT", "")
+
+# CosyVoice 官方示例 zero_shot_prompt.wav 的逐字文本。zero-shot 必须同时提供
+# prompt 音频和对应文本，否则模型容易把参考音频语义混入输出，导致“读的不是输入文本”。
+DEFAULT_ZERO_SHOT_PROMPT_TEXT = "希望你以后能够做的比我还好呦。"
+_prompt_text_default = (
+    DEFAULT_ZERO_SHOT_PROMPT_TEXT
+    if ZERO_SHOT_PROMPT_WAV and ZERO_SHOT_PROMPT_WAV == _DEFAULT_PROMPT_WAV
+    else ""
+)
+ZERO_SHOT_PROMPT_TEXT = os.getenv("TTS_ZERO_SHOT_PROMPT_TEXT", _prompt_text_default)
 
 # Instruct 模式配置（用文字描述想要的音色风格）
 INSTRUCT_TEXT = os.getenv("TTS_INSTRUCT_TEXT", "")

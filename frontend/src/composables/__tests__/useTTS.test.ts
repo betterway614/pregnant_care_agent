@@ -33,6 +33,12 @@ describe('useTTS', () => {
     vi.clearAllMocks()
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
   it('should initialize with default state', () => {
     const tts = useTTS()
     expect(tts.isSpeaking.value).toBe(false)
@@ -119,6 +125,210 @@ describe('useTTS', () => {
       const tts = useTTS({ mode: 'browser' })
       await tts.speak('你好')
       expect(mockCancel).toHaveBeenCalled()
+      expect(mockSpeak).toHaveBeenCalled()
+    })
+
+    it('should use streaming backend synthesis first', async () => {
+      localStorage.setItem('token', 'test-token')
+
+      const wavHeader = new Uint8Array(44)
+      const view = new DataView(wavHeader.buffer)
+      wavHeader.set([82, 73, 70, 70], 0) // RIFF
+      wavHeader.set([87, 65, 86, 69], 8) // WAVE
+      view.setUint16(20, 1, true)
+      view.setUint16(22, 1, true)
+      view.setUint32(24, 24000, true)
+      view.setUint16(34, 16, true)
+      const pcm = new Uint8Array([0, 0, 255, 127])
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(wavHeader)
+          controller.enqueue(pcm)
+          controller.close()
+        },
+      })
+
+      const starts: number[] = []
+      class MockAudioBuffer {
+        duration: number
+        private data: Float32Array
+        constructor(length: number, sampleRate: number) {
+          this.duration = length / sampleRate
+          this.data = new Float32Array(length)
+        }
+        getChannelData() { return this.data }
+      }
+      class MockSource {
+        buffer: MockAudioBuffer | null = null
+        onended: (() => void) | null = null
+        connect() {}
+        start(when: number) {
+          starts.push(when)
+          this.onended?.()
+        }
+        stop() {}
+      }
+      class MockAudioContext {
+        currentTime = 0
+        state = 'running'
+        destination = {}
+        createBuffer(channels: number, length: number, sampleRate: number) {
+          expect(channels).toBe(1)
+          return new MockAudioBuffer(length, sampleRate)
+        }
+        createBufferSource() { return new MockSource() }
+        resume() { return Promise.resolve() }
+        close() { return Promise.resolve() }
+      }
+      class MockAudio {
+        src: string
+        onended: (() => void) | null = null
+        onerror: (() => void) | null = null
+        constructor(src: string) { this.src = src }
+        play() {
+          this.onended?.()
+          return Promise.resolve()
+        }
+        pause() {}
+      }
+
+      vi.stubGlobal('AudioContext', MockAudioContext)
+      vi.stubGlobal('Audio', MockAudio)
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:tts')
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      const fetchMock = vi.fn(async () => new Response(new Blob(['wav-bytes'], { type: 'audio/wav' }), {
+        status: 200,
+        headers: { 'Content-Type': 'audio/wav' },
+      }))
+      fetchMock.mockResolvedValueOnce(new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'audio/wav' },
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const tts = useTTS({ mode: 'backend', role: 'pregnant' })
+      await tts.speak('你好')
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const fetchCalls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+      expect(fetchCalls[0][0]).toBe('/api/v1/tts/stream')
+      const [, requestInit] = fetchCalls[0]
+      expect(JSON.parse(String(requestInit.body))).toMatchObject({
+        text: '你好',
+        role: 'pregnant',
+      })
+      expect(starts.length).toBeGreaterThan(0)
+    })
+
+    it('should fall back to non-stream synthesis when streaming audio is silent', async () => {
+      const wavHeader = new Uint8Array(44)
+      const view = new DataView(wavHeader.buffer)
+      wavHeader.set([82, 73, 70, 70], 0) // RIFF
+      wavHeader.set([87, 65, 86, 69], 8) // WAVE
+      view.setUint16(20, 1, true)
+      view.setUint16(22, 1, true)
+      view.setUint32(24, 24000, true)
+      view.setUint16(34, 16, true)
+      const silentPcm = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0])
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(wavHeader)
+          controller.enqueue(silentPcm)
+          controller.close()
+        },
+      })
+
+      class MockAudioBuffer {
+        length: number
+        duration: number
+        private data: Float32Array
+        constructor(length: number, sampleRate: number) {
+          this.length = length
+          this.duration = length / sampleRate
+          this.data = new Float32Array(length)
+        }
+        getChannelData() { return this.data }
+      }
+      class MockSource {
+        buffer: MockAudioBuffer | null = null
+        onended: (() => void) | null = null
+        connect() {}
+        start() { this.onended?.() }
+        stop() {}
+      }
+      class MockAudioContext {
+        currentTime = 0
+        state = 'running'
+        destination = {}
+        createBuffer(channels: number, length: number, sampleRate: number) {
+          return new MockAudioBuffer(length, sampleRate)
+        }
+        createBufferSource() { return new MockSource() }
+        resume() { return Promise.resolve() }
+        close() { return Promise.resolve() }
+      }
+      class MockAudio {
+        src: string
+        onended: (() => void) | null = null
+        onerror: (() => void) | null = null
+        constructor(src: string) { this.src = src }
+        play() {
+          this.onended?.()
+          return Promise.resolve()
+        }
+        pause() {}
+      }
+
+      vi.stubGlobal('AudioContext', MockAudioContext)
+      vi.stubGlobal('Audio', MockAudio)
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:tts')
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'audio/wav' },
+        }))
+        .mockResolvedValueOnce(new Response(new Blob(['wav-bytes'], { type: 'audio/wav' }), {
+          status: 200,
+          headers: { 'Content-Type': 'audio/wav' },
+        }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const tts = useTTS({ mode: 'backend', role: 'pregnant' })
+      await tts.speak('你好')
+
+      const fetchCalls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+      expect(fetchCalls.map(call => call[0])).toEqual([
+        '/api/v1/tts/stream',
+        '/api/v1/tts/synthesize',
+      ])
+    })
+
+    it('should fall back to browser speech when backend audio playback is rejected', async () => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:tts')
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+      class MockAudio {
+        src: string
+        onended: (() => void) | null = null
+        onerror: (() => void) | null = null
+        constructor(src: string) { this.src = src }
+        play() {
+          return Promise.reject(new DOMException('NotAllowedError', 'NotAllowedError'))
+        }
+        pause() {}
+      }
+
+      vi.stubGlobal('Audio', MockAudio)
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['wav-bytes'], { type: 'audio/wav' }), {
+        status: 200,
+        headers: { 'Content-Type': 'audio/wav' },
+      })))
+
+      const tts = useTTS({ mode: 'backend' })
+      await tts.speak('你好')
+
       expect(mockSpeak).toHaveBeenCalled()
     })
 

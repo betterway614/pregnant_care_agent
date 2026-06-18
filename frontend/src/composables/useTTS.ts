@@ -41,67 +41,213 @@ export function useTTS(options: TTSOptions = {}) {
     speechSynthesis.speak(utterance)
   }
 
-  async function playStreamingWav(response: Response, signal: AbortSignal): Promise<void> {
-    if (!response.body) throw new Error('No body')
-    const reader = response.body.getReader()
-    const chunks: Uint8Array[] = []
-
-    // 收集全部字节（流式传输使生成与网络重叠，总延迟仍远低于非流式端点）
-    while (true) {
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) chunks.push(value)
-    }
-
-    // 拼装 ArrayBuffer
-    const totalLen = chunks.reduce((s, c) => s + c.length, 0)
-    if (totalLen < 44) throw new Error(`WAV too short: ${totalLen} bytes`)
-
-    const wavBuf = new ArrayBuffer(totalLen)
-    const wavView = new Uint8Array(wavBuf)
-    let off = 0
-    for (const c of chunks) { wavView.set(c, off); off += c.length }
-
-    // 修复 WAV header（0xFFFFFFFF → 实际大小）
-    const dv = new DataView(wavBuf)
-    dv.setUint32(4, totalLen - 8, true)
-    dv.setUint32(40, totalLen - 44, true)
-
-    // 用原始采样率创建 AudioContext，避免浏览器上采样
-    const nativeRate = dv.getUint32(24, true)
-    audioContext = new AudioContext({ sampleRate: nativeRate })
-    if (audioContext.state === 'suspended') await audioContext.resume()
-
-    // 浏览器原生解码 — 保证语序绝对正确，无调度竞态
-    const audioBuffer = await audioContext.decodeAudioData(wavBuf)
-
-    const source = audioContext.createBufferSource()
-    source.buffer = audioBuffer; source.connect(audioContext.destination)
-    source.start()
-    scheduledSources.push(source)
-
-    await new Promise<void>(resolve => {
-      let resolved = false
-      const done = () => { if (!resolved) { resolved = true; resolve() } }
-      const fallback = setTimeout(done, audioBuffer.duration * 1000 + 2000)
-      source.onended = () => { clearTimeout(fallback); done() }
-    })
-
-    console.log(
-      `[TTS] 流式播放完成: ${totalLen}B, ` +
-      `${audioBuffer.sampleRate}Hz/${audioBuffer.numberOfChannels}ch/${audioBuffer.duration.toFixed(1)}s`
-    )
-  }
-
   async function playBlob(blob: Blob): Promise<void> {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       const url = URL.createObjectURL(blob)
       currentAudio = new Audio(url)
-      const cleanup = () => { URL.revokeObjectURL(url); currentAudio = null; resolve() }
-      currentAudio.onended = cleanup; currentAudio.onerror = cleanup
-      currentAudio.play().catch(cleanup)
+      let settled = false
+      const cleanup = () => {
+        URL.revokeObjectURL(url)
+        currentAudio = null
+      }
+      const finish = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve()
+      }
+      const fail = (err: unknown) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(err instanceof Error ? err : new Error('音频播放失败'))
+      }
+      currentAudio.onended = finish
+      currentAudio.onerror = () => fail(new Error('音频播放失败'))
+      currentAudio.play().catch(fail)
     })
+  }
+
+  function appendBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+    if (!a.length) return b
+    if (!b.length) return a
+    const out = new Uint8Array(a.length + b.length)
+    out.set(a)
+    out.set(b, a.length)
+    return out
+  }
+
+  function parseWavHeader(header: Uint8Array): { sampleRate: number; channels: number; bitsPerSample: number } {
+    if (header.length < 44) throw new Error('WAV header 不完整')
+    const riff = String.fromCharCode(...header.slice(0, 4))
+    const wave = String.fromCharCode(...header.slice(8, 12))
+    if (riff !== 'RIFF' || wave !== 'WAVE') throw new Error('流式响应不是 WAV')
+
+    const view = new DataView(header.buffer, header.byteOffset, header.byteLength)
+    return {
+      channels: view.getUint16(22, true),
+      sampleRate: view.getUint32(24, true),
+      bitsPerSample: view.getUint16(34, true),
+    }
+  }
+
+  async function getAudioContext(sampleRate: number): Promise<AudioContext> {
+    const AudioContextCtor = (
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ||
+      (globalThis as typeof globalThis & { AudioContext?: typeof AudioContext }).AudioContext
+    )
+    if (!AudioContextCtor) throw new Error('浏览器不支持 AudioContext')
+    if (!audioContext || audioContext.state === 'closed') {
+      audioContext = new AudioContextCtor({ sampleRate })
+    }
+    if (audioContext.state === 'suspended') await audioContext.resume()
+    return audioContext
+  }
+
+  function pcm16ToAudioBuffer(
+    ctx: AudioContext,
+    bytes: Uint8Array,
+    sampleRate: number,
+    channels: number
+  ): AudioBuffer {
+    const bytesPerSample = 2
+    const frameCount = Math.floor(bytes.length / (bytesPerSample * channels))
+    const buffer = ctx.createBuffer(channels, frameCount, sampleRate)
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+
+    for (let ch = 0; ch < channels; ch += 1) {
+      const channelData = buffer.getChannelData(ch)
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        const offset = (frame * channels + ch) * bytesPerSample
+        channelData[frame] = view.getInt16(offset, true) / 32768
+      }
+    }
+
+    return buffer
+  }
+
+  function hasPcm16Signal(bytes: Uint8Array): boolean {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    for (let offset = 0; offset + 1 < bytes.length; offset += 2) {
+      if (view.getInt16(offset, true) !== 0) return true
+    }
+    return false
+  }
+
+  async function playStreamingWav(response: Response, signal: AbortSignal): Promise<void> {
+    if (!response.body) throw new Error('流式响应缺少 body')
+
+    const reader = response.body.getReader()
+    let headerBytes = new Uint8Array()
+    let pending = new Uint8Array()
+    let headerParsed = false
+    let sampleRate = 24000
+    let channels = 1
+    let nextStartTime = 0
+    let activeSources = 0
+    let audioFrames = 0
+    let streamDone = false
+    let rejected = false
+    let resolveDone!: () => void
+    let rejectDone!: (reason?: unknown) => void
+
+    const done = new Promise<void>((resolve, reject) => {
+      resolveDone = resolve
+      rejectDone = reject
+    })
+
+    const maybeDone = () => {
+      if (!rejected && streamDone && activeSources === 0) resolveDone()
+    }
+    const fail = (err: unknown) => {
+      if (rejected) return
+      rejected = true
+      rejectDone(err)
+    }
+    const abortHandler = () => fail(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', abortHandler)
+
+    const schedulePcm = async (bytes: Uint8Array) => {
+      if (!bytes.length) return
+      if (!hasPcm16Signal(bytes)) return
+      const ctx = await getAudioContext(sampleRate)
+      const audioBuffer = pcm16ToAudioBuffer(ctx, bytes, sampleRate, channels)
+      if (audioBuffer.length === 0) return
+      audioFrames += audioBuffer.length
+
+      const source = ctx.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(ctx.destination)
+      source.onended = () => {
+        scheduledSources = scheduledSources.filter(s => s !== source)
+        activeSources -= 1
+        maybeDone()
+      }
+
+      const startAt = Math.max(nextStartTime, ctx.currentTime + 0.05)
+      nextStartTime = startAt + audioBuffer.duration
+      activeSources += 1
+      scheduledSources.push(source)
+      source.start(startAt)
+    }
+
+    const handleBytes = async (chunk: Uint8Array) => {
+      let bytes = chunk
+      if (!headerParsed) {
+        const needed = 44 - headerBytes.length
+        if (bytes.length < needed) {
+          headerBytes = appendBytes(headerBytes, bytes)
+          return
+        }
+
+        headerBytes = appendBytes(headerBytes, bytes.slice(0, needed))
+        const header = parseWavHeader(headerBytes)
+        if (header.bitsPerSample !== 16) {
+          throw new Error(`不支持的 WAV 位深: ${header.bitsPerSample}`)
+        }
+        sampleRate = header.sampleRate
+        channels = header.channels
+        headerParsed = true
+        nextStartTime = (await getAudioContext(sampleRate)).currentTime + 0.08
+        bytes = bytes.slice(needed)
+      }
+
+      if (pending.length) {
+        bytes = appendBytes(pending, bytes)
+        pending = new Uint8Array()
+      }
+
+      const frameBytes = channels * 2
+      const playableLength = bytes.length - (bytes.length % frameBytes)
+      if (playableLength <= 0) {
+        pending = bytes
+        return
+      }
+
+      await schedulePcm(bytes.slice(0, playableLength))
+      if (playableLength < bytes.length) pending = bytes.slice(playableLength)
+    }
+
+    try {
+      while (true) {
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+        const { done: readDone, value } = await reader.read()
+        if (readDone) break
+        if (value) await handleBytes(value)
+      }
+      if (!headerParsed) throw new Error('流式 WAV header 不完整')
+      if (audioFrames === 0) throw new Error('流式音频为空')
+      streamDone = true
+      maybeDone()
+      await done
+    } catch (err) {
+      fail(err)
+      await done
+    } finally {
+      signal.removeEventListener('abort', abortHandler)
+      reader.releaseLock()
+    }
   }
 
   async function extractError(resp: Response, fallback: string): Promise<string> {
@@ -122,29 +268,25 @@ export function useTTS(options: TTSOptions = {}) {
       }
       const body = JSON.stringify({ text, role, speed })
 
-      let streamFailed = false
       try {
         const resp = await fetch('/api/v1/tts/stream', { method: 'POST', headers, body, signal: abortController.signal })
         if (!resp.ok) throw new Error(`流式接口 ${resp.status}: ${await extractError(resp, `HTTP ${resp.status}`)}`)
         await playStreamingWav(resp, abortController.signal)
+        return
       } catch (streamErr) {
         if ((streamErr as Error).name === 'AbortError') throw streamErr
         console.warn('[TTS] 流式合成失败，降级到非流式:', (streamErr as Error).message)
-        streamFailed = true
       }
 
-      if (streamFailed) {
-        let resp: Response
-        try {
-          resp = await fetch('/api/v1/tts/synthesize', { method: 'POST', headers, body, signal: abortController.signal })
-          if (!resp.ok) throw new Error(`非流式接口 ${resp.status}: ${await extractError(resp, `HTTP ${resp.status}`)}`)
-        } catch (synthErr) {
-          if ((synthErr as Error).name === 'AbortError') throw synthErr
-          console.warn('[TTS] 非流式合成也失败，降级到浏览器 TTS:', (synthErr as Error).message)
-          speakBrowser(text); return
-        }
+      try {
+        const resp = await fetch('/api/v1/tts/synthesize', { method: 'POST', headers, body, signal: abortController.signal })
+        if (!resp.ok) throw new Error(`非流式接口 ${resp.status}: ${await extractError(resp, `HTTP ${resp.status}`)}`)
         const blob = await resp.blob()
         await playBlob(blob)
+      } catch (synthErr) {
+        if ((synthErr as Error).name === 'AbortError') throw synthErr
+        console.warn('[TTS] 后端合成失败，降级到浏览器 TTS:', (synthErr as Error).message)
+        speakBrowser(text); return
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -170,7 +312,7 @@ export function useTTS(options: TTSOptions = {}) {
     }
     if (abortController) { abortController.abort(); abortController = null }
     if (audioContext) {
-      scheduledSources.forEach(s => { try { s.stop() } catch { /* */ } })
+      scheduledSources.forEach(s => { try { s.stop() } catch { /* already stopped */ } })
       scheduledSources = []
       audioContext.close().catch(() => {})
       audioContext = null
