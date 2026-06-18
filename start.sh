@@ -409,7 +409,8 @@ show_status() {
     if [ -f "${AI_SERVICES_SCRIPT}" ]; then
         echo ""
         echo "  ── AI 服务 ──"
-        bash "${AI_SERVICES_SCRIPT}" status 2>/dev/null | grep -E "^\s*(●|○)" | sed 's/^/  /' || true
+        bash "${AI_SERVICES_SCRIPT}" --no-color status 2>/dev/null | \
+            grep -E '^\s*(●|○)' | sed 's/^/  /' || true
     fi
 
     echo ""

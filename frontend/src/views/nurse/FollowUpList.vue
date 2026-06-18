@@ -509,6 +509,14 @@ const RECOMMEND_POLL_MULTIPLIER = 3
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pollTick = 0
 
+/** 延迟清除 recentlyTriggeredIds，给后端足够时间同步 */
+function scheduleClearTriggeredIds() {
+  if (clearTriggeredTimer) clearTimeout(clearTriggeredTimer)
+  clearTriggeredTimer = setTimeout(() => {
+    recentlyTriggeredIds.value = new Set()
+  }, 60_000) // 60 秒后清除，之后正常的轮询/刷新会正确反映后端状态
+}
+
 /** 开始轮询 */
 function startPolling() {
   if (pollTimer) return
@@ -612,6 +620,10 @@ const recommendPanelOpen = ref<string[]>(['recommend'])
 const recommendLoading = ref(false)
 const recommendations = ref<any[]>([])
 const batchTriggering = ref(false)
+/** 最近触发过的孕妇 ID 集合 — 在 fetchRecommendations 中过滤，防止后端响应把刚移除的条目拉回来 */
+const recentlyTriggeredIds = ref<Set<string>>(new Set())
+/** 清除最近触发记录的超时句柄 */
+let clearTriggeredTimer: ReturnType<typeof setTimeout> | null = null
 const selectAllRecommendations = ref(false)
 
 const selectedRecommendations = computed(() =>
@@ -897,7 +909,12 @@ async function fetchRecommendations() {
   recommendLoading.value = true
   try {
     const res = await nurseAiApi.getFollowupRecommendations()
-    recommendations.value = (res.data?.recommendations || []).map((r: any) => ({ ...r, _triggering: false, _selected: false }))
+    const triggeredSet = recentlyTriggeredIds.value
+    const rawList = (res.data?.recommendations || []).map((r: any) => ({ ...r, _triggering: false, _selected: false }))
+    // 过滤掉最近触发过的患者，防止后端暂未排除时把刚移除的条目拉回来
+    recommendations.value = triggeredSet.size > 0
+      ? rawList.filter((r: any) => !triggeredSet.has(r.pregnant_id))
+      : rawList
   } catch (err) {
     console.error('加载AI推荐失败:', err)
     recommendations.value = []
@@ -913,12 +930,15 @@ async function doQuickTrigger(rec: any) {
   try {
     await followUpApi.trigger(rec.pregnant_id, rec.template_id)
     ElMessage.success(`已触发对 ${rec.patient_name} 的随访`)
-    // 乐观移除：立即从推荐列表中移除，避免等待后端重取
+    // 加入防护集合：60s 内 fetchRecommendations 自动过滤此患者
+    recentlyTriggeredIds.value.add(rec.pregnant_id)
+    scheduleClearTriggeredIds()
+    // 乐观移除：立即从推荐列表中移除
     if (idx !== -1) {
       recommendations.value.splice(idx, 1)
     }
     await fetchRecords()
-    // 后台异步同步推荐列表（不阻塞 UI）
+    // 后台异步同步推荐列表（不阻塞 UI，防护集合兜底过滤）
     fetchRecommendations()
   } catch (err: any) {
     const msg = err.response?.data?.detail || err.message || '触发失败'
@@ -962,6 +982,11 @@ async function doBatchTrigger() {
     }
 
     // 乐观移除：立即从推荐列表中移除已触发的条目（含 skipped 的，因为已有活跃随访）
+    // 同时加入防护集合，60s 内不会被 fetchRecommendations 拉回
+    for (const pid of triggeredIds) {
+      recentlyTriggeredIds.value.add(pid)
+    }
+    scheduleClearTriggeredIds()
     recommendations.value = recommendations.value.filter(
       (r: any) => !triggeredIds.has(r.pregnant_id)
     )

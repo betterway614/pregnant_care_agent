@@ -168,7 +168,21 @@ tool_metrics = ToolMetrics()
 
 
 def _resolve_pid(pregnant_id: str, run_context: RunContext | None) -> str:
-    """解析孕妇ID：优先使用传入值，为空时从 RunContext.user_id 获取"""
+    """解析孕妇ID。
+
+    护士/医生端如果路由层识别到本轮显式目标，会通过 session_state 注入
+    explicit_patient_target_id。该目标优先级最高，用于抵御 LLM 工具参数误填
+    或历史上下文串扰。
+    """
+    if run_context is not None and getattr(run_context, "session_state", None):
+        explicit_pid = str(run_context.session_state.get("explicit_patient_target_id") or "").strip()
+        if explicit_pid:
+            if pregnant_id and pregnant_id != explicit_pid:
+                run_context.session_state["target_mismatch_overridden"] = {
+                    "requested": pregnant_id,
+                    "used": explicit_pid,
+                }
+            return explicit_pid
     if pregnant_id:
         return pregnant_id
     if run_context is not None and hasattr(run_context, "user_id") and run_context.user_id:

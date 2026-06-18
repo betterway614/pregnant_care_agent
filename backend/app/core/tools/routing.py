@@ -126,8 +126,11 @@ def resolve_nurse_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
         "report": "report", "report_issue": "report",
         "chat": "chat", "greeting": "chat", "emotion": "chat",
         "ask_knowledge": "chat", "ask_symptom": "chat",
+        "check_patient_status": "complex",
     }
     group_name = nurse_intent_map.get(intent)
+    if group_name == "complex":
+        return (NURSE_TOOLS, "complex")
     if group_name and group_name in NURSE_TOOL_GROUPS:
         return (NURSE_TOOL_GROUPS[group_name], group_name)
     # UNKNOWN 回退到 chat 变体（对话式交互，非结构化分析）
@@ -145,8 +148,11 @@ def resolve_doctor_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
         "handle_issue": "issue", "resolve_issue": "issue",
         "chat": "chat", "greeting": "chat",
         "ask_knowledge": "chat", "guideline": "analyze",
+        "check_patient_status": "complex",
     }
     group_name = doctor_intent_map.get(intent)
+    if group_name == "complex":
+        return (DOCTOR_TOOLS, "complex")
     if group_name and group_name in DOCTOR_TOOL_GROUPS:
         return (DOCTOR_TOOL_GROUPS[group_name], group_name)
     # UNKNOWN 回退到 chat 变体（对话式交互，非结构化分析）

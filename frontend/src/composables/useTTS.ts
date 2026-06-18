@@ -41,103 +41,57 @@ export function useTTS(options: TTSOptions = {}) {
     speechSynthesis.speak(utterance)
   }
 
-  function pcmToAudioBuffer(
-    pcmBytes: Uint8Array, ctx: AudioContext,
-    sampleRate: number, numChannels: number, bitsPerSample: number,
-  ): AudioBuffer {
-    const bytesPerFrame = (bitsPerSample / 8) * numChannels
-    const numFrames = Math.floor(pcmBytes.length / bytesPerFrame)
-    const buffer = ctx.createBuffer(numChannels, numFrames, sampleRate)
-    if (bitsPerSample === 16) {
-      const int16 = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, numFrames * numChannels)
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = buffer.getChannelData(ch)
-        for (let i = 0; i < numFrames; i++) channel[i] = int16[i * numChannels + ch] / 32768.0
-      }
-    }
-    return buffer
-  }
-
   async function playStreamingWav(response: Response, signal: AbortSignal): Promise<void> {
     if (!response.body) throw new Error('No body')
     const reader = response.body.getReader()
-    const HEADER_SIZE = 44
+    const chunks: Uint8Array[] = []
 
-    let headerBuf = new Uint8Array(0)
-    while (headerBuf.length < HEADER_SIZE) {
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-      const { done, value } = await reader.read()
-      if (done) throw new Error('Stream ended before WAV header')
-      const merged = new Uint8Array(headerBuf.length + (value?.length || 0))
-      merged.set(headerBuf)
-      if (value) merged.set(value, headerBuf.length)
-      headerBuf = merged
-    }
-
-    const hv = new DataView(headerBuf.buffer, 0, HEADER_SIZE)
-    if (String.fromCharCode(hv.getUint8(0), hv.getUint8(1), hv.getUint8(2), hv.getUint8(3)) !== 'RIFF')
-      throw new Error('Invalid WAV')
-
-    const numChannels = hv.getUint16(22, true)
-    const sampleRate = hv.getUint32(24, true)
-    const bitsPerSample = hv.getUint16(34, true)
-    const bytesPerFrame = (bitsPerSample / 8) * numChannels
-
-    audioContext = new AudioContext({ sampleRate })
-    if (audioContext.state === 'suspended') await audioContext.resume()
-
-    let pcmRemaining = headerBuf.slice(HEADER_SIZE)
-    let nextStartTime = audioContext.currentTime + 0.15
-    let totalBytes = 0; let bufferCount = 0
-
+    // 收集全部字节（流式传输使生成与网络重叠，总延迟仍远低于非流式端点）
     while (true) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
       const { done, value } = await reader.read()
       if (done) break
-      if (!value || value.length === 0) continue
-
-      const combined = new Uint8Array(pcmRemaining.length + value.length)
-      combined.set(pcmRemaining); combined.set(value, pcmRemaining.length)
-      const frameBytes = Math.floor(combined.length / bytesPerFrame) * bytesPerFrame
-
-      if (frameBytes > 0) {
-        const frameData = combined.slice(0, frameBytes)
-        pcmRemaining = combined.slice(frameBytes)
-        totalBytes += frameData.length
-
-        const ab = pcmToAudioBuffer(frameData, audioContext, sampleRate, numChannels, bitsPerSample)
-        nextStartTime = Math.max(nextStartTime, audioContext.currentTime + 0.01)
-        const source = audioContext.createBufferSource()
-        source.buffer = ab; source.connect(audioContext.destination)
-        source.start(nextStartTime)
-        scheduledSources.push(source)
-        nextStartTime += ab.duration
-        bufferCount++
-      }
+      if (value) chunks.push(value)
     }
 
-    if (pcmRemaining.length >= bytesPerFrame && !signal.aborted) {
-      const frameBytes = Math.floor(pcmRemaining.length / bytesPerFrame) * bytesPerFrame
-      const ab = pcmToAudioBuffer(pcmRemaining.slice(0, frameBytes), audioContext, sampleRate, numChannels, bitsPerSample)
-      if (ab.length > 0) {
-        nextStartTime = Math.max(nextStartTime, audioContext.currentTime + 0.01)
-        const source = audioContext.createBufferSource()
-        source.buffer = ab; source.connect(audioContext.destination)
-        source.start(nextStartTime)
-        scheduledSources.push(source)
-        bufferCount++
-      }
-    }
+    // 拼装 ArrayBuffer
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0)
+    if (totalLen < 44) throw new Error(`WAV too short: ${totalLen} bytes`)
 
-    if (scheduledSources.length > 0 && !signal.aborted) {
-      const last = scheduledSources[scheduledSources.length - 1]
-      await new Promise<void>(resolve => {
-        last.onended = () => resolve()
-        const remaining = Math.max((nextStartTime - audioContext!.currentTime) * 1000 + 2000, 1000)
-        setTimeout(resolve, remaining)
-      })
-    }
-    console.log(`[TTS] 流式播放完成: ${totalBytes}B PCM, ${sampleRate}Hz/${numChannels}ch, ${bufferCount} buffers`)
+    const wavBuf = new ArrayBuffer(totalLen)
+    const wavView = new Uint8Array(wavBuf)
+    let off = 0
+    for (const c of chunks) { wavView.set(c, off); off += c.length }
+
+    // 修复 WAV header（0xFFFFFFFF → 实际大小）
+    const dv = new DataView(wavBuf)
+    dv.setUint32(4, totalLen - 8, true)
+    dv.setUint32(40, totalLen - 44, true)
+
+    // 用原始采样率创建 AudioContext，避免浏览器上采样
+    const nativeRate = dv.getUint32(24, true)
+    audioContext = new AudioContext({ sampleRate: nativeRate })
+    if (audioContext.state === 'suspended') await audioContext.resume()
+
+    // 浏览器原生解码 — 保证语序绝对正确，无调度竞态
+    const audioBuffer = await audioContext.decodeAudioData(wavBuf)
+
+    const source = audioContext.createBufferSource()
+    source.buffer = audioBuffer; source.connect(audioContext.destination)
+    source.start()
+    scheduledSources.push(source)
+
+    await new Promise<void>(resolve => {
+      let resolved = false
+      const done = () => { if (!resolved) { resolved = true; resolve() } }
+      const fallback = setTimeout(done, audioBuffer.duration * 1000 + 2000)
+      source.onended = () => { clearTimeout(fallback); done() }
+    })
+
+    console.log(
+      `[TTS] 流式播放完成: ${totalLen}B, ` +
+      `${audioBuffer.sampleRate}Hz/${audioBuffer.numberOfChannels}ch/${audioBuffer.duration.toFixed(1)}s`
+    )
   }
 
   async function playBlob(blob: Blob): Promise<void> {

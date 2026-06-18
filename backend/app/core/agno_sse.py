@@ -65,6 +65,7 @@ class AgnoSseConfig:
     done_source: str = "AI"
     images: list[Any] | None = None
     done_extra: dict[str, Any] | None = None
+    session_state: dict[str, Any] | None = None
 
 
 async def agno_sse_event_generator(
@@ -100,6 +101,8 @@ async def agno_sse_event_generator(
             user_id=config.user_id,
             session_id=config.session_id,
         )
+        if config.session_state:
+            arun_kwargs["session_state"] = config.session_state
         if config.images:
             arun_kwargs["images"] = config.images
 

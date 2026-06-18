@@ -596,6 +596,7 @@ async function sendAudioMessage(base64: string, audioFormat: string, audioBlob: 
       {
         message: '请听取以下语音并给出回复',
         pregnant_id: pregnantId || undefined,
+        session_id: currentSessionId || undefined,
         message_type: 'AUDIO',
         audio_data: base64,
         audio_format: audioFormat,

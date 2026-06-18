@@ -123,6 +123,12 @@ class RuleBaseNLU:
     )
 
     INTENT_PATTERNS = {
+        "CHECK_PATIENT_STATUS": [
+            r"(孕妇|患者|产妇|孕妈|病人)\s*(\d+|[零一二两三四五六七八九十百]+).{0,20}(最近|情况|数据|指标|健康|状态|怎么样|如何)",
+            r"(查|查询|查看|看一下|了解|分析|评估).{0,20}(孕妇|患者|产妇|孕妈|病人)?.{0,20}(最近|情况|数据|指标|健康)",
+            r"(孕妇|患者|产妇|孕妈|病人).{0,20}(最近|情况|数据|指标|健康).{0,20}(查|查询|查看|分析|评估|处理|异常)",
+            r"(最近|情况|数据|指标|健康).{0,20}(异常|处理|上报|医嘱)",
+        ],
         "HEALTH_DATA_REPORT": [
             r"(体重|血压|胎动|血糖|心率).*?(\d+)",
             r"(\d+\.?\d*)\s*(kg|斤|mmHg|次)",
@@ -313,6 +319,7 @@ class RuleBaseNLU:
             "GREETING": IntentCategory.CHAT,
             "KNOWLEDGE_QUERY": IntentCategory.KNOWLEDGE,
             "SCHEDULE_INQUIRY": IntentCategory.CHAT,
+            "CHECK_PATIENT_STATUS": IntentCategory.ANALYZE,
         }
         if intent in _INTENT_MAP:
             return _INTENT_MAP[intent]
@@ -352,10 +359,10 @@ class RuleBaseNLU:
             tools.append("agno_save_health_data")
 
         # 意图 + 关键词 → 具体工具推荐
-        if intent == "HEALTH_DATA_REPORT" or any(kw in text for kw in self._TREND_KEYWORDS):
+        if intent in ("HEALTH_DATA_REPORT", "CHECK_PATIENT_STATUS") or any(kw in text for kw in self._TREND_KEYWORDS):
             tools.append("agno_analyze_health_trends")
 
-        if any(kw in text for kw in self._ASSESS_KEYWORDS):
+        if intent == "CHECK_PATIENT_STATUS" or any(kw in text for kw in self._ASSESS_KEYWORDS):
             tools.append("agno_evaluate_vital_rules")
 
         if any(kw in text for kw in self._EPDS_KEYWORDS):

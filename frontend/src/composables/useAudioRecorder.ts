@@ -1,4 +1,4 @@
-import { ref, readonly } from 'vue'
+import { ref, readonly, onUnmounted } from 'vue'
 
 export interface AudioRecorderResult {
   base64: string
@@ -153,6 +153,27 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}) {
     shouldSendAudio = !isInCancelZone.value
     mediaRecorder.stop()
   }
+
+  function cleanup() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      shouldSendAudio = false
+      mediaRecorder.stop()
+    }
+    if (mediaRecorder) {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop())
+    }
+    if (recordingTimer) {
+      clearInterval(recordingTimer)
+      recordingTimer = null
+    }
+    document.removeEventListener('pointermove', onPointerMove)
+    document.removeEventListener('pointerup', onPointerUp)
+    document.removeEventListener('pointercancel', onPointerUp)
+    isRecording.value = false
+    isInCancelZone.value = false
+  }
+
+  onUnmounted(() => { cleanup() })
 
   return {
     isRecording: readonly(isRecording),

@@ -40,6 +40,7 @@ class CosyVoiceModel:
             self._has_sft: bool = False
             self._load_error: Optional[str] = None
             self._cached_prompt_input = None
+            self._inference_lock = threading.Lock()
             CosyVoiceModel._initialized = True
 
     @property
@@ -152,41 +153,42 @@ class CosyVoiceModel:
             logger.error("Model not loaded")
             return None
 
-        try:
-            import torch
+        with self._inference_lock:
+            try:
+                import torch
 
-            speaker = speaker or config.DEFAULT_SPEAKER
-            result_gen = self._get_inference_generator(text, speaker, speed, stream=False)
-            if result_gen is None:
+                speaker = speaker or config.DEFAULT_SPEAKER
+                result_gen = self._get_inference_generator(text, speaker, speed, stream=False)
+                if result_gen is None:
+                    return None
+
+                # 拼接所有音频 chunk
+                audio_chunks = []
+                for chunk in result_gen:
+                    if chunk is not None and "tts_speech" in chunk:
+                        tensor = chunk["tts_speech"]
+                        if tensor.dim() > 1:
+                            tensor = tensor.squeeze(0)
+                        audio_chunks.append(tensor)
+
+                if not audio_chunks:
+                    logger.warning("Synthesis produced no audio")
+                    return None
+
+                audio_tensor = torch.cat(audio_chunks, dim=-1)
+
+                if abs(speed - 1.0) > 0.01:
+                    audio_tensor = self._adjust_speed(audio_tensor, speed)
+
+                audio_np = audio_tensor.cpu().numpy().astype(np.float32)
+                max_val = np.abs(audio_np).max()
+                if max_val > 0:
+                    audio_np = audio_np / max_val
+                return audio_np
+
+            except Exception as e:
+                logger.exception(f"Synthesis failed: {e}")
                 return None
-
-            # 拼接所有音频 chunk
-            audio_chunks = []
-            for chunk in result_gen:
-                if chunk is not None and "tts_speech" in chunk:
-                    tensor = chunk["tts_speech"]
-                    if tensor.dim() > 1:
-                        tensor = tensor.squeeze(0)
-                    audio_chunks.append(tensor)
-
-            if not audio_chunks:
-                logger.warning("Synthesis produced no audio")
-                return None
-
-            audio_tensor = torch.cat(audio_chunks, dim=-1)
-
-            if abs(speed - 1.0) > 0.01:
-                audio_tensor = self._adjust_speed(audio_tensor, speed)
-
-            audio_np = audio_tensor.cpu().numpy().astype(np.float32)
-            max_val = np.abs(audio_np).max()
-            if max_val > 0:
-                audio_np = audio_np / max_val
-            return audio_np
-
-        except Exception as e:
-            logger.exception(f"Synthesis failed: {e}")
-            return None
 
     def synthesize_stream(
         self,
@@ -199,33 +201,34 @@ class CosyVoiceModel:
             logger.error("Model not loaded")
             return
 
-        try:
-            import torch
+        with self._inference_lock:
+            try:
+                import torch
 
-            speaker = speaker or config.DEFAULT_SPEAKER
-            result_gen = self._get_inference_generator(text, speaker, speed, stream=True)
-            if result_gen is None:
-                return
+                speaker = speaker or config.DEFAULT_SPEAKER
+                result_gen = self._get_inference_generator(text, speaker, speed, stream=True)
+                if result_gen is None:
+                    return
 
-            chunk_idx = 0
-            for chunk in result_gen:
-                if chunk is None or "tts_speech" not in chunk:
-                    continue
-                tensor = chunk["tts_speech"]
-                if tensor.dim() > 1:
-                    tensor = tensor.squeeze(0)
+                chunk_idx = 0
+                for chunk in result_gen:
+                    if chunk is None or "tts_speech" not in chunk:
+                        continue
+                    tensor = chunk["tts_speech"]
+                    if tensor.dim() > 1:
+                        tensor = tensor.squeeze(0)
 
-                audio_np = tensor.cpu().numpy().astype(np.float32)
-                # 固定幅度裁剪替代逐段 /max_val，保留段间自然幅度关系
-                np.clip(audio_np, -0.99, 0.99, out=audio_np)
+                    audio_np = tensor.cpu().numpy().astype(np.float32)
+                    # 固定幅度裁剪替代逐段 /max_val，保留段间自然幅度关系
+                    np.clip(audio_np, -0.99, 0.99, out=audio_np)
 
-                chunk_len = len(audio_np) / self._sample_rate
-                logger.info(f"Stream chunk #{chunk_idx}: {chunk_len:.2f}s audio")
-                chunk_idx += 1
-                yield audio_np
+                    chunk_len = len(audio_np) / self._sample_rate
+                    logger.info(f"Stream chunk #{chunk_idx}: {chunk_len:.2f}s audio")
+                    chunk_idx += 1
+                    yield audio_np
 
-        except Exception as e:
-            logger.exception(f"Stream synthesis failed: {e}")
+            except Exception as e:
+                logger.exception(f"Stream synthesis failed: {e}")
 
     def _get_inference_generator(self, text, speaker, speed, stream):
         """根据配置创建推理生成器（SFT 或 zero-shot），使用缓存的 prompt 特征"""

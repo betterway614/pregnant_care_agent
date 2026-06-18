@@ -488,14 +488,30 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
+    from ..core.patient_targeting import (
+        build_patient_target_session_state,
+        build_patient_target_system_prefix,
+        resolve_patient_target_from_text,
+    )
     from ..core.agno_medical_agents import get_nurse_chat_variant_agent, get_nurse_agent
     from ..core.agno_tools import resolve_nurse_tools_by_intent, NURSE_TOOLS, tool_metrics
     from ..core.agno_sse import AgnoSseConfig, AgnoSseState, agno_sse_event_generator
 
+    target = await asyncio.to_thread(
+        resolve_patient_target_from_text,
+        message,
+        fallback_pregnant_id=pregnant_id,
+    )
+    if target.explicit and not target.pregnant_id:
+        return JSONResponse({"error": target.unresolved_reason or "未找到指定孕妇"}, status_code=404)
+    pregnant_id = target.pregnant_id or pregnant_id
+    target_prefix = build_patient_target_system_prefix(target)
+    target_session_state = build_patient_target_session_state(target)
+
     # 1. NLU 意图解析 — 结果用于动态工具选择 + 上下文注入
     intent_variant = "chat"
     intent_classification = None
-    input_text = message
+    input_text = f"{target_prefix}\n{message}" if target_prefix else message
     if message.strip():
         try:
             from ..core.nlu_engine import nlu_engine
@@ -516,7 +532,8 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             )
             if nlu_result.suggested_tools:
                 nlu_prefix += f" 建议工具:{','.join(nlu_result.suggested_tools)}"
-            input_text = f"{nlu_prefix}\n{message}"
+            body = f"{nlu_prefix}\n{message}"
+            input_text = f"{target_prefix}\n{body}" if target_prefix else body
 
             # 利用 Agno Agent.tools 可变属性动态注入工具子集
             agent = get_nurse_chat_variant_agent()
@@ -557,6 +574,8 @@ async def nurse_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depends
             error_log_message="Nurse chat stream error",
             error_chunk_content="\n\n抱歉，AI服务暂时不可用，请稍后再试。",
             done_source="NURSE_AI",
+            session_state=target_session_state,
+            done_extra={"target_pregnant_id": pregnant_id} if pregnant_id else None,
         )
 
         tool_metrics.start_session()
