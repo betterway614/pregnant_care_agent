@@ -8,6 +8,7 @@
 - archived: 长期存档
 """
 import json
+import re
 import time
 from typing import Optional, AsyncGenerator
 
@@ -26,6 +27,7 @@ from ..database import SessionLocal
 from ..schemas import (
     FollowUpRecordResponse, FollowUpConfirm, FollowUpTrigger,
     FollowUpSignatureRequest, FollowUpRecordUpdateRequest,
+    FollowUpArchiveSummaryRequest, FollowUpArchiveSummaryResponse,
     FOLLOWUP_ACTIVE_STATUSES, FOLLOWUP_STATUS_DRAFT,
     FOLLOWUP_STATUS_IN_PROGRESS, FOLLOWUP_STATUS_COMPLETED,
 )
@@ -84,6 +86,107 @@ def _quick_audit(
 
 
 router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
+
+
+def _normalize_archive_summary_text(text: str) -> str:
+    """Compare clinical text while ignoring whitespace-only edits."""
+    return re.sub(r"\s+", "", str(text or ""))
+
+
+def _format_archive_summary_text(summary: dict | str | None) -> str:
+    """Render AI structured archive summary into editable plain text."""
+    if not summary:
+        return ""
+    if isinstance(summary, str):
+        return summary.strip()
+    lines: list[str] = []
+    if summary.get("warm_summary"):
+        lines.append(f"温馨总结：{summary.get('warm_summary', '')}")
+    abnormal = summary.get("abnormal_indicators") or summary.get("abnormal_flags") or []
+    if abnormal:
+        lines.append(f"需关注指标：{'、'.join(str(item) for item in abnormal)}")
+    if summary.get("trend_analysis"):
+        lines.append(f"趋势分析：{summary.get('trend_analysis', '')}")
+    if summary.get("personalized_advice"):
+        lines.append(f"个性化建议：{summary.get('personalized_advice', '')}")
+    if summary.get("nurse_action_suggestion"):
+        lines.append(f"护士建议：{summary.get('nurse_action_suggestion', '')}")
+    return "\n\n".join(line for line in lines if line).strip()
+
+
+def _archive_summary_parts(record: FollowUpRecord) -> tuple[dict, str, str, bool]:
+    snapshot = dict(record.ai_snapshot or {})
+    draft = snapshot.get("archive_summary_draft") or snapshot.get("archive_summary") or {}
+    draft_text = (snapshot.get("archive_summary_draft_text") or _format_archive_summary_text(draft)).strip()
+    final = snapshot.get("archive_summary_final") or {}
+    final_text = (snapshot.get("archive_summary_final_text") or final.get("text") or "").strip()
+    modified = bool(
+        draft_text
+        and final_text
+        and _normalize_archive_summary_text(draft_text) != _normalize_archive_summary_text(final_text)
+    )
+    return draft, draft_text, final_text, modified
+
+
+def _archive_summary_response(record: FollowUpRecord) -> FollowUpArchiveSummaryResponse:
+    draft, draft_text, final_text, modified = _archive_summary_parts(record)
+    snapshot = dict(record.ai_snapshot or {})
+    return FollowUpArchiveSummaryResponse(
+        record_id=str(record.id),
+        ai_draft=draft if isinstance(draft, dict) else {},
+        ai_draft_text=draft_text,
+        nurse_final_text=final_text,
+        modified=modified,
+        generated_at=snapshot.get("archive_summary_generated_at"),
+        modified_at=snapshot.get("archive_summary_modified_at"),
+    )
+
+
+def _require_modified_archive_summary(record: FollowUpRecord) -> str:
+    _, draft_text, final_text, modified = _archive_summary_parts(record)
+    if not draft_text:
+        raise HTTPException(400, "请先生成 AI 归档总结原稿")
+    if not final_text:
+        raise HTTPException(400, "请先修改并保存归档总结")
+    if not modified:
+        raise HTTPException(400, "护士提交的归档总结必须和 AI 原稿不同")
+    return final_text
+
+
+def _document_payload(record: FollowUpRecord) -> dict:
+    _, draft_text, final_text, modified = _archive_summary_parts(record)
+    return {
+        "record_id": str(record.id),
+        "status": record.status,
+        "classification": record.classification or "normal",
+        "chief_complaint": record.chief_complaint,
+        "self_reported_data": record.self_reported_data or {},
+        "obstetric_exam": record.obstetric_exam or {},
+        "lab_results": record.lab_results or {},
+        "summary": record.summary,
+        "health_education": record.health_education or [],
+        "guidance_tags": record.guidance_tags or [],
+        "referral": record.referral,
+        "next_followup_date": str(record.next_followup_date) if record.next_followup_date else "",
+        "reviewed_by": record.reviewed_by,
+        "reviewed_at": str(record.reviewed_at) if record.reviewed_at else "",
+        "review_comment": record.review_comment,
+        "ai_snapshot": record.ai_snapshot or {},
+        "archive_summary_draft_text": draft_text,
+        "archive_summary_final_text": final_text,
+        "archive_summary_modified": modified,
+    }
+
+
+def _generate_record_document_for(record: FollowUpRecord, patient_name: str) -> tuple[dict, str]:
+    gest_week = record.gestational_week or "?"
+    follow_up_date = record.follow_up_date.strftime("%Y-%m-%d") if record.follow_up_date else "?"
+    return followup_service.generate_record_document(
+        patient_name=patient_name,
+        gest_week=gest_week,
+        follow_up_date=follow_up_date,
+        record=_document_payload(record),
+    )
 
 
 @router.post("/trigger")
@@ -185,6 +288,23 @@ def get_records(status: Optional[str] = None,
     return result
 
 
+@router.get("/records/{record_id}", response_model=FollowUpRecordResponse)
+def get_record(record_id: str, db: Session = Depends(get_db),
+               current_user: TokenPayload = Depends(get_current_user)):
+    """获取单条随访记录详情（孕妇仅可查看本人记录）"""
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    if current_user.role == "pregnant":
+        if not current_user.pregnant_id or record.pregnant_id != current_user.pregnant_id:
+            raise HTTPException(403, "无权访问此记录")
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    return FollowUpRecordResponse(
+        **{c.name: getattr(record, c.name) for c in record.__table__.columns},
+        patient_name=pregnant.display_name if pregnant else "未知"
+    )
+
+
 @router.put("/records/{record_id}/confirm", response_model=FollowUpRecordResponse)
 def confirm_record(record_id: str, confirm: FollowUpConfirm,
                    db: Session = Depends(get_db),
@@ -217,37 +337,11 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
     if confirm.ai_snapshot:
         record.ai_snapshot = confirm.ai_snapshot
 
-    # 生成归档文档快照 + 纯文本
+    # 生成确认阶段文档快照 + 纯文本。归档时会重新冻结护士定稿后的最终快照。
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
     patient_name = (pregnant.display_name if pregnant else "未知")
-    gest_week = record.gestational_week or "?"
-    follow_up_date = record.follow_up_date.strftime("%Y-%m-%d") if record.follow_up_date else "?"
-
-    record_dict = {
-        "status": record.status,
-        "classification": record.classification or "normal",
-        "chief_complaint": record.chief_complaint,
-        "self_reported_data": record.self_reported_data or {},
-        "obstetric_exam": record.obstetric_exam or {},
-        "lab_results": record.lab_results or {},
-        "summary": record.summary,
-        "health_education": record.health_education or [],
-        "guidance_tags": record.guidance_tags or [],
-        "referral": record.referral,
-        "next_followup_date": str(record.next_followup_date) if record.next_followup_date else "",
-        "reviewed_by": record.reviewed_by,
-        "reviewed_at": str(record.reviewed_at) if record.reviewed_at else "",
-        "review_comment": record.review_comment,
-        "ai_snapshot": record.ai_snapshot or {},
-    }
-
     try:
-        snapshot, text = followup_service.generate_record_document(
-            patient_name=patient_name,
-            gest_week=gest_week,
-            follow_up_date=follow_up_date,
-            record=record_dict,
-        )
+        snapshot, text = _generate_record_document_for(record, patient_name)
         record.record_snapshot = snapshot
         record.record_text = text
     except Exception as e:
@@ -260,6 +354,134 @@ def confirm_record(record_id: str, confirm: FollowUpConfirm,
         **{c.name: getattr(record, c.name) for c in record.__table__.columns},
         patient_name=patient_name,
     )
+
+
+@router.post("/records/{record_id}/archive", response_model=FollowUpRecordResponse)
+async def archive_record(record_id: str, db: Session = Depends(get_db),
+                   current_user: TokenPayload = Depends(get_current_user)):
+    """归档已确认的随访记录（confirmed → archived）
+
+    1. 校验护士签名已存在（签名是归档前置条件）
+    2. 校验护士定稿已保存且不同于 AI 原稿
+    3. 状态机转换 confirmed → archived，并冻结最终文档
+    """
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以归档随访记录")
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+
+    # 状态机校验（优先于签名检查，给出明确错误信息）
+    try:
+        current_status = FollowUpStatus(record.status)
+        new_status = followup_fsm.transition(current_status, "archive")
+    except InvalidTransition as e:
+        raise HTTPException(400, f"状态转换不允许: {e}")
+
+    sig = record.signature_data or {}
+    if not sig.get("image"):
+        raise HTTPException(400, "请先完成护士签名后再归档")
+
+    # 护士定稿必须不同于 AI 原稿，归档前再次后端校验。
+    _require_modified_archive_summary(record)
+
+    pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    patient_name = (pregnant.display_name if pregnant else "未知")
+
+    record.status = new_status.value
+    try:
+        snapshot, text = _generate_record_document_for(record, patient_name)
+        record.record_snapshot = snapshot
+        record.record_text = text
+    except Exception as e:
+        logger.warning("归档最终文档生成失败: {}", e)
+
+    db.commit()
+    db.refresh(record)
+
+    return FollowUpRecordResponse(
+        **{c.name: getattr(record, c.name) for c in record.__table__.columns},
+        patient_name=patient_name,
+    )
+
+
+@router.post("/records/{record_id}/archive-summary/generate", response_model=FollowUpArchiveSummaryResponse)
+async def generate_archive_summary(record_id: str, db: Session = Depends(get_db),
+                                   current_user: TokenPayload = Depends(get_current_user)):
+    """生成或读取 AI 归档总结原稿。
+
+    AI 原稿只负责起草；护士必须另存一版不同的定稿后才允许签名和归档。
+    """
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以生成归档总结")
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    if record.status not in ("confirmed", "archived"):
+        raise HTTPException(400, "仅已确认的随访记录可以生成归档总结")
+
+    snapshot = dict(record.ai_snapshot or {})
+    _, draft_text, _, _ = _archive_summary_parts(record)
+    if not draft_text:
+        pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+        patient_name = (pregnant.nickname or pregnant.display_name) if pregnant else "未知"
+        ai_report = await _generate_llm_summary(
+            patient_name=patient_name,
+            gest_week=record.gestational_week or "?",
+            answers=record.self_reported_data or {},
+            risk_tags=pregnant.risk_tags if pregnant else [],
+            pregnant_id=record.pregnant_id,
+        )
+        draft_text = _format_archive_summary_text(ai_report)
+        snapshot["archive_summary_draft"] = ai_report
+        snapshot["archive_summary_draft_text"] = draft_text
+        snapshot["archive_summary_generated_at"] = beijing_now().isoformat()
+        snapshot.setdefault("archive_summary_final_text", "")
+        snapshot["archive_summary_modified"] = False
+        record.ai_snapshot = snapshot
+        db.commit()
+        db.refresh(record)
+
+    return _archive_summary_response(record)
+
+
+@router.put("/records/{record_id}/archive-summary", response_model=FollowUpArchiveSummaryResponse)
+def update_archive_summary(record_id: str, req: FollowUpArchiveSummaryRequest,
+                           db: Session = Depends(get_db),
+                           current_user: TokenPayload = Depends(get_current_user)):
+    """保存护士修改后的归档总结定稿。"""
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以修改归档总结")
+    record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
+    if not record:
+        raise HTTPException(404, "记录不存在")
+    if record.status != "confirmed":
+        raise HTTPException(400, "仅已确认且未归档的随访记录可以修改归档总结")
+
+    snapshot = dict(record.ai_snapshot or {})
+    _, draft_text, _, _ = _archive_summary_parts(record)
+    if not draft_text:
+        raise HTTPException(400, "请先生成 AI 归档总结原稿")
+
+    final_text = req.summary_text.strip()
+    if not final_text:
+        raise HTTPException(400, "归档总结不能为空")
+    if _normalize_archive_summary_text(final_text) == _normalize_archive_summary_text(draft_text):
+        raise HTTPException(400, "护士提交的归档总结必须和 AI 原稿不同")
+
+    now = beijing_now().isoformat()
+    snapshot["archive_summary_final_text"] = final_text
+    snapshot["archive_summary_final"] = {
+        "text": final_text,
+        "modified_by": current_user.sub,
+        "modified_at": now,
+    }
+    snapshot["archive_summary_modified"] = True
+    snapshot["archive_summary_modified_by"] = current_user.sub
+    snapshot["archive_summary_modified_at"] = now
+    record.ai_snapshot = snapshot
+    db.commit()
+    return _archive_summary_response(record)
 
 
 @router.get("/records/{record_id}/ai-review")
@@ -464,43 +686,60 @@ async def update_record(record_id: str, data: FollowUpRecordUpdateRequest, db: S
 @router.get("/records/{record_id}/document")
 def get_record_document(record_id: str, db: Session = Depends(get_db),
                         current_user: TokenPayload = Depends(get_current_user)):
-    """获取随访记录的归档文档
+    """获取随访记录的归档文档。
 
-    返回：record_snapshot（结构化快照）+ record_text（纯文本）+ signature_data（签名）
+    confirmed 阶段返回实时预览；archived 阶段返回最终冻结快照。
     """
-    from ..schemas import FollowUpRecordResponse
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == record.pregnant_id).first()
+    patient_name = pregnant.display_name if pregnant else "未知"
+
+    generated_snapshot, generated_text = _generate_record_document_for(record, patient_name)
+    if record.status == "archived" and record.record_snapshot:
+        snapshot = dict(record.record_snapshot or {})
+        snapshot.setdefault("record_id", str(record.id))
+        if not snapshot.get("archive_summary_final_text"):
+            snapshot["archive_summary_final_text"] = generated_snapshot.get("archive_summary_final_text", "")
+            snapshot["archive_summary_modified"] = generated_snapshot.get("archive_summary_modified", False)
+            snapshot["ai_snapshot"] = generated_snapshot.get("ai_snapshot", {})
+        text = record.record_text or generated_text
+    else:
+        snapshot = generated_snapshot
+        text = generated_text
+
     return {
         "record_id": str(record.id),
-        "patient_name": pregnant.display_name if pregnant else "未知",
-        "snapshot": record.record_snapshot or {},
-        "text": record.record_text or "",
+        "patient_name": patient_name,
+        "status": record.status,
+        "snapshot": snapshot,
+        "text": text,
         "signature": record.signature_data or {},
-        "has_document": bool(record.record_snapshot),
+        "ai_snapshot": record.ai_snapshot or {},
+        "archive_summary": _archive_summary_response(record).model_dump(),
+        "has_document": bool(snapshot),
+        "can_print": record.status == "archived",
     }
 
 
 @router.post("/records/{record_id}/sign")
 def sign_record(record_id: str, req: FollowUpSignatureRequest, db: Session = Depends(get_db),
                 current_user: TokenPayload = Depends(get_current_user)):
-    """提交手写签名
+    """护士签署归档文档
 
-    将签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
-    仅孕妇本人可以签名自己的随访记录。
+    将手写签名 base64 PNG 存入 signature_data，附带签名者姓名和时间。
+    仅护士/管理员可以签署。签名后记录才可归档。
     """
-    if current_user.role != "pregnant":
-        raise HTTPException(403, "仅孕妇可以签署随访记录")
+    if current_user.role not in ("nurse", "admin"):
+        raise HTTPException(403, "仅护士或管理员可以签署随访记录")
     record = db.query(FollowUpRecord).filter(FollowUpRecord.id == UUID(record_id)).first()
     if not record:
         raise HTTPException(404, "记录不存在")
-    if record.pregnant_id != current_user.pregnant_id:
-        raise HTTPException(403, "只能签署本人的随访记录")
     # 状态机校验：仅 confirmed 状态允许签名
     if record.status != "confirmed":
         raise HTTPException(400, f"当前状态 '{record.status}' 不允许签名，仅 'confirmed' 状态可签名")
+    _require_modified_archive_summary(record)
     record.signature_data = {
         "image": req.signature_image,
         "signer": req.signer_name,

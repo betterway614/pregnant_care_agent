@@ -202,7 +202,7 @@
             :total="total"
             layout="prev, pager, next"
             background
-            small
+            size="small"
           />
         </div>
       </div>
