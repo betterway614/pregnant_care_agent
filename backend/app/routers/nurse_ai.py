@@ -12,7 +12,7 @@ from ..models import Pregnant, HealthDataPoint, Alert, FollowUpRecord, FgrAssess
 from ..schemas import (
     NurseAnalyzeRequest, NurseAnalyzeResponse, FollowUpGenerateRequest, FollowUpGenerateResponse,
     FollowupScheduleResponse, FollowupScheduleRecommendation, FollowupScheduleContext,
-    ChatStreamRequest,
+    ChatStreamRequest, FOLLOWUP_ACTIVE_STATUSES,
 )
 from ..core import get_llm_client
 from ..core.json_parser import parse_llm_json
@@ -1086,42 +1086,71 @@ def get_followup_recommendations(user: TokenPayload = Depends(get_current_user),
         raise HTTPException(status_code=403, detail="需要护士权限")
 
     all_pregnant = db.query(Pregnant).all()
-    all_recommendations = []
+
+    # ── 第一层去重：批量查出已有活跃随访的孕妇，这些不参与推荐 ──
+    active_pregnant_ids: set[str] = {
+        row[0] for row in db.query(FollowUpRecord.pregnant_id).filter(
+            FollowUpRecord.status.in_(FOLLOWUP_ACTIVE_STATUSES),
+        ).distinct().all()
+    }
+
+    # ── 第二层去重：每人只保留最优的 1 条推荐（按 pregnant_id 去重）──
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+
+    def _rec_sort_key(r: dict):
+        return (
+            0 if r["recommended_date"] == "immediate" else 1,
+            priority_order.get(r.get("priority", "low"), 2),
+            r["recommended_date"] if r["recommended_date"] != "immediate" else "",
+        )
+
+    best_by_patient: dict[str, dict] = {}
+    skipped_active = 0
+    skipped_duplicate = 0
 
     for p in all_pregnant:
-        # read_only=True: GET 请求不应修改 DB 状态（僵尸随访归档延迟到实际触发时执行）
+        # 已有活跃随访 → 跳过
+        if p.pregnant_id in active_pregnant_ids:
+            skipped_active += 1
+            continue
+
         result = tool_recommend_followup_schedule(db, p.pregnant_id, read_only=True)
         if "error" in result:
             continue
         for rec in result.get("recommendations", []):
             # 只保留 immediate 和未来 7 天内的推荐
-            if rec["recommended_date"] == "immediate":
-                all_recommendations.append({
-                    "pregnant_id": p.pregnant_id,
-                    "patient_name": p.display_name,
-                    "gestational_week": result.get("current_gestational_week", ""),
-                    **rec,
-                })
-            else:
+            if rec["recommended_date"] != "immediate":
                 try:
                     from datetime import date as date_cls
                     rec_date = date_cls.fromisoformat(rec["recommended_date"])
-                    if (rec_date - beijing_now().date()).days <= 7:
-                        all_recommendations.append({
-                            "pregnant_id": p.pregnant_id,
-                            "patient_name": p.display_name,
-                            "gestational_week": result.get("current_gestational_week", ""),
-                            **rec,
-                        })
+                    if (rec_date - beijing_now().date()).days > 7:
+                        continue
                 except (ValueError, TypeError):
-                    pass
+                    continue
 
-    # 排序：immediate优先，然后按 priority
-    priority_order = {"high": 0, "medium": 1, "low": 2}
-    all_recommendations.sort(key=lambda r: (
-        0 if r["recommended_date"] == "immediate" else 1,
-        priority_order.get(r.get("priority", "low"), 2),
-    ))
+            entry = {
+                "pregnant_id": p.pregnant_id,
+                "patient_name": p.display_name,
+                "gestational_week": result.get("current_gestational_week", ""),
+                **rec,
+            }
+
+            existing = best_by_patient.get(p.pregnant_id)
+            if existing is None:
+                best_by_patient[p.pregnant_id] = entry
+            elif _rec_sort_key(entry) < _rec_sort_key(existing):
+                best_by_patient[p.pregnant_id] = entry
+                skipped_duplicate += 1
+            else:
+                skipped_duplicate += 1
+
+    if skipped_active or skipped_duplicate:
+        logger.info(
+            "推荐去重：跳过{}名活跃随访孕妇，去除{}条同患者重复推荐，最终{}条",
+            skipped_active, skipped_duplicate, len(best_by_patient),
+        )
+
+    all_recommendations = sorted(best_by_patient.values(), key=_rec_sort_key)
 
     return {"recommendations": all_recommendations[:10]}
 

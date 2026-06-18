@@ -88,10 +88,36 @@ router = APIRouter(prefix="/api/v1/followup", tags=["随访管理"])
 
 @router.post("/trigger")
 def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db), current_user: TokenPayload = Depends(get_current_user)):
-    """触发自动随访"""
+    """触发自动随访
+
+    去重逻辑：同一孕妇仅保留最新一条活跃随访。若已存在 draft/in_progress
+    状态的随访记录，自动归档旧记录后再创建新记录。
+    """
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == trigger.pregnant_id).first()
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
+
+    # ── 去重：归档该孕妇所有活跃的旧随访记录 ──
+    active_records = db.query(FollowUpRecord).filter(
+        FollowUpRecord.pregnant_id == trigger.pregnant_id,
+        FollowUpRecord.status.in_(FOLLOWUP_ACTIVE_STATUSES),
+    ).all()
+
+    archived_count = 0
+    for old in active_records:
+        old.status = "archived"
+        old.review_comment = (
+            f"[自动归档] 护士重新触发随访（{beijing_now().strftime('%Y-%m-%d %H:%M')}），"
+            f"原状态 {old.status if old.status != 'archived' else 'draft'} 的记录被新记录取代。"
+        )
+        archived_count += 1
+
+    if archived_count > 0:
+        db.flush()
+        logger.info(
+            "随访去重：归档孕妇 {} 的 {} 条旧记录，创建最新记录",
+            trigger.pregnant_id, archived_count,
+        )
 
     template = followup_service.get_template(trigger.template_id or "standard")
 
@@ -120,6 +146,7 @@ def trigger_followup(trigger: FollowUpTrigger, db: Session = Depends(get_db), cu
         "record_id": str(record.id),
         "template": template,
         "gestational_week": gest_week_display,
+        "archived_previous": archived_count,
     }
 
 

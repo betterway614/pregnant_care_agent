@@ -229,10 +229,8 @@ class CosyVoiceModel:
                     tensor = tensor.squeeze(0)
 
                 audio_np = tensor.cpu().numpy().astype(np.float32)
-                # 逐片段归一化
-                max_val = np.abs(audio_np).max()
-                if max_val > 0:
-                    audio_np = audio_np / max_val
+                # 固定幅度裁剪替代逐段 /max_val，保留段间自然幅度关系
+                np.clip(audio_np, -0.99, 0.99, out=audio_np)
 
                 chunk_len = len(audio_np) / self._sample_rate
                 logger.info(f"Stream chunk #{chunk_idx}: {chunk_len:.2f}s audio")

@@ -36,7 +36,7 @@ ZERO_SHOT_PROMPT_WAV = os.getenv("TTS_ZERO_SHOT_PROMPT_WAV", _DEFAULT_PROMPT_WAV
 ZERO_SHOT_PROMPT_TEXT = os.getenv("TTS_ZERO_SHOT_PROMPT_TEXT", "")
 
 # Instruct 模式配置（用文字描述想要的音色风格）
-INSTRUCT_TEXT = os.getenv("TTS_INSTRUCT_TEXT", "请用温柔甜美的女声朗读")
+INSTRUCT_TEXT = os.getenv("TTS_INSTRUCT_TEXT", "")
 
 # 日志
 LOG_LEVEL = os.getenv("TTS_LOG_LEVEL", "INFO")

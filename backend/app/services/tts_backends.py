@@ -105,15 +105,15 @@ class CosyVoiceLocalBackend:
         self._speaker = speaker
         self._timeout = timeout
 
-    async def synthesize(self, text: str) -> bytes:
+    async def synthesize(self, text: str, speed: float = 1.0) -> bytes:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(
                 f"{self._base_url}/v1/tts/synthesize",
                 json={
                     "text": text,
                     "speaker": self._speaker,
-                    "format": "mp3",
-                    "speed": 1.0,
+                    "format": "wav",
+                    "speed": speed,
                 },
             )
             if resp.status_code != 200:
@@ -121,7 +121,9 @@ class CosyVoiceLocalBackend:
                 raise RuntimeError(f"CosyVoice 合成失败 [{resp.status_code}]: {error_detail}")
             return resp.content
 
-    async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    async def synthesize_stream(
+        self, text: str, speed: float = 1.0
+    ) -> AsyncGenerator[bytes, None]:
         """流式合成 — 边生成边 yield WAV 音频块
 
         首个 yield 是 WAV header，后续 yield 是 PCM_16 音频数据。
@@ -135,7 +137,7 @@ class CosyVoiceLocalBackend:
                     "text": text,
                     "speaker": self._speaker,
                     "format": "wav",
-                    "speed": 1.0,
+                    "speed": speed,
                 },
             ) as resp:
                 if resp.status_code != 200:
