@@ -214,7 +214,7 @@ async def synthesize(req: SynthesizeRequest):
                 detail=f"模型未加载: {model.load_error}",
             )
 
-    # 合成
+    # 合成（线程安全通过 model_loader 的 threading.Lock 保证）
     start = time.time()
     audio_np = model.synthesize(
         text=text,
@@ -318,10 +318,10 @@ async def synthesize_stream(req: SynthesizeRequest):
 
     def audio_generator():
         """生成 WAV header + PCM_16 音频块"""
-        # 1. 发送 WAV header
+        # GPU 推理串行化（通过 model_loader 的 threading.Lock）
+        # 注意：回退为 sync generator，运行在线程池中，不影响事件循环
         yield _wav_header(sample_rate)
 
-        # 2. 逐片段发送 PCM_16 数据
         chunk_count = 0
         t_start = time.time()
         for audio_np in model.synthesize_stream(

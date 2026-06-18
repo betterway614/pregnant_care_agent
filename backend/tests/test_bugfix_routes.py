@@ -181,16 +181,15 @@ class TestFollowUpStateMachine:
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_record.status = "completed"
-        mock_record.pregnant_id = "P001"
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_record
 
         sign_req = MagicMock()
         sign_req.signature_image = "base64..."
-        sign_req.signer_name = "张三"
+        sign_req.signer_name = "李护士"
 
-        mock_user = TokenPayload(sub="P001", role="pregnant", pregnant_id="P001")
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
 
         with pytest.raises(HTTPException) as exc_info:
             sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
@@ -198,27 +197,31 @@ class TestFollowUpStateMachine:
         assert "confirmed" in str(exc_info.value.detail)
 
     def test_sign_accepts_confirmed_status(self):
-        """confirmed 状态允许签名"""
+        """confirmed 状态允许护士签名"""
         from app.routers.followup import sign_record
         from app.core.auth import TokenPayload
 
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_record.status = "confirmed"
-        mock_record.pregnant_id = "P001"
         mock_record.signature_data = {}
+        mock_record.ai_snapshot = {
+            "archive_summary_draft_text": "温馨总结：AI原稿",
+            "archive_summary_final_text": "温馨总结：护士复核后的归档总结",
+            "archive_summary_modified": True,
+        }
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_record
 
         sign_req = MagicMock()
         sign_req.signature_image = "base64..."
-        sign_req.signer_name = "张三"
+        sign_req.signer_name = "李护士"
 
-        mock_user = TokenPayload(sub="P001", role="pregnant", pregnant_id="P001")
+        mock_user = TokenPayload(sub="N001", role="nurse", pregnant_id="")
 
         result = sign_record(str(mock_record.id), sign_req, db=mock_db, current_user=mock_user)
-        assert mock_record.signature_data["signer"] == "张三"
+        assert mock_record.signature_data["signer"] == "李护士"
         mock_db.commit.assert_called_once()
 
 

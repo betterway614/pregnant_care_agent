@@ -31,7 +31,9 @@ async def get_recommend(
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
 
-    gest_days = pregnant.gestational_age_days or 0
+    from ..services.patient_context_service import compute_gestational_days
+
+    gest_days = compute_gestational_days(pregnant)
     gest_week = gest_days // 7
     gest_day = gest_days % 7
     risk_tags = pregnant.risk_tags or []

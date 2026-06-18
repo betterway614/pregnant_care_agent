@@ -6,8 +6,27 @@
 from __future__ import annotations
 
 from typing import Optional
+from datetime import date
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
+
+
+def compute_gestational_days(pregnant) -> int:
+    """动态计算孕周天数：优先从 lmp_date 实时推算，兜底使用静态字段
+
+    这是全系统统一的孕周计算入口。lmp_date（末次月经）是唯一真值源，
+    gestational_age_days 仅作为 lmp_date 缺失时的兜底。
+
+    Args:
+        pregnant: Pregnant ORM 对象（需有 lmp_date 和 gestational_age_days 属性）
+
+    Returns:
+        孕周天数（整数）
+    """
+    if pregnant.lmp_date:
+        delta = (date.today() - pregnant.lmp_date).days
+        return max(0, delta)  # 不允许负数
+    return pregnant.gestational_age_days or 0
 
 
 def get_patient_basic(db: Session, pregnant_id: str) -> Optional[dict]:
@@ -22,7 +41,7 @@ def get_patient_basic(db: Session, pregnant_id: str) -> Optional[dict]:
     if not pregnant:
         return None
 
-    gest_days = pregnant.gestational_age_days or 0
+    gest_days = compute_gestational_days(pregnant)
     return {
         "pregnant_id": pregnant_id,
         "display_name": pregnant.display_name,

@@ -24,16 +24,22 @@
       </div>
 
       <div class="kick-btn-wrap">
-        <button class="kick-btn kick-btn--active" @click="recordKick">
-          <span class="kick-btn__icon">👶</span>
+        <button class="kick-btn kick-btn--active" type="button" aria-label="记录一次胎动" @click="recordKick">
+          <el-icon class="kick-btn__icon" :size="32"><Avatar /></el-icon>
           <span class="kick-btn__text">+1 胎动</span>
         </button>
-        <p class="kick-hint">{{ count > 0 ? '每次感觉到胎动，点击一次 👆' : '宝宝踢一下，就点一次 👶' }}</p>
+        <p class="kick-hint">{{ count > 0 ? '每次感觉到胎动，轻触按钮记录一次' : '感觉到宝宝动了一下，就点一次' }}</p>
       </div>
 
       <div class="timer-controls" v-if="count > 0">
-        <button class="ctrl-btn ctrl-btn--save" @click="saveSession">✔ 完成记录</button>
-        <button class="ctrl-btn ctrl-btn--cancel" @click="resetCounter">↺ 重置</button>
+        <button class="ctrl-btn ctrl-btn--save" type="button" @click="saveSession">
+          <el-icon :size="15"><Check /></el-icon>
+          完成记录
+        </button>
+        <button class="ctrl-btn ctrl-btn--cancel" type="button" @click="resetCounter">
+          <el-icon :size="15"><RefreshLeft /></el-icon>
+          重置
+        </button>
       </div>
     </div>
 
@@ -44,7 +50,7 @@
         胎动计数历史
       </div>
       <div v-if="historyLoading" class="empty-tip">加载中...</div>
-      <div v-else-if="sessionHistory.length === 0" class="empty-tip">暂无胎动计数记录，开始第一次计数吧~ 👶</div>
+      <div v-else-if="sessionHistory.length === 0" class="empty-tip">暂无胎动计数记录，开始第一次计数吧</div>
       <div v-else class="records-list">
         <div v-for="s in sessionHistory" :key="s.id" class="record-row fm-row">
           <div class="fm-row__header">
@@ -52,11 +58,14 @@
               <span class="fm-row__date">{{ formatDateShort(s.start_time) }}</span>
               <span class="fm-row__count-label">{{ s.total_count }}次</span>
             </div>
-            <button class="fm-row__del" @click="deleteSession(s.id)" title="删除">✕</button>
+            <button class="fm-row__del" type="button" aria-label="删除胎动记录" title="删除" @click="deleteSession(s.id)">
+              <el-icon :size="12"><Close /></el-icon>
+            </button>
           </div>
           <div class="fm-row__kicks" v-if="s.kick_times && s.kick_times.length">
             <span v-for="(kt, ki) in s.kick_times" :key="ki" class="kick-dot">
-              👶 {{ formatTimeShort(kt) }}
+              <el-icon class="kick-dot__icon" :size="13"><Avatar /></el-icon>
+              <span>{{ formatTimeShort(kt) }}</span>
             </span>
           </div>
         </div>
@@ -69,6 +78,7 @@
 import { ref, onMounted } from 'vue'
 import { fetalMovementApi } from '@/api/endpoints'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Avatar, Check, Close, RefreshLeft } from '@element-plus/icons-vue'
 
 const count = ref(0)
 const sessionId = ref<string | null>(null)
@@ -182,11 +192,11 @@ onMounted(() => { loadHistory() })
 .kick-btn { width: 120px; height: 120px; border-radius: 50%; border: 3px solid rgba(244, 143, 177, 0.3); background: linear-gradient(135deg, #fce4ec, #f8bbd0); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: all 0.2s ease; }
 .kick-btn:active:not(:disabled) { transform: scale(0.92); }
 .kick-btn--active { border-color: var(--pt-primary); box-shadow: 0 0 0 6px rgba(244, 143, 177, 0.15), 0 8px 30px rgba(244, 143, 177, 0.3); }
-.kick-btn__icon { font-size: 32px; line-height: 1; }
+.kick-btn__icon { line-height: 1; color: var(--pt-primary-dark); }
 .kick-btn__text { font-size: 16px; font-weight: 700; color: var(--pt-primary-dark); }
 .kick-hint { margin: 10px 0 0; font-size: 13px; color: var(--pt-text-muted); text-align: center; }
 .timer-controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0 4px; }
-.ctrl-btn { padding: 10px 22px; border-radius: 24px; border: none; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s ease; }
+.ctrl-btn { padding: 10px 22px; border-radius: 24px; border: none; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .ctrl-btn:active { transform: scale(0.96); }
 .ctrl-btn--save { background: #e8f5e9; color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
 .ctrl-btn--cancel { background: transparent; color: var(--pt-text-muted); border: 1px solid rgba(0, 0, 0, 0.1); }
@@ -201,7 +211,8 @@ onMounted(() => { loadHistory() })
 .fm-row__date { font-size: 13px; font-weight: 600; color: var(--pt-text); }
 .fm-row__count-label { font-size: 12px; color: var(--pt-text-muted); }
 .fm-row__kicks { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--pt-border); }
-.kick-dot { font-size: 12px; color: var(--pt-text-secondary); white-space: nowrap; }
+.kick-dot { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--pt-text-secondary); white-space: nowrap; }
+.kick-dot__icon { color: var(--pt-primary); }
 .fm-row__del { width: 24px; height: 24px; border: none; border-radius: 50%; background: transparent; color: var(--pt-text-muted); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: all 0.2s; flex-shrink: 0; }
 .record-row:hover .fm-row__del { opacity: 1; }
 .fm-row__del:hover { background: #ffebee; color: #c62828; }

@@ -494,7 +494,7 @@ class TestSchedulerScan:
     """调度器全量扫描"""
 
     def test_scan_creates_drafts_for_info_missing(self):
-        """扫描应自动为信息缺失的孕妇创建 draft 随访"""
+        """扫描仅清理僵尸，不再自动创建 draft 随访（随访须由护士手动触发）"""
         db = TestSessionLocal()
         try:
             # 清理之前测试的残留数据
@@ -507,26 +507,25 @@ class TestSchedulerScan:
             db.add(p)
             db.commit()
 
-            # 调用扫描
-            stats = sched_mod._scan_and_create_followups(db)
+            # 调用扫描（已改为仅清理僵尸）
+            stats = sched_mod._scan_and_cleanup_zombies(db)
             assert stats["total"] >= 1
-            # 应为信息缺失创建了 draft
-            assert stats["created"] >= 1, \
-                f"应为无数据孕妇创建随访草稿，stats={stats}"
+            # 自动创建已禁用
+            assert stats["created"] == 0, \
+                f"调度器不应自动创建随访草稿，stats={stats}"
 
-            # 验证草稿已创建
+            # 验证没有草稿被自动创建
             drafts = db.query(FollowUpRecord).filter(
                 FollowUpRecord.pregnant_id == "P_SCHED_SCAN",
                 FollowUpRecord.status == "draft",
             ).all()
-            assert len(drafts) >= 1, "应为该孕妇创建了 draft 随访"
-            assert drafts[0].self_reported_data.get("auto_generated") is True
+            assert len(drafts) == 0, "调度器不应自动创建 draft 随访"
         finally:
             db.rollback()
             db.close()
 
     def test_scan_skips_fresh_active_followup(self):
-        """扫描应跳过有新鲜活跃随访且有近期数据的孕妇（不满足旁路条件）"""
+        """扫描不自动创建随访，已有活跃记录不受影响"""
         db = TestSessionLocal()
         try:
             from app.models import Pregnant, FollowUpRecord
@@ -534,7 +533,6 @@ class TestSchedulerScan:
             db.query(Pregnant).delete()
             db.commit()
 
-            # 低风险 + 有近期数据：不触发旁路，原有 draft 正常阻塞
             p = _make_pregnant("P_FRESH_BLOCK", gest_days=200, risk_tags=[])
             db.add(p)
             db.add(_make_followup("P_FRESH_BLOCK", status="draft", created_days_ago=1))
@@ -542,19 +540,20 @@ class TestSchedulerScan:
             db.add(_make_health_data_point("P_FRESH_BLOCK", "weight", 65.0, days_ago=4))
             db.commit()
 
-            stats = sched_mod._scan_and_create_followups(db)
-            # 不应为新draft创建重复随访
+            stats = sched_mod._scan_and_cleanup_zombies(db)
+            # 不应创建新随访（自动创建已禁用）
+            assert stats["created"] == 0
             drafts = db.query(FollowUpRecord).filter(
                 FollowUpRecord.pregnant_id == "P_FRESH_BLOCK",
             ).all()
-            # 应该只有原来那1条
+            # 应该只有原来那1条，无新增
             assert len(drafts) == 1, f"不应重复创建随访: {len(drafts)} 条"
         finally:
             db.rollback()
             db.close()
 
     def test_scan_cleans_zombie_and_creates(self):
-        """扫描应先清理僵尸随访，再为新推荐创建草稿"""
+        """扫描清理僵尸随访，但不再自动创建新草稿"""
         db = TestSessionLocal()
         try:
             from app.models import Pregnant, FollowUpRecord
@@ -562,13 +561,13 @@ class TestSchedulerScan:
             db.query(Pregnant).delete()
             db.commit()
 
-            # 创建有风险标签(GDM)但被僵尸阻塞的无数据孕妇
+            # 创建有风险标签(GDM)但被僵尸阻塞的孕妇
             p = _make_pregnant("P_ZOMBIE_CLEAN", gest_days=200, risk_tags=["GDM"])
             db.add(p)
             db.add(_make_followup("P_ZOMBIE_CLEAN", status="draft", created_days_ago=10))
             db.commit()
 
-            stats = sched_mod._scan_and_create_followups(db)
+            stats = sched_mod._scan_and_cleanup_zombies(db)
             assert stats["zombies_cleaned"] >= 1, f"应清理僵尸随访: {stats}"
 
             # 验证僵尸被归档
@@ -578,12 +577,13 @@ class TestSchedulerScan:
             ).first()
             assert archived is not None, "僵尸应被归档"
 
-            # 应为GDM风险孕妇创建新的随访草稿
+            # 自动创建已禁用 — 不应有新 draft
+            assert stats["created"] == 0, "调度器不应再自动创建随访草稿"
             drafts = db.query(FollowUpRecord).filter(
                 FollowUpRecord.pregnant_id == "P_ZOMBIE_CLEAN",
                 FollowUpRecord.status == "draft",
             ).all()
-            assert len(drafts) >= 1, f"清理僵尸后应为无数据GDM孕妇创建新随访: {stats}"
+            assert len(drafts) == 0, f"清理僵尸后不应自动创建新随访: stats={stats}"
         finally:
             db.rollback()
             db.close()

@@ -63,10 +63,14 @@ export const followUpApi = {
     client.get<FollowUpRecord[]>('/followup/records', { params }),
   confirm: (recordId: string, status: string = 'confirmed', extra?: { reviewer_id?: string; review_comment?: string; ai_snapshot?: Record<string, any> }) =>
     client.put(`/followup/records/${recordId}/confirm`, { status, ...(extra || {}) }),
+  archive: (recordId: string) =>
+    client.post<FollowUpRecord>(`/followup/records/${recordId}/archive`),
   update: (recordId: string, data: any) =>
     client.put(`/followup/records/${recordId}`, data),
   getPending: (pregnantId: string) =>
     client.get<FollowUpPendingResponse>(`/followup/pending/${pregnantId}`),
+  getRecord: (recordId: string) =>
+    client.get<FollowUpRecord>(`/followup/records/${recordId}`),
   respond: (recordId: string, answers: Record<string, any>, totalCount?: number) =>
     client.post('/followup/respond', { record_id: recordId, answers, total_count: totalCount || 0 }),
   // 流式 AI 分析（SSE）
@@ -78,7 +82,46 @@ export const followUpApi = {
   aiReview: (recordId: string) =>
     client.get<any>(`/followup/records/${recordId}/ai-review`),
   getDocument: (recordId: string) =>
-    client.get<{ record_id: string; patient_name: string; snapshot: any; text: string; signature: any; has_document: boolean }>(`/followup/records/${recordId}/document`),
+    client.get<{
+      record_id: string
+      patient_name: string
+      status: string
+      snapshot: any
+      text: string
+      signature: any
+      ai_snapshot: any
+      archive_summary: {
+        record_id: string
+        ai_draft: Record<string, any>
+        ai_draft_text: string
+        nurse_final_text: string
+        modified: boolean
+        generated_at?: string
+        modified_at?: string
+      }
+      has_document: boolean
+      can_print: boolean
+    }>(`/followup/records/${recordId}/document`),
+  generateArchiveSummary: (recordId: string) =>
+    client.post<{
+      record_id: string
+      ai_draft: Record<string, any>
+      ai_draft_text: string
+      nurse_final_text: string
+      modified: boolean
+      generated_at?: string
+      modified_at?: string
+    }>(`/followup/records/${recordId}/archive-summary/generate`),
+  updateArchiveSummary: (recordId: string, summary_text: string) =>
+    client.put<{
+      record_id: string
+      ai_draft: Record<string, any>
+      ai_draft_text: string
+      nurse_final_text: string
+      modified: boolean
+      generated_at?: string
+      modified_at?: string
+    }>(`/followup/records/${recordId}/archive-summary`, { summary_text }),
   sign: (recordId: string, signature_image: string, signer_name: string) =>
     client.post<{ message: string; signed_at: string }>(`/followup/records/${recordId}/sign`, { signature_image, signer_name }),
 }

@@ -179,6 +179,7 @@ FOLLOWUP_STATUS_IN_PROGRESS = "in_progress"
 FOLLOWUP_STATUS_COMPLETED = "completed"
 FOLLOWUP_STATUS_CONFIRMED = "confirmed"
 FOLLOWUP_STATUS_ARCHIVED = "archived"
+FOLLOWUP_STATUS_CANCELLED = "cancelled"
 
 # 孕妇端可见的活跃随访状态（主页通知卡片展示条件）
 FOLLOWUP_ACTIVE_STATUSES = [FOLLOWUP_STATUS_DRAFT, FOLLOWUP_STATUS_IN_PROGRESS]
@@ -271,6 +272,22 @@ class FollowUpSignatureRequest(BaseModel):
     """签名提交请求"""
     signature_image: str = Field(description="手写签名的 base64 PNG 图片数据")
     signer_name: str = Field(description="签名者姓名")
+
+
+class FollowUpArchiveSummaryRequest(BaseModel):
+    """护士提交归档总结定稿"""
+    summary_text: str = Field(..., min_length=1, max_length=10000, description="护士修改后的归档总结文本")
+
+
+class FollowUpArchiveSummaryResponse(BaseModel):
+    """归档总结原稿/定稿状态"""
+    record_id: str
+    ai_draft: dict = {}
+    ai_draft_text: str = ""
+    nurse_final_text: str = ""
+    modified: bool = False
+    generated_at: Optional[str] = None
+    modified_at: Optional[str] = None
 
 
 class FollowUpRecordUpdateRequest(BaseModel):

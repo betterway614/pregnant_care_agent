@@ -29,6 +29,7 @@ def _make_pregnant(pid="P001", name="张小花", gest_days=200, risk_tags=None):
     p.display_name = name
     p.nickname = name
     p.gestational_age_days = gest_days
+    p.lmp_date = None
     p.risk_tags = risk_tags or []
     p.height_cm = 162
     p.pre_pregnancy_weight_kg = 55

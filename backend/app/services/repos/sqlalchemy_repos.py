@@ -27,7 +27,8 @@ class SqlAlchemyPatientRepo:
             p = db.query(Pregnant).filter(Pregnant.pregnant_id == patient_id).first()
             if not p:
                 return None
-            gest_days = p.gestational_age_days or 0
+            from ..patient_context_service import compute_gestational_days
+            gest_days = compute_gestational_days(p)
             return {
                 "pregnant_id": p.pregnant_id,
                 "display_name": p.display_name,

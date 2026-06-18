@@ -8,6 +8,7 @@ from ..database import get_db
 from ..models import Pregnant, Alert, FollowUpRecord, FgrAssessment, MedicalOrder
 from ..core.auth import get_current_user, TokenPayload
 from ..schemas import DashboardStats
+from ..services.patient_context_service import compute_gestational_days
 from ..utils.timezone import beijing_now
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["数据统计"])
@@ -116,7 +117,7 @@ def get_pregnant_list(
                 "nickname": pregnant.nickname,
                 "phone": pregnant.phone,
                 "hospital_id": pregnant.hospital_id,
-                "gestational_age_days": pregnant.gestational_age_days,
+                "gestational_age_days": compute_gestational_days(pregnant),
                 "edd": pregnant.edd.isoformat() if pregnant.edd else None,
                 "risk_tags": pregnant.risk_tags or [],
                 "created_at": pregnant.created_at.isoformat() if pregnant.created_at else None,
@@ -193,7 +194,7 @@ def get_pregnant_list(
             "nickname": p.nickname,
             "phone": p.phone,
             "hospital_id": p.hospital_id,
-            "gestational_age_days": p.gestational_age_days,
+            "gestational_age_days": compute_gestational_days(p),
             "edd": p.edd.isoformat() if p.edd else None,
             "risk_tags": p.risk_tags or [],
             "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -228,8 +229,8 @@ def get_pregnant_detail(pregnant_id: str, db: Session = Depends(get_db), user: T
     return {
         "pregnant_id": pregnant.pregnant_id,
         "display_name": pregnant.display_name,
-        "gestational_age_days": pregnant.gestational_age_days,
-        "gestational_week": f"{pregnant.gestational_age_days // 7}+{pregnant.gestational_age_days % 7}" if pregnant.gestational_age_days else "未知",
+        "gestational_age_days": compute_gestational_days(pregnant),
+        "gestational_week": f"{compute_gestational_days(pregnant) // 7}+{compute_gestational_days(pregnant) % 7}" if (pregnant.lmp_date or pregnant.gestational_age_days) else "未知",
         "lmp_date": pregnant.lmp_date.isoformat() if pregnant.lmp_date else None,
         "edd": pregnant.edd.isoformat() if pregnant.edd else None,
         "risk_tags": pregnant.risk_tags or [],

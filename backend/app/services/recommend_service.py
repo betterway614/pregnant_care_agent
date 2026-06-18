@@ -268,7 +268,8 @@ class RecommendService:
         risk_tags: list[str],
     ) -> RecommendResponse:
         """获取推荐：缓存优先 → LLM 生成 → 模板兜底"""
-        cache_key = f"{pregnant.pregnant_id}:{pregnant.gestational_age_days or 0}"
+        from .patient_context_service import compute_gestational_days
+        cache_key = f"{pregnant.pregnant_id}:{compute_gestational_days(pregnant)}"
 
         # 1. 缓存命中
         cached = self._cache.get(cache_key)

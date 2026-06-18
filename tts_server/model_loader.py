@@ -194,20 +194,7 @@ class CosyVoiceModel:
         speaker: Optional[str] = None,
         speed: float = 1.0,
     ) -> Generator[np.ndarray, None, None]:
-        """
-        流式合成语音，逐句 yield numpy float32 数组（单声道）
-
-        CosyVoice2 原生支持 stream=True，模型每生成一个语音片段就 yield，
-        无需等待整段文本合成完毕，适合实时播放场景。
-
-        Args:
-            text: 合成文本
-            speaker: 说话人名称
-            speed: 语速
-
-        Yields:
-            numpy float32 数组，每个代表一个语音片段
-        """
+        """流式合成语音，逐句 yield numpy float32 数组"""
         if not self.is_loaded:
             logger.error("Model not loaded")
             return

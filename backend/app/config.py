@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     tts_local_cosyvoice_speaker_pregnant: str = ""
     tts_local_cosyvoice_speaker_nurse: str = ""
     tts_local_cosyvoice_speaker_doctor: str = ""
-    tts_local_cosyvoice_timeout: float = 30.0
+    tts_local_cosyvoice_timeout: float = 300.0
 
     # FGR配置
     fgr_mode: bool = True

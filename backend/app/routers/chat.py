@@ -18,6 +18,7 @@ from ..models import HealthDataPoint, Pregnant, MedicalOrder, ConversationMessag
 from ..database import get_db
 from ..config import settings
 from ..utils.timezone import beijing_now
+from ..services.patient_context_service import compute_gestational_days
 
 router = APIRouter(prefix="/api/v1/chat", tags=["对话管理"])
 
@@ -207,14 +208,15 @@ def get_pregnant_context(pregnant_id: str, user: TokenPayload = Depends(get_curr
         "pregnant_id": pregnant_id,
         "display_name": pregnant.display_name,
         "nickname": pregnant.nickname,
-        "gestational_age_days": pregnant.gestational_age_days,
+        "gestational_age_days": compute_gestational_days(pregnant),
         "gestational_week": "",
         "risk_tags": pregnant.risk_tags or [],
     }
 
-    if pregnant.gestational_age_days:
-        gw = pregnant.gestational_age_days // 7
-        gd = pregnant.gestational_age_days % 7
+    gest_days = compute_gestational_days(pregnant)
+    if gest_days:
+        gw = gest_days // 7
+        gd = gest_days % 7
         context["gestational_week"] = f"{gw}+{gd}周"
 
     recent_data = (
@@ -368,7 +370,7 @@ async def get_health_trends(pregnant_id: str, user: TokenPayload = Depends(get_c
     from ..core.trend_engine import trend_engine
 
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-    gest_week = (pregnant.gestational_age_days // 7) if pregnant and pregnant.gestational_age_days else 0
+    gest_week = compute_gestational_days(pregnant) // 7 if pregnant and (pregnant.lmp_date or pregnant.gestational_age_days) else 0
 
     two_weeks_ago = beijing_now() - timedelta(days=14)
     records = db.query(HealthDataPoint).filter(
@@ -416,7 +418,7 @@ async def get_proactive_greeting(pregnant_id: str, user: TokenPayload = Depends(
         return ProactiveGreeting(message="欢迎回来！", greeting_type="morning", icon="👋")
 
     hour = beijing_now().hour
-    gw = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else 0
+    gw = compute_gestational_days(pregnant) // 7 if (pregnant.lmp_date or pregnant.gestational_age_days) else 0
 
     recent_data = db.query(HealthDataPoint).filter(
         HealthDataPoint.pregnant_id == pregnant_id,

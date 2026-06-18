@@ -36,7 +36,8 @@ async def agno_query_patient_data(pregnant_id: str = "", run_context: RunContext
             if not pregnant:
                 return {"error": "孕妇不存在"}
 
-            gest_days = pregnant.gestational_age_days or 0
+            from ...services.patient_context_service import compute_gestational_days
+            gest_days = compute_gestational_days(pregnant)
             result = {
                 "basic_info": {
                     "name": pregnant.display_name,
@@ -123,12 +124,13 @@ async def agno_list_patients(run_context: RunContext | None = None) -> dict:
         try:
             total = db.query(Pregnant).count()
             patients = db.query(Pregnant).limit(20).all()
+            from ...services.patient_context_service import compute_gestational_days
             result = [
                 {
                     "pregnant_id": p.pregnant_id,
                     "display_name": p.display_name,
-                    "gestational_age_days": p.gestational_age_days or 0,
-                    "gestational_week": f"{(p.gestational_age_days or 0) // 7}+{(p.gestational_age_days or 0) % 7}",
+                    "gestational_age_days": compute_gestational_days(p),
+                    "gestational_week": f"{compute_gestational_days(p) // 7}+{compute_gestational_days(p) % 7}",
                     "risk_tags": p.risk_tags or [],
                 }
                 for p in patients
@@ -162,7 +164,8 @@ async def agno_create_followup_record(
             pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pid).first()
             if not pregnant:
                 return {"error": "孕妇不存在"}
-            gest_days = pregnant.gestational_age_days or 0
+            from ...services.patient_context_service import compute_gestational_days
+            gest_days = compute_gestational_days(pregnant)
             record = FollowUpRecord(
                 pregnant_id=pid, gestational_week=str(gest_days // 7),
                 chief_complaint=chief_complaint, summary=summary, status="draft",

@@ -97,6 +97,7 @@ async def test_agno_get_patient_context():
     mock_pregnant.display_name = "测试"
     mock_pregnant.nickname = "小明"
     mock_pregnant.gestational_age_days = 210
+    mock_pregnant.lmp_date = None
     mock_pregnant.risk_tags = ["GDM"]
 
     mock_query = MagicMock()
@@ -244,12 +245,12 @@ def test_resolve_tools_by_intent_missing_intent_key():
 
 
 def test_resolve_tools_by_intent_unknown():
-    """验证未知意图回退到 complex"""
-    from app.core.agno_tools import resolve_tools_by_intent, MEDICAL_TOOLS
+    """验证未知意图回退到 chat（对话式交互，非结构化分析）"""
+    from app.core.agno_tools import resolve_tools_by_intent, MEDICAL_TOOLS, TOOL_GROUPS
 
     tools, variant = resolve_tools_by_intent({"intent": "nonexistent_intent_xyz"})
-    assert variant == "complex"
-    assert tools == MEDICAL_TOOLS
+    assert variant == "chat"
+    assert tools == TOOL_GROUPS["chat"]
 
 
 def test_resolve_tools_by_intent_returns_tuple():

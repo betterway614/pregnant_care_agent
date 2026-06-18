@@ -9,6 +9,7 @@ from ..models import Pregnant, HealthDataPoint, FollowUpRecord
 from ..core.auth import get_current_user, TokenPayload
 from ..core.trend_engine import trend_engine
 from ..core.metric_registry import get_metric_meta
+from ..services.patient_context_service import compute_gestational_days
 from ..schemas.schemas import (
     HealthTrendResponse, TrendSeries, TrendDataPoint,
     FollowUpHistoryResponse, FollowUpHistoryRecord,
@@ -65,7 +66,8 @@ def get_health_trends(
         raise HTTPException(404, "孕妇不存在")
 
     # 计算当前孕周
-    gest_days = pregnant.gestational_age_days or 0
+    from ..services.patient_context_service import compute_gestational_days
+    gest_days = compute_gestational_days(pregnant)
     gest_week = gest_days // 7
     gest_day = gest_days % 7
 
@@ -300,6 +302,6 @@ def get_lab_trends(
 
     return LabTrendResponse(
         pregnant_id=pregnant_id,
-        gestational_week=f"{(pregnant.gestational_age_days or 0) // 7}+{(pregnant.gestational_age_days or 0) % 7}",
+        gestational_week=f"{compute_gestational_days(pregnant) // 7}+{compute_gestational_days(pregnant) % 7}",
         items=items,
     )

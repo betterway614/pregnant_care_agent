@@ -206,7 +206,8 @@ def _analyze_health_trends_sync(pregnant_id: str) -> dict:
     db = SessionLocal()
     try:
         pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == pregnant_id).first()
-        gest_week = (pregnant.gestational_age_days // 7) if pregnant and pregnant.gestational_age_days else 0
+        from ...services.patient_context_service import compute_gestational_days
+        gest_week = compute_gestational_days(pregnant) // 7 if pregnant else 0
 
         two_weeks_ago = beijing_now() - timedelta(days=14)
         records = db.query(HealthDataPoint).filter(

@@ -225,6 +225,7 @@ class TestBatchRecommendations:
         mock_pregnant.pregnant_id = "P001"
         mock_pregnant.display_name = "测试孕妇"
         mock_pregnant.gestational_age_days = 210  # 30周
+        mock_pregnant.lmp_date = None
         mock_pregnant.risk_tags = []
         db.query.return_value.filter.return_value.first.return_value = mock_pregnant
         db.query.return_value.filter.return_value.all.return_value = []
@@ -249,6 +250,7 @@ class TestBatchRecommendations:
         mock_pregnant.pregnant_id = "P002"
         mock_pregnant.display_name = "高危孕妇"
         mock_pregnant.gestational_age_days = 252  # 36周
+        mock_pregnant.lmp_date = None
         mock_pregnant.risk_tags = ["FGR高危"]
 
         # Mock RED 级别预警
@@ -453,6 +455,30 @@ class TestRecordDocument:
         assert "随访护士签名" in text
         assert "[营养] 均衡饮食" in text
         assert "宫高" in text
+
+    def test_generate_record_document_accepts_legacy_string_guidance_tags(self):
+        """旧随访记录的 guidance_tags 可能是字符串数组，文档生成不应 500。"""
+        from app.services.followup_service import followup_service
+
+        record = {
+            "status": "confirmed",
+            "classification": "normal",
+            "self_reported_data": {"bp": "120/80"},
+            "obstetric_exam": {},
+            "lab_results": {},
+            "summary": "整体平稳",
+            "guidance_tags": ["营养", "运动"],
+        }
+
+        _, text = followup_service.generate_record_document(
+            patient_name="小明",
+            gest_week="28+3",
+            follow_up_date="2026-05-20",
+            record=record,
+        )
+
+        assert "[营养]" in text
+        assert "[运动]" in text
 
     def test_generate_record_document_abnormal(self):
         from app.services.followup_service import followup_service

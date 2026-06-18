@@ -99,11 +99,9 @@ class MorningBriefingService:
             risk_level = highest_level.level  # RED / ORANGE / YELLOW
             latest_alert = max(patient_alerts, key=lambda a: a.created_at)
 
-            gest_week = (
-                patient.gestational_age_days // 7
-                if patient.gestational_age_days
-                else 0
-            )
+            from .patient_context_service import compute_gestational_days
+            gd = compute_gestational_days(patient)
+            gest_week = gd // 7 if gd else 0
 
             bp = BriefingPatient(
                 pregnant_id=patient.pregnant_id,

@@ -331,6 +331,7 @@ class TestToolTruncationIntegration:
             p.display_name = f"孕妇{i}"
             p.nickname = f"nick{i}"
             p.gestational_age_days = 180 + i
+            p.lmp_date = None
             p.risk_tags = ["GDM"] if i % 3 == 0 else []
             many_pregnants.append(p)
 
@@ -359,6 +360,7 @@ class TestToolTruncationIntegration:
         mock_pregnant.display_name = "测试孕妇"
         mock_pregnant.nickname = "test"
         mock_pregnant.gestational_age_days = 210
+        mock_pregnant.lmp_date = None
         mock_pregnant.risk_tags = ["GDM", "高龄"]
 
         mock_query = MagicMock()
@@ -384,6 +386,7 @@ class TestToolTruncationIntegration:
         mock_pregnant.display_name = "测试"
         mock_pregnant.nickname = "test"
         mock_pregnant.gestational_age_days = 210
+        mock_pregnant.lmp_date = None
         mock_pregnant.risk_tags = ["GDM"]
 
         mock_query = MagicMock()

@@ -60,11 +60,16 @@ if [ -z "$TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL" ]; then
     echo "  启用 AOTriton 加速 attention (TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1)"
 fi
 if [ -z "$MIOPEN_FIND_MODE" ]; then
+    # 3 = FAST（使用已知的高效算法，避免 Tuning 模式下的 workspace 分配崩溃）
     export MIOPEN_FIND_MODE=3
     echo "  MIOpen 快速搜索模式 (MIOPEN_FIND_MODE=3)"
 fi
+# MIOpen 工作空间（2GB，足够 fp32 卷积使用）
 export PYTORCH_MIOPEN_WORKSPACE_SIZE_LIMIT="${PYTORCH_MIOPEN_WORKSPACE_SIZE_LIMIT:-2147483648}"
 echo "  MIOpen workspace: ${PYTORCH_MIOPEN_WORKSPACE_SIZE_LIMIT} bytes"
+
+# PyTorch 缓存分配器：预分配大块显存，减少碎片
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 # 默认环境变量
 export TTS_HOST="${TTS_HOST:-0.0.0.0}"

@@ -111,7 +111,8 @@ def resolve_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
     group_name = INTENT_TO_GROUP.get(intent)
     if group_name and group_name in TOOL_GROUPS:
         return (TOOL_GROUPS[group_name], group_name)
-    return (MEDICAL_TOOLS, "complex")
+    # UNKNOWN 回退到 chat 变体（对话式交互，非结构化分析）
+    return (TOOL_GROUPS.get("chat", MEDICAL_TOOLS), "chat")
 
 
 def resolve_nurse_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
@@ -129,7 +130,8 @@ def resolve_nurse_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
     group_name = nurse_intent_map.get(intent)
     if group_name and group_name in NURSE_TOOL_GROUPS:
         return (NURSE_TOOL_GROUPS[group_name], group_name)
-    return (NURSE_TOOLS, "complex")
+    # UNKNOWN 回退到 chat 变体（对话式交互，非结构化分析）
+    return (NURSE_TOOL_GROUPS.get("chat", NURSE_TOOLS), "chat")
 
 
 def resolve_doctor_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
@@ -147,4 +149,5 @@ def resolve_doctor_tools_by_intent(nlu_result: dict | None) -> tuple[list, str]:
     group_name = doctor_intent_map.get(intent)
     if group_name and group_name in DOCTOR_TOOL_GROUPS:
         return (DOCTOR_TOOL_GROUPS[group_name], group_name)
-    return (DOCTOR_TOOLS, "complex")
+    # UNKNOWN 回退到 chat 变体（对话式交互，非结构化分析）
+    return (DOCTOR_TOOL_GROUPS.get("chat", DOCTOR_TOOLS), "chat")

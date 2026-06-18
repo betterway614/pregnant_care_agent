@@ -34,12 +34,13 @@
         <span class="section-title">主观数据</span>
       </div>
       <div class="section-body">
-        <div class="kv-grid">
-          <div v-for="(val, key) in snapshot.self_reported_data" :key="key" class="kv-item">
+        <div v-if="selfReportedEntries.length" class="kv-grid">
+          <div v-for="[key, val] in selfReportedEntries" :key="key" class="kv-item">
             <span class="kv-item__key">{{ fieldLabel(String(key)) }}</span>
-            <span class="kv-item__val">{{ val }}</span>
+            <span class="kv-item__val">{{ formatPrintValue(val) }}</span>
           </div>
         </div>
+        <div v-else class="empty-line">暂无主观数据</div>
         <div v-if="snapshot.chief_complaint" class="complaint-line">
           主诉：{{ snapshot.chief_complaint }}
         </div>
@@ -58,7 +59,7 @@
           <div class="exam-grid">
             <div v-for="(val, key) in snapshot.obstetric_exam" :key="key" class="exam-cell">
               <div class="exam-cell__label">{{ examLabel(String(key)) }}</div>
-              <div class="exam-cell__value">{{ val }}</div>
+              <div class="exam-cell__value">{{ formatPrintValue(val) }}</div>
             </div>
           </div>
         </div>
@@ -67,10 +68,11 @@
           <div class="exam-grid">
             <div v-for="(val, key) in snapshot.lab_results" :key="key" class="exam-cell">
               <div class="exam-cell__label">{{ labLabel(String(key)) }}</div>
-              <div class="exam-cell__value">{{ val }}</div>
+              <div class="exam-cell__value">{{ formatPrintValue(val) }}</div>
             </div>
           </div>
         </div>
+        <div v-if="!hasExam(snapshot.obstetric_exam) && !hasExam(snapshot.lab_results)" class="empty-line">暂无客观检查</div>
       </div>
     </div>
 
@@ -92,15 +94,28 @@
         <span class="section-title">计划</span>
       </div>
       <div class="section-body">
-        <div v-for="(g, i) in (snapshot.guidance_tags || [])" :key="i" class="guidance-line">
-          [{{ g.tag }}] {{ g.content }}
-        </div>
-        <div v-if="snapshot.next_followup_date" class="next-date-line">
-          下次随访日期：{{ snapshot.next_followup_date }}
-        </div>
-        <div v-if="snapshot.referral?.has_referral" class="referral-line">
-          转诊：{{ snapshot.referral.reason }} → {{ snapshot.referral.institution }} {{ snapshot.referral.department }}
-        </div>
+        <template v-if="hasPlan">
+          <div v-for="(g, i) in (snapshot.guidance_tags || [])" :key="i" class="guidance-line">
+            [{{ g.tag }}] {{ g.content }}
+          </div>
+          <div v-if="snapshot.next_followup_date" class="next-date-line">
+            下次随访日期：{{ snapshot.next_followup_date }}
+          </div>
+          <div v-if="snapshot.referral?.has_referral" class="referral-line">
+            转诊：{{ snapshot.referral.reason }} → {{ snapshot.referral.institution }} {{ snapshot.referral.department }}
+          </div>
+        </template>
+        <div v-else class="empty-line">暂无计划</div>
+      </div>
+    </div>
+
+    <!-- 归档总结 -->
+    <div v-if="archiveSummaryText" class="record-print__section record-print__section--archive">
+      <div class="section-head">
+        <span class="section-title">归档总结</span>
+      </div>
+      <div class="section-body">
+        <p class="archive-summary-text">{{ archiveSummaryText }}</p>
       </div>
     </div>
 
@@ -155,6 +170,20 @@ const props = defineProps<{
 }>()
 
 const printDate = new Date().toLocaleDateString('zh-CN')
+const INTERNAL_FIELDS = new Set(['template_id', 'auto_generated'])
+
+const selfReportedEntries = computed(() =>
+  Object.entries(props.snapshot.self_reported_data || {}).filter(([key]) => !INTERNAL_FIELDS.has(key))
+)
+
+const archiveSummaryText = computed(() => {
+  const ai = props.snapshot.ai_snapshot || {}
+  return props.snapshot.archive_summary_final_text || ai.archive_summary_final_text || ai.archive_summary_final?.text || ''
+})
+
+const hasPlan = computed(() =>
+  !!(props.snapshot.guidance_tags?.length || props.snapshot.next_followup_date || props.snapshot.referral?.has_referral)
+)
 
 const clsLabel = computed(() => {
   const map: Record<string, string> = { normal: '正常', abnormal: '异常', critical: '高危' }
@@ -170,6 +199,13 @@ const clsClass = computed(() => {
 
 function hasExam(obj: Record<string, any> | undefined): boolean {
   return !!obj && Object.keys(obj).length > 0
+}
+
+function formatPrintValue(val: any): string {
+  if (val === null || val === undefined || val === '') return '--'
+  if (typeof val === 'boolean') return val ? '是' : '否'
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
 }
 </script>
 
@@ -297,6 +333,9 @@ function hasExam(obj: Record<string, any> | undefined): boolean {
 .exam-cell__value { font-size: 14px; font-weight: 700; }
 
 .assessment-text { margin: 0; font-size: 13px; line-height: 1.7; }
+.empty-line { font-size: 13px; color: #999; }
+.archive-summary-text { margin: 0; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+.record-print__section--archive { border-color: #c6e2ff; }
 
 .guidance-line { font-size: 13px; margin: 4px 0; }
 .next-date-line { margin-top: 8px; font-weight: 600; font-size: 13px; }

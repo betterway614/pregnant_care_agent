@@ -43,11 +43,8 @@ def generate_schedule(pregnant_id: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="孕妇缺少末次月经日期")
 
     # 动态计算当前孕周（优先从 lmp_date 实时推算，兜底静态字段）
-    today = date.today()
-    if pregnant.lmp_date:
-        current_week = max(0, (today - pregnant.lmp_date).days) // 7
-    else:
-        current_week = pregnant.gestational_age_days // 7 if pregnant.gestational_age_days else None
+    from ..services.patient_context_service import compute_gestational_days
+    current_week = compute_gestational_days(pregnant) // 7 if pregnant.lmp_date or pregnant.gestational_age_days else None
 
     nodes = schedule_engine.generate(
         lmp_date=pregnant.lmp_date,

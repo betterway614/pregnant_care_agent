@@ -68,16 +68,16 @@ class TestNLUToolRouting:
             assert variant == "chat", f"intent={intent} should route to chat"
             assert tools == NURSE_TOOL_GROUPS["chat"]
 
-    def test_nurse_unknown_intent_routes_to_full_tools(self):
-        """护士端未知意图应路由到全量工具集（兜底）"""
-        from app.core.tools.routing import resolve_nurse_tools_by_intent, NURSE_TOOLS
+    def test_nurse_unknown_intent_routes_to_chat_tools(self):
+        """护士端未知意图应路由到 chat 工具集（对话式交互，非结构化分析）"""
+        from app.core.tools.routing import resolve_nurse_tools_by_intent, NURSE_TOOL_GROUPS
 
         tools, variant = resolve_nurse_tools_by_intent({
             "intent": "UNKNOWN_THING",
             "entities": {},
         })
-        assert variant == "complex"
-        assert tools == NURSE_TOOLS
+        assert variant == "chat"
+        assert tools == NURSE_TOOL_GROUPS["chat"]
 
     def test_nurse_none_input_routes_to_full_tools(self):
         """护士端 None 输入应路由到全量工具集"""
@@ -671,8 +671,8 @@ class TestEndToEndToolChain:
             "intent": nlu_result.intent,
             "entities": nlu_result.entities,
         })
-        # KNOWLEDGE_QUERY → nurse_intent_map 中无此 key → fallback
-        assert variant == "complex"
+        # KNOWLEDGE_QUERY → nurse_intent_map 中无此 key → chat 兜底（对话式交互）
+        assert variant == "chat"
 
     def test_nlu_prefix_format(self):
         """验证 NLU 前缀格式正确"""

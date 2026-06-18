@@ -60,6 +60,7 @@ def test_get_patient_context_sync_function():
     mock_db = MagicMock()
     mock_pregnant = MagicMock()
     mock_pregnant.gestational_age_days = 210
+    mock_pregnant.lmp_date = None  # 显式设为 None,确保 compute_gestational_days 走兜底逻辑
     mock_pregnant.display_name = "测试孕妇"
     mock_pregnant.nickname = "小测"
     mock_pregnant.risk_tags = []
@@ -80,6 +81,7 @@ def test_analyze_health_trends_sync_function():
     mock_db = MagicMock()
     mock_pregnant = MagicMock()
     mock_pregnant.gestational_age_days = 210
+    mock_pregnant.lmp_date = None  # 显式设为 None,确保 compute_gestational_days 走兜底逻辑
 
     mock_db.query.return_value.filter.return_value.first.return_value = mock_pregnant
     mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []

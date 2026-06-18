@@ -40,7 +40,9 @@
           <span class="point-detail__name">{{ pointDetail.name }}</span>
           <el-tag v-if="pointDetail.isNormal === true" type="success" size="small">正常</el-tag>
           <el-tag v-else-if="pointDetail.isNormal === false" type="danger" size="small">异常</el-tag>
-          <button class="point-detail__close" @click="pointDetail = null">✕</button>
+          <button class="point-detail__close" type="button" aria-label="关闭数据点详情" @click="pointDetail = null">
+            <el-icon :size="12"><Close /></el-icon>
+          </button>
         </div>
         <div class="point-detail__body">
           <span class="point-detail__value">{{ pointDetail.value }}</span>
@@ -58,6 +60,7 @@ import { pregnantApi } from '@/api/endpoints'
 import HealthTrendChart from '@/components/charts/HealthTrendChart.vue'
 import MetricCategorySelector from '@/components/charts/MetricCategorySelector.vue'
 import type { TrendSeries } from '@/types'
+import { Close } from '@element-plus/icons-vue'
 
 const selectedMetrics = ref<string[]>(['weight', 'systolic', 'diastolic'])
 const trendAxisMode = ref<'date' | 'gestational_week'>('date')
@@ -101,7 +104,8 @@ onMounted(() => { loadTrendData() })
 .point-detail-card { margin-top: 12px; padding: 12px 16px; background: linear-gradient(135deg, #e3f2fd, #f3e5f5); border-radius: 12px; border: 1px solid rgba(66, 165, 245, 0.2); }
 .point-detail__header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .point-detail__name { font-size: 14px; font-weight: 600; color: #303133; }
-.point-detail__close { margin-left: auto; width: 20px; height: 20px; border: none; border-radius: 50%; background: rgba(0, 0, 0, 0.06); color: #909399; font-size: 10px; cursor: pointer; }
+.point-detail__close { margin-left: auto; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(0, 0, 0, 0.06); color: #909399; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s, color 0.2s; }
+.point-detail__close:hover { background: rgba(0, 0, 0, 0.1); color: #606266; }
 .point-detail__body { display: flex; align-items: baseline; gap: 6px; }
 .point-detail__value { font-size: 28px; font-weight: 800; font-family: 'Figtree', sans-serif; color: #1976d2; }
 .point-detail__unit { font-size: 14px; color: #666; }

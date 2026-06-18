@@ -1,12 +1,9 @@
 """随访自动调度服务
 
-每日定时扫描所有孕妇，自动：
-1. 为符合条件（紧急告警/逾期/从未随访/数据不活跃/信息缺失）的孕妇生成随访草稿
-2. 清理僵尸随访（长期 draft/in_progress 未处理的记录）
+每日定时扫描，仅执行僵尸随访清理（长期 draft/in_progress 未处理的记录）。
+随访草稿不再自动生成 —— 必须由护士通过 AI 推荐面板手动触发。
 """
-import uuid
 from datetime import date, datetime, timedelta
-from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -18,37 +15,6 @@ from ..config import settings
 from ..database import SessionLocal
 from ..models import Pregnant, FollowUpRecord, HealthDataPoint, Alert
 from ..utils.timezone import beijing_now
-
-
-def _create_draft_followup(
-    db: Session,
-    pregnant_id: str,
-    rec: dict[str, Any],
-) -> str | None:
-    """根据推荐结果创建一条 draft 状态的随访记录。返回记录 ID，失败返回 None。"""
-    try:
-        now = beijing_now()
-        record = FollowUpRecord(
-            id=str(uuid.uuid4()),
-            pregnant_id=pregnant_id,
-            status="draft",
-            gestational_week=rec.get("gestational_week", ""),
-            self_reported_data={
-                "template_id": rec.get("template_id", "standard"),
-                "auto_generated": True,
-                "reason": rec.get("reason", ""),
-                "priority": rec.get("priority", "low"),
-            },
-            guidance_tags=rec.get("suggested_actions", []),
-            created_at=now,
-            follow_up_date=now,
-        )
-        db.add(record)
-        db.flush()
-        return record.id
-    except Exception:
-        logger.exception("创建随访草稿失败 pregnant_id={}", pregnant_id)
-        return None
 
 
 def _archive_zombie_followup(db: Session, record: FollowUpRecord) -> bool:
@@ -101,67 +67,29 @@ def _cleanup_zombie_followups(db: Session) -> int:
     return cleaned
 
 
-def _scan_and_create_followups(db: Session) -> dict[str, int]:
-    """扫描所有孕妇并自动创建随访推荐。返回统计信息。"""
-    from ..routers.nurse_ai import tool_recommend_followup_schedule
+def _scan_and_cleanup_zombies(db: Session) -> dict[str, int]:
+    """扫描并清理僵尸随访记录（仅清理，不自动创建）。
 
+    设计决策：随访必须由护士在 AI 推荐面板中手动触发，系统不自动生成
+    草稿，避免护士看到未预期的"进行中"记录。
+    """
     all_pregnant = db.query(Pregnant).all()
     if not all_pregnant:
         logger.info("随访调度: 无孕妇数据，跳过扫描")
         return {"total": 0, "created": 0, "skipped": 0, "zombies_cleaned": 0}
 
-    # 先清理僵尸随访
+    # 清理僵尸随访
     zombies_cleaned = _cleanup_zombie_followups(db)
     if zombies_cleaned:
-        db.commit()  # 提交清理结果，避免后续推荐被僵尸阻塞
-
-    created = 0
-    skipped = 0
-
-    for p in all_pregnant:
-        try:
-            result = tool_recommend_followup_schedule(db, p.pregnant_id)
-            if "error" in result:
-                skipped += 1
-                continue
-
-            recommendations = result.get("recommendations", [])
-            skip_reason = result.get("skip_reason", "")
-
-            # 查找 immediate 推荐（高优先级 + 推荐日期为 immediate）
-            immediate_recs = [
-                r for r in recommendations
-                if r.get("recommended_date") == "immediate"
-            ]
-
-            if not immediate_recs:
-                skipped += 1
-                continue
-
-            # 为每条 immediate 推荐创建随访草稿（实际通常只有 1 条）
-            for rec in immediate_recs:
-                record_id = _create_draft_followup(db, p.pregnant_id, rec)
-                if record_id:
-                    created += 1
-                    logger.info(
-                        "自动创建随访 draft: id={} pregnant_id={} reason={}",
-                        record_id, p.pregnant_id, rec.get("reason", "")[:60],
-                    )
-        except Exception:
-            logger.exception("扫描孕妇随访失败 pregnant_id={}", p.pregnant_id)
-            skipped += 1
-
-    if created:
         db.commit()
-        logger.info("随访调度扫描完成: total={} created={} skipped={} zombies={}",
-                     len(all_pregnant), created, skipped, zombies_cleaned)
-    else:
-        db.rollback()
+
+    total = len(all_pregnant)
+    logger.info("随访调度扫描完成: total={} zombies_cleaned={} (自动创建已禁用)", total, zombies_cleaned)
 
     return {
-        "total": len(all_pregnant),
-        "created": created,
-        "skipped": skipped,
+        "total": total,
+        "created": 0,
+        "skipped": 0,
         "zombies_cleaned": zombies_cleaned,
     }
 
@@ -174,7 +102,7 @@ def _daily_scan_job():
     logger.info("随访定时调度开始执行...")
     db = SessionLocal()
     try:
-        stats = _scan_and_create_followups(db)
+        stats = _scan_and_cleanup_zombies(db)
         logger.info(
             "随访定时调度完成: total={total} created={created} "
             "skipped={skipped} zombies={zombies_cleaned}",
@@ -264,9 +192,9 @@ def stop_scheduler():
 
 
 def trigger_scan_now() -> dict[str, int]:
-    """手动触发一次全量扫描（用于调试/测试/API调用）。"""
+    """手动触发一次全量扫描（仅清理僵尸，不自动创建随访）。"""
     db = SessionLocal()
     try:
-        return _scan_and_create_followups(db)
+        return _scan_and_cleanup_zombies(db)
     finally:
         db.close()

@@ -141,6 +141,7 @@ function statusType(status: string): string {
     completed: 'primary',
     in_progress: 'warning',
     draft: 'info',
+    cancelled: 'info',
   }
   return map[status] || 'info'
 }
@@ -151,7 +152,8 @@ function statusLabel(status: string): string {
     confirmed: '已确认',
     completed: '已完成',
     in_progress: '进行中',
-    draft: '进行中',
+    draft: '待开始',
+    cancelled: '已取消',
   }
   return map[status] || status
 }
@@ -159,6 +161,7 @@ function statusLabel(status: string): string {
 function dotClass(status: string): string {
   if (status === 'archived' || status === 'confirmed') return 'dot--success'
   if (status === 'in_progress') return 'dot--warning'
+  if (status === 'draft') return 'dot--default'
   return 'dot--default'
 }
 

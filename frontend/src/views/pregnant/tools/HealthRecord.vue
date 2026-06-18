@@ -36,7 +36,7 @@
           <span class="health-field__label">情绪</span>
           <div class="mood-row">
             <button v-for="m in moods" :key="m.value" class="mood-btn" :class="{ active: form.mood === m.value }" @click="form.mood = m.value" type="button">
-              <span class="mood-emoji">{{ m.emoji }}</span>
+              <el-icon class="mood-icon" :size="28"><component :is="m.icon" /></el-icon>
               <span class="mood-text">{{ m.label }}</span>
             </button>
           </div>
@@ -53,6 +53,7 @@
 import { ref, reactive, computed } from 'vue'
 import { pregnantApi } from '@/api/endpoints'
 import { ElMessage } from 'element-plus'
+import { CircleCheckFilled, RemoveFilled, WarningFilled } from '@element-plus/icons-vue'
 
 const form = reactive({
   weight: null as number | null,
@@ -63,9 +64,9 @@ const form = reactive({
 })
 
 const moods = [
-  { emoji: '😊', label: '好', value: 'good' },
-  { emoji: '😐', label: '一般', value: 'neutral' },
-  { emoji: '😟', label: '差', value: 'bad' },
+  { icon: CircleCheckFilled, label: '好', value: 'good' },
+  { icon: RemoveFilled, label: '一般', value: 'neutral' },
+  { icon: WarningFilled, label: '差', value: 'bad' },
 ]
 
 const saving = ref(false)
@@ -116,7 +117,8 @@ async function saveAll() {
 .mood-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: 2px solid var(--pt-border); border-radius: 14px; background: #FAFAFA; cursor: pointer; transition: all 0.2s; font-size: 12px; color: var(--pt-text-secondary); font-family: inherit; }
 .mood-btn.active { border-color: var(--pt-primary); background: var(--pt-primary-light); }
 .mood-btn:active { transform: scale(0.96); }
-.mood-emoji { font-size: 28px; line-height: 1; }
+.mood-icon { line-height: 1; color: var(--pt-primary-dark); }
+.mood-btn.active .mood-icon { color: var(--pt-primary); }
 .mood-text { font-weight: 500; }
 .save-btn { width: 100%; height: 48px; border: none; border-radius: 14px; background: linear-gradient(135deg, var(--pt-primary), var(--pt-primary-dark)); color: #fff; font-size: 16px; font-weight: 700; font-family: 'Figtree', sans-serif; cursor: pointer; transition: all 0.2s; margin-top: 4px; }
 .save-btn:active { transform: scale(0.98); }

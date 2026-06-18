@@ -165,6 +165,7 @@ class RuleBaseNLU:
         ],
         "GREETING": [
             r"^(你好|您好|嗨|hi|hello|早上好|下午好|晚上好)",
+            r"(你是谁|你有什么功能|你能做什么|你会什么|你可以做什么|介绍一下自己|你能干嘛|你有什么能力|你能帮我什么|你都会什么|你能干啥|你叫什么|你是什么)",
         ],
     }
 
@@ -341,6 +342,10 @@ class RuleBaseNLU:
         """根据实体和关键词推荐具体工具，供 Agent 优先调用。"""
         tools: list[str] = []
 
+        # GREETING 意图不推荐工具（用户可能在寒暄或询问功能）
+        if intent == "GREETING":
+            return []
+
         # 有健康数据实体 → 建议保存
         data_entities = {"weight", "sbp", "dbp", "fetal_movement", "blood_sugar", "heart_rate", "sleep_hours"}
         if data_entities & set(entities.keys()):
@@ -368,24 +373,45 @@ class RuleBaseNLU:
                 unique.append(t)
         return unique
 
-    def classify_with_llm(self, text: str) -> str:
+    # LLM 分类 — 统一意图空间（与规则引擎 parse() 一致）
+    _LLM_CLASSIFY_INTENTS = (
+        "HEALTH_DATA_REPORT / EMOTION_EXPRESS / KNOWLEDGE_QUERY / "
+        "SCHEDULE_INQUIRY / GREETING"
+    )
+    _LLM_CLASSIFY_VALID = {
+        "HEALTH_DATA_REPORT", "EMOTION_EXPRESS", "KNOWLEDGE_QUERY",
+        "SCHEDULE_INQUIRY", "GREETING",
+    }
+    _LLM_CLASSIFY_HINTS = {
+        "HEALTH": "HEALTH_DATA_REPORT", "体重": "HEALTH_DATA_REPORT", "血压": "HEALTH_DATA_REPORT", "记录": "HEALTH_DATA_REPORT",
+        "EMOTION": "EMOTION_EXPRESS", "焦虑": "EMOTION_EXPRESS", "心情": "EMOTION_EXPRESS", "情绪": "EMOTION_EXPRESS",
+        "KNOWLEDGE": "KNOWLEDGE_QUERY", "知识": "KNOWLEDGE_QUERY", "什么": "KNOWLEDGE_QUERY", "怎么": "KNOWLEDGE_QUERY",
+        "SCHEDULE": "SCHEDULE_INQUIRY", "产检": "SCHEDULE_INQUIRY", "预约": "SCHEDULE_INQUIRY",
+        "GREETING": "GREETING", "你好": "GREETING", "嗨": "GREETING", "你是谁": "GREETING", "功能": "GREETING",
+    }
+
+    def classify_with_llm(self, text: str, role: str = "pregnant") -> str:
         """LLM 辅助意图分类（仅在规则引擎返回 UNKNOWN 时调用）。
 
-        使用项目配置的 LLM 做极简分类，max_tokens=30。
+        统一使用与规则引擎一致的通用意图空间。role 仅影响选用哪个角色的 LLM 模型。
+        意图→变体的路由映射由 routing.py 按角色处理。
+
+        Args:
+            text: 用户输入文本
+            role: 角色标识 (pregnant/nurse/doctor)，仅用于选择 LLM 模型
         Returns:
             重新判定的 NLU intent 字符串，失败时返回 "UNKNOWN"。
         """
         try:
             from agno.models.message import Message
             from .agno_client import get_agno_model
-            model = get_agno_model(role="pregnant")
+            model = get_agno_model(role=role)
 
             classify_msg = Message(
                 role="user",
                 content=(
                     "判断用户消息的意图，只返回一个标签（不要解释）：\n"
-                    "HEALTH_DATA_REPORT / EMOTION_EXPRESS / KNOWLEDGE_QUERY / "
-                    "SCHEDULE_INQUIRY / GREETING / UNKNOWN\n"
+                    f"{self._LLM_CLASSIFY_INTENTS} / UNKNOWN\n"
                     f"消息：{text[:100]}"
                 ),
             )
@@ -400,31 +426,18 @@ class RuleBaseNLU:
             elif hasattr(response, "text"):
                 result_text = response.text.strip().upper()
 
-            # 提取有效意图标签（处理杂乱的模型输出）
-            import re
-            valid_intents = {
-                "HEALTH_DATA_REPORT", "EMOTION_EXPRESS", "KNOWLEDGE_QUERY",
-                "SCHEDULE_INQUIRY", "GREETING", "UNKNOWN",
-            }
-            # 匹配输出中最可能的有效意图
-            for intent in valid_intents:
+            # 提取有效意图标签
+            for intent in self._LLM_CLASSIFY_VALID:
                 if intent in result_text:
                     return intent
-            # 如果输出混乱但包含提示词，仍尝试推断
-            if any(kw in result_text for kw in ["HEALTH", "体重", "血压", "记录"]):
-                return "HEALTH_DATA_REPORT"
-            if any(kw in result_text for kw in ["EMOTION", "焦虑", "心情", "情绪"]):
-                return "EMOTION_EXPRESS"
-            if any(kw in result_text for kw in ["KNOWLEDGE", "知识", "什么", "怎么", "能否"]):
-                return "KNOWLEDGE_QUERY"
-            if any(kw in result_text for kw in ["SCHEDULE", "产检", "预约", "下次"]):
-                return "SCHEDULE_INQUIRY"
-            if any(kw in result_text for kw in ["GREETING", "你好", "嗨", "早上好", "HI"]):
-                return "GREETING"
+            # 模糊推断（兜底）
+            for hint_kw, hint_intent in self._LLM_CLASSIFY_HINTS.items():
+                if hint_kw in result_text:
+                    return hint_intent
             return "UNKNOWN"
         except Exception as exc:
             import logging
-            logging.getLogger(__name__).warning("LLM意图分类失败 text=%s: %s", text[:50], exc)
+            logging.getLogger(__name__).warning("LLM意图分类失败 role=%s text=%s: %s", role, text[:50], exc)
             return "UNKNOWN"
 
     def _analyze_emotion(self, text: str) -> dict:

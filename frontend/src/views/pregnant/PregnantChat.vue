@@ -35,8 +35,17 @@
             >
               已完成
             </el-tag>
+            <el-tag
+              v-else-if="followupProgress?.status === 'archived'"
+              type="info"
+              size="small"
+              effect="dark"
+              style="margin-left: auto"
+            >
+              已归档
+            </el-tag>
           </div>
-          <div v-if="followupProgress && followupProgress.total > 0 && followupProgress.status !== 'confirmed'" class="followup-banner__progress">
+          <div v-if="followupProgress && followupProgress.total > 0 && followupProgress.status !== 'confirmed' && followupProgress.status !== 'archived'" class="followup-banner__progress">
             <div class="followup-banner__bar">
               <div
                 class="followup-banner__fill"
@@ -826,7 +835,7 @@ async function handleSend() {
       const data = res.data
       if (data.followup_progress) {
         followupProgress.value = data.followup_progress
-        if (data.followup_progress.status === 'confirmed') followupRecordId.value = null
+        if (data.followup_progress.status === 'confirmed' || data.followup_progress.status === 'archived') followupRecordId.value = null
       }
       chatStore.sessionId = data.session_id
       chatStore.updateMessage(loadingMsg.id, {

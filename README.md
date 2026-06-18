@@ -11,11 +11,15 @@
 
 ## 核心特性
 
-- **Agno多智能体框架**：基于Agno SDK构建，孕妇端（健康咨询/情绪陪伴）、护士端（随访管理/排期）、医生端（FGR预警/医嘱辅助）三端协同
-- **RAG知识检索**：基于pgvector的混合检索（向量+关键词），结合医学知识库增强LLM回答的专业准确性
+- **Agno多智能体框架**：基于Agno SDK构建，孕妇端（健康咨询/情绪陪伴）、护士端（随访管理/排期）、医生端（FGR预警/医嘱辅助）三端协同，16个@tool函数按角色硬隔离
+- **RAG知识检索**：基于pgvector的混合检索（向量+关键词），结合40周孕期知识库与医学知识库增强LLM回答的专业准确性
 - **语音交互**：集成ASR语音识别（FunASR/Whisper/DashScope）与TTS语音合成（CosyVoice），支持全语音对话
-- **NLU意图识别**：规则引擎+LLM混合模式，支持紧急情况检测、情绪分析与工具路由
-- **FGR风险评估**：胎儿生长受限专病评估模块，支持多后端推理（PyTorch/ONNX/ROCm/NPU）
+- **NLU意图识别**：规则引擎+LLM混合模式，支持紧急情况检测、情绪分析与动态工具路由
+- **FGR风险评估**：胎儿生长受限专病评估模块，支持多后端推理（PyTorch/ONNX/ROCm/NPU），集成胎盘分割（nnU-Net）与超声图像分析
+- **产检排期引擎**：基于ACOG/中华医学会指南的硬编码规则引擎，覆盖13次标准产检 + 5个超声里程碑 + 8项速查参考，联动风险标签（FGR/GDM/高血压）自动加密监测
+- **随访排期推荐**：纯规则引擎五维度优先级判定（告警/逾期/数据活跃度/孕周/风险标签），输出高/中/低三档紧急度
+- **医嘱生命周期管理**：AI辅助生成（RAG增强+LLM模板）、签署（手写签名+归档快照）、软删除（保障医疗记录完整性）
+- **安全护栏**：全角色紧急检测护栏 + 角色级输出安全拦截 + JWT认证全局中间件
 - **端侧部署优先**：支持Ollama本地模型+FunASR本地识别，医疗数据本地处理，保护隐私
 
 ## 技术栈
@@ -91,13 +95,18 @@ pregnant_care_agent/
 | 模块 | 路径 | 说明 |
 |------|------|------|
 | **Agno智能体** | `backend/app/core/agno_agent.py` | 基于Agno SDK的多Agent编排，支持工具调用、团队协作与工作流 |
-| **LLM客户端** | `backend/app/core/llm_client.py` | 封装DashScope/DeepSeek/Ollama调用，支持cloud/local/mock三种模式 |
+| **安全护栏** | `backend/app/core/agno_guardrails.py` | 全角色紧急检测护栏 + 角色级输出安全拦截 |
+| **LLM客户端** | `backend/app/core/llm_client.py` | 封装DashScope/DeepSeek/Ollama调用，支持cloud/local/mixed/mock四种模式 |
 | **NLU引擎** | `backend/app/core/nlu_engine.py` | 规则+LLM混合意图识别，支持紧急检测、情绪分析与工具路由 |
 | **RAG知识库** | `backend/app/core/agno_knowledge.py` | 基于pgvector的混合检索（向量+关键词），医学知识增强生成 |
+| **产检排期引擎** | `backend/app/services/schedule_engine.py` | ACOG/中华医学会指南硬编码规则引擎，13次标准产检 + 5个超声里程碑 |
+| **随访排期推荐** | `backend/app/routers/nurse_ai.py` | 五维度优先级判定规则引擎（告警/逾期/数据活跃度/孕周/风险标签） |
+| **医嘱服务** | `backend/app/services/order_service.py` | 医嘱AI辅助生成（RAG增强）+ 签署（手写签名归档）+ 软删除生命周期管理 |
 | **ASR服务** | `backend/app/interfaces/asr_backend.py` | 语音识别接口，支持FunASR/Whisper/DashScope多后端 |
 | **TTS服务** | `backend/app/interfaces/tts_backend.py` | 语音合成接口，集成CosyVoice端侧TTS |
 | **对话路由** | `backend/app/routers/chat.py` | 孕妇智能问答核心接口，集成NLU/RAG/记忆管理 |
 | **FGR评估** | `backend/app/routers/fgr.py` | 胎儿生长受限风险评估，支持PyTorch/ONNX/ROCm多后端 |
+| **孕期日记** | `backend/app/services/pregnancy_diary.py` | 每周孕期叙事，LLM生成 + 40周知识库驱动 + 模板兜底 |
 
 ## 快速开始
 
@@ -178,12 +187,16 @@ npm run dev
 | 模块 | 端点 | 说明 |
 |------|------|------|
 | 认证 | `POST /api/auth/login` | 用户登录 |
-| 聊天 | `POST /api/chat` | 孕妇智能问答（支持语音） |
-| 随访 | `POST /api/followup` | 随访管理 |
-| 预警 | `GET /api/alerts` | 高危预警列表 |
-| FGR | `POST /api/fgr/assess` | FGR风险评估 |
-| 医嘱 | `POST /api/orders/generate` | AI医嘱生成 |
-| 仪表盘 | `GET /api/dashboard` | 数据统计看板 |
+| 聊天 | `POST /api/chat` | 孕妇智能问答（支持语音，SSE流式推送） |
+| 随访 | `POST /api/followup` | 随访管理与AI智能排期推荐 |
+| 预警 | `GET /api/alerts` | 高危预警列表（角色数据隔离） |
+| FGR | `POST /api/fgr/assess` | FGR风险评估（多后端推理） |
+| 产检排期 | `GET /api/schedule` | 产检日程管理（护士生成→发布→孕妇同步） |
+| 医嘱 | `POST /api/orders/generate` | AI医嘱生成（RAG增强） |
+| 医嘱签署 | `PUT /api/orders/{id}/sign` | 医嘱签署（手写签名 + 归档快照） |
+| 医嘱删除 | `DELETE /api/orders/{id}` | 医嘱软删除（保障医疗记录完整性） |
+| 孕期日记 | `GET /api/{pid}/diary` | 孕期周记（LLM叙事 + 40周知识库驱动） |
+| 仪表盘 | `GET /api/dashboard` | 数据统计看板（模块独立加载） |
 | 健康趋势 | `GET /api/health-trends` | 健康数据趋势分析 |
 | 心理评估 | `POST /api/mental-health` | 心理健康评估 |
 | 知识库 | `GET /api/knowledge` | 医学知识库管理 |
@@ -195,23 +208,66 @@ npm run dev
 ## 功能模块
 
 ### 孕妇端
-- 智能健康咨询（RAG增强，支持语音输入/输出）
-- 产检日程管理与提醒
-- 健康数据记录（体重/血压/胎动/健康趋势）
+- 智能健康咨询（RAG增强，支持语音输入/输出，全面去预警化温和措辞）
+- 产检日程管理与提醒（基于LMP动态推算，已发布排期自动同步）
+- 健康数据记录（体重/血压/胎动/健康趋势，NLU自动提取）
 - 情绪陪伴与心理评估
+- 孕期日记（LLM叙事 + 模板兜底，每周一条，40周知识库驱动每周变化内容）
 - 胎动计数工具
+- 患者主题页面（背景矢量图 + 视觉升级）
 
 ### 护士端
-- 随访任务管理与智能排期
-- 高危预警处理与升级
+- 随访任务管理与AI智能排期推荐（五维度优先级：告警/逾期/数据活跃度/孕周/风险标签）
+- 高危预警处理与升级（角色数据隔离，规则消息源统一）
 - 孕妇健康趋势追踪
-- 随访记录自动生成
+- 随访记录自动生成（结构化详情展示）
+- 产检排期管理（护士生成→发布→孕妇端自动同步）
 
 ### 医生端
-- FGR风险看板与多维数据分析
-- 辅助医嘱生成
+- FGR风险看板与多维数据分析（胎儿生长受限看板重构，响应速度优化 + 移动端适配）
+- AI辅助医嘱生成（RAG增强 + LLM模板 + Markdown渲染）、签署（手写签名 + 归档快照）、软删除
 - 病例审核工作台
+- 仪表盘数据独立加载（杜绝单一模块故障引发整体连锁崩溃）
 - WebSocket实时数据推送
+
+### 管理端
+- 审计日志查询（含工具调用会话记录，支持按会话ID查询）
+- 系统监控与数据统计
+
+## 模型权重文件说明
+
+### FGR 专病评估模型
+
+FGR 风险评估模块依赖以下预训练模型权重文件，由于文件过大（单个模型文件数百MB）且受 GitHub LFS 限制，**未包含在 Git 仓库中**。`.gitignore` 中已排除以下文件类型：
+
+| 排除规则 | 说明 |
+|----------|------|
+| `backend/fgr_compete/**/*.pth` | PyTorch 模型权重（ResNet 5折模型 + nnU-Net 胎盘分割模型） |
+| `backend/fgr_compete/**/*.pt` | PyTorch 跟踪/脚本模型 |
+| `backend/fgr_compete/**/*.ckpt` | PyTorch Lightning 检查点 |
+| `backend/fgr_compete/**/*.safetensors` | SafeTensors 格式权重 |
+| `backend/fgr_compete/onnx_resnet/*.onnx` | ONNX 导出模型（ROCm NPU 推理） |
+| `backend/fgr_compete/cache/` | 推理缓存目录 |
+| `backend/fgr_compete/uploads/` | 上传的超声图像 |
+| `backend/fgr_compete/diagnostic_reports/` | 生成的诊断报告 |
+| `backend/fgr_compete/photo/` | 患者照片 |
+| `backend/fgr_compete/_vendor/` | 第三方依赖（ONNX Runtime 等） |
+
+### 获取模型权重
+
+运行项目前需将模型权重文件放入对应目录。目录结构和模型权重获取方式请参考：
+
+```
+backend/fgr_compete/
+├── 0.701_515pth/                    # PyTorch ResNet 5折模型 (resnet_v9_best_fold{1-5}.pth)
+├── onnx_resnet/                       # ONNX 模型 (resnet_v9_best_fold{1-5}.onnx)
+└── Dataset001_PlacentaNT/
+    └── nnUNetTrainer__nnUNetPlans__2d/
+        └── fold_{0-4}/
+            └── checkpoint_final.pth   # nnU-Net 胎盘分割 5折模型
+```
+
+> **注意**：未放置模型权重文件时，FGR 相关接口将返回错误提示。如需本地开发测试，可将 `FGR_MODE=false` 或 `FGR_BACKEND=mock` 临时禁用 FGR 模块。
 
 ## 开发指南
 

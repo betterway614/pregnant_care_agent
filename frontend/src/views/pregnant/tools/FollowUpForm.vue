@@ -12,10 +12,28 @@
       <span class="loading-text">加载中...</span>
     </div>
 
+    <!-- 已归档状态 -->
+    <div v-else-if="isArchivedView" class="empty-state">
+      <div class="empty-icon-wrap" style="background: linear-gradient(135deg, #E3F2FD, #BBDEFB)">
+        <span class="empty-icon-text" style="color: #1976D2">📋</span>
+      </div>
+      <p class="empty-title">随访已归档</p>
+      <p class="empty-desc">该随访记录已存档，无需再填写</p>
+      <!-- 归档摘要 -->
+      <div v-if="summary" class="summary-card" style="margin: 16px 0; text-align: left; max-width: 360px;">
+        <div class="summary-card__header">
+          <span class="summary-card__avatar">🤖</span>
+          <span class="summary-card__name">随访摘要</span>
+        </div>
+        <div class="summary-card__body">{{ summary }}</div>
+      </div>
+      <button class="btn btn--outline" @click="$router.push('/pregnant/home')">返回首页</button>
+    </div>
+
     <!-- 无待处理随访 -->
     <div v-else-if="!pending.has_pending && !completed" class="empty-state">
       <div class="empty-icon-wrap">
-        <span class="empty-icon-text">✓</span>
+        <el-icon class="empty-icon-text" :size="30"><CircleCheckFilled /></el-icon>
       </div>
       <p class="empty-title">暂无待完成的随访</p>
       <p class="empty-desc">所有随访已完成，感谢配合</p>
@@ -28,7 +46,7 @@
       <div class="info-banner">
         <div class="info-banner__left">
           <div class="info-banner__name">{{ pending.patient_name }}</div>
-          <div class="info-banner__meta">{{ pending.template_name }}</div>
+          <div class="info-banner__meta">请配合完成随访</div>
         </div>
         <div class="info-banner__right">
           <div class="progress-ring">
@@ -59,7 +77,7 @@
           <div class="form-card__header">
             <span class="form-card__index">{{ idx + 1 }}</span>
             <span class="form-card__question">{{ q.question }}</span>
-            <span v-if="q.answered || isFieldFilled(q)" class="form-card__check">✓</span>
+            <el-icon v-if="q.answered || isFieldFilled(q)" class="form-card__check"><Check /></el-icon>
           </div>
 
           <!-- 血压双输入框 -->
@@ -141,7 +159,7 @@
         <!-- 完成头部 -->
         <div class="completion-hero">
           <div class="completion-check">
-            <span class="completion-check-icon">✓</span>
+            <el-icon class="completion-check-icon" :size="30"><Check /></el-icon>
           </div>
           <h2 class="completion-title">随访完成</h2>
           <p class="completion-subtitle">感谢 {{ pending.patient_name }} 的配合</p>
@@ -150,7 +168,7 @@
         <!-- 模板温馨总结 -->
         <div v-if="summary" class="summary-card">
           <div class="summary-card__header">
-            <span class="summary-card__avatar">🤖</span>
+            <el-icon class="summary-card__avatar" :size="18"><Service /></el-icon>
             <span class="summary-card__name">小安的总结</span>
           </div>
           <div class="summary-card__body">{{ summary }}</div>
@@ -158,12 +176,13 @@
 
         <!-- ===== AI 分析选择区 ===== -->
         <div v-if="!analysisDone && !analyzing" class="analysis-choice-card">
-          <div class="analysis-choice__icon">🔬</div>
+          <el-icon class="analysis-choice__icon" :size="42"><DataAnalysis /></el-icon>
           <h3 class="analysis-choice__title">是否需要 AI 深度分析？</h3>
           <p class="analysis-choice__desc">AI 将结合您的历史数据，分析健康趋势并给出个性化建议</p>
           <div class="analysis-choice__actions">
             <button class="btn btn--primary btn--block" @click="startAnalysis">
-              ✨ AI 智能分析
+              <el-icon :size="16"><MagicStick /></el-icon>
+              AI 智能分析
             </button>
             <button class="btn btn--ghost btn--block" @click="skipAnalysis">
               暂不需要，查看结果
@@ -179,7 +198,7 @@
               <span class="stream-phase__text">{{ msg.content }}</span>
             </div>
             <div v-else-if="msg.type === 'bubble'" class="stream-bubble">
-              <div class="stream-bubble__avatar">🤖</div>
+              <el-icon class="stream-bubble__avatar" :size="17"><Service /></el-icon>
               <div class="stream-bubble__content">
                 <div class="stream-bubble__name">小安</div>
                 <div class="stream-bubble__text bubble-markdown" v-html="renderMd(msg.content)" />
@@ -191,7 +210,7 @@
           <!-- 初始加载动画 -->
           <div v-if="analysisMessages.length === 0" class="stream-loading">
             <div class="stream-bubble">
-              <div class="stream-bubble__avatar">🤖</div>
+              <el-icon class="stream-bubble__avatar" :size="17"><Service /></el-icon>
               <div class="stream-bubble__content">
                 <div class="stream-bubble__name">小安</div>
                 <div class="stream-bubble__loading">
@@ -208,7 +227,7 @@
         <template v-if="analysisDone && analysisReport">
           <div v-if="analysisReport.abnormal_indicators?.length" class="alert-card">
             <div class="alert-card__header">
-              <span class="alert-card__icon">⚠</span>
+              <el-icon class="alert-card__icon" :size="18"><WarningFilled /></el-icon>
               <span class="alert-card__title">需关注指标</span>
             </div>
             <ul class="alert-card__list">
@@ -217,12 +236,18 @@
           </div>
 
           <div v-if="analysisReport.trend_analysis" class="info-card">
-            <div class="info-card__header">📊 趋势分析</div>
+            <div class="info-card__header">
+              <el-icon class="section-icon" :size="16"><TrendCharts /></el-icon>
+              <span>趋势分析</span>
+            </div>
             <div class="info-card__body">{{ analysisReport.trend_analysis }}</div>
           </div>
 
           <div v-if="analysisReport.personalized_advice" class="advice-card">
-            <div class="advice-card__header">💡 个性化建议</div>
+            <div class="advice-card__header">
+              <el-icon class="section-icon" :size="16"><Opportunity /></el-icon>
+              <span>个性化建议</span>
+            </div>
             <div class="advice-card__body">{{ analysisReport.personalized_advice }}</div>
           </div>
         </template>
@@ -248,6 +273,16 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { followUpApi } from '@/api/endpoints'
 import { ElMessage } from 'element-plus'
+import {
+  Check,
+  CircleCheckFilled,
+  DataAnalysis,
+  MagicStick,
+  Opportunity,
+  Service,
+  TrendCharts,
+  WarningFilled,
+} from '@element-plus/icons-vue'
 import { renderMarkdown } from '@/utils/markdown'
 
 interface FollowUpQuestion {
@@ -274,6 +309,9 @@ interface PendingData {
 }
 
 const route = useRoute()
+const recordId = computed(() => route.params.recordId as string | undefined)
+const recordStatus = ref<string>('')
+const isArchivedView = computed(() => recordStatus.value === 'archived')
 const loading = ref(true)
 const submitting = ref(false)
 const completed = ref(false)
@@ -306,7 +344,7 @@ const pending = ref<PendingData>({
 const formData = reactive<Record<string, any>>({})
 
 const pageTitle = computed(() =>
-  completed.value ? '随访完成' : pending.value.template_name || '随访'
+  completed.value ? '随访完成' : '随访'
 )
 
 const gestWeek = computed(() => '?')
@@ -386,12 +424,67 @@ function initFormData(questions: FollowUpQuestion[]) {
   }
 }
 
-async function loadPending() {
+async function loadData() {
   const pregnantId = localStorage.getItem('currentPregnantId') || ''
   if (!pregnantId) {
     loading.value = false
     return
   }
+
+  // 如果有 recordId，先获取记录详情以检查状态
+  const rid = recordId.value
+  if (rid) {
+    try {
+      const recordRes = await followUpApi.getRecord(rid)
+      const record = recordRes.data as any
+      recordStatus.value = record.status || ''
+
+      if (record.status === 'archived') {
+        // 已归档: 展示归档视图
+        summary.value = record.summary || ''
+        healthEducation.value = record.health_education || []
+        pending.value = {
+          record_id: record.id,
+          patient_name: record.patient_name || '',
+          template_id: '',
+          template_name: '已归档随访',
+          questions: [],
+          answered_count: 0,
+          total_count: 0,
+          has_pending: false,
+          health_education: record.health_education || [],
+        } as PendingData
+        completed.value = true
+        loading.value = false
+        return
+      }
+
+      if (['completed', 'confirmed'].includes(record.status)) {
+        // 已完成/已确认: 展示完成视图
+        summary.value = record.summary || ''
+        healthEducation.value = record.health_education || []
+        pending.value = {
+          record_id: record.id,
+          patient_name: record.patient_name || '',
+          template_id: '',
+          template_name: '随访已完成',
+          questions: [],
+          answered_count: 0,
+          total_count: 0,
+          has_pending: false,
+          health_education: record.health_education || [],
+        } as PendingData
+        completed.value = true
+        loading.value = false
+        return
+      }
+    } catch {
+      // 记录不存在或无权限，回退到 pending 查询
+      recordStatus.value = ''
+    }
+  }
+
+  // 原有 pending 加载逻辑（draft/in_progress 或无 recordId）
   try {
     const res = await followUpApi.getPending(pregnantId)
     pending.value = res.data as PendingData
@@ -438,7 +531,7 @@ async function handleSubmit() {
     } else {
       ElMessage.success('已保存')
       loading.value = true
-      await loadPending()
+      await loadData()
     }
   } catch {
     ElMessage.error('提交失败，请重试')
@@ -524,7 +617,7 @@ function skipAnalysis() {
   analysisDone.value = true
 }
 
-onMounted(loadPending)
+onMounted(loadData)
 
 onUnmounted(() => {
   if (abortController) {
@@ -907,7 +1000,7 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 10px;
 }
-.summary-card__avatar { font-size: 20px; }
+.summary-card__avatar { color: var(--pt-primary-dark); }
 .summary-card__name { font-size: 13px; font-weight: 600; color: var(--pt-text-secondary); }
 .summary-card__body {
   font-size: 14px;
@@ -952,7 +1045,7 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 10px;
 }
-.alert-card__icon { font-size: 18px; }
+.alert-card__icon { color: #E65100; }
 .alert-card__title { font-size: 14px; font-weight: 700; color: #E65100; }
 .alert-card__list {
   margin: 0;
@@ -972,11 +1065,15 @@ onUnmounted(() => {
   border-left: 3px solid #42A5F5;
 }
 .info-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 700;
   color: var(--pt-text);
   margin-bottom: 8px;
 }
+.info-card__header .section-icon { color: #1976d2; }
 .info-card__body {
   font-size: 13px;
   line-height: 1.7;
@@ -991,11 +1088,15 @@ onUnmounted(() => {
   border: 1.5px solid #A5D6A7;
 }
 .advice-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 700;
   color: #2E7D32;
   margin-bottom: 8px;
 }
+.advice-card__header .section-icon { color: #2E7D32; }
 .advice-card__body {
   font-size: 13px;
   line-height: 1.7;
@@ -1012,7 +1113,7 @@ onUnmounted(() => {
   border: 1.5px solid rgba(171, 71, 188, 0.15);
   box-shadow: 0 2px 12px rgba(171, 71, 188, 0.06);
 }
-.analysis-choice__icon { font-size: 40px; margin-bottom: 12px; }
+.analysis-choice__icon { color: #8E24AA; margin-bottom: 12px; }
 .analysis-choice__title {
   font-size: 17px;
   font-weight: 700;

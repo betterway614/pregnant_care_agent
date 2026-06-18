@@ -10,6 +10,9 @@
         <button class="toolbar-action-btn" :class="{ 'toolbar-action-btn--active': isMuted }" @click="toggleMute" :title="isMuted ? '取消静音' : '静音'">
           <el-icon :size="14"><Mute v-if="isMuted" /><Microphone v-else /></el-icon>
         </button>
+        <button class="toolbar-action-btn" @click="handleClearChat" title="清除聊天记录">
+          <el-icon :size="14"><Delete /></el-icon>
+        </button>
         <button class="toolbar-action-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '放大全屏'">
           <el-icon :size="14"><FullScreen v-if="!isFullscreen" /><Aim v-else /></el-icon>
         </button>
@@ -257,7 +260,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { Promotion, CircleCheck, Microphone, VideoPlay, VideoPause, Mute, Document, FullScreen, Aim } from '@element-plus/icons-vue'
+import { Promotion, CircleCheck, Microphone, VideoPlay, VideoPause, Mute, Document, FullScreen, Aim, Delete, Headset } from '@element-plus/icons-vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { nurseAiApi, chatApi, feedbackApi } from '@/api/endpoints'
 import AgentAvatar from '@/components/common/AgentAvatar.vue'
 import { renderMarkdown, isStructuredAnalysis, parseStructuredAnalysis } from '@/utils/markdown'
@@ -422,6 +426,39 @@ function toggleMute() {
 
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value
+}
+
+/** 清除聊天记录：清空本地消息 + 后端会话，重置 session_id */
+async function handleClearChat() {
+  try {
+    await ElMessageBox.confirm('确定要清除所有聊天记录吗？', '确认操作', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch { return }
+
+  try {
+    const pregnantId = localStorage.getItem('currentPregnantId') || ''
+    if (pregnantId && currentSessionId) {
+      await chatApi.clearConversation(pregnantId, currentSessionId)
+    } else if (pregnantId) {
+      await chatApi.clearConversation(pregnantId)
+    }
+    // 重置本地状态
+    currentSessionId = null
+    messages.value = []
+    completedToolSteps.value = []
+    // 重新添加欢迎消息
+    messages.value.push({
+      id: genId(),
+      role: 'assistant',
+      content: '您好！我是**小护**，您的AI护理助手。\n\n可以问我关于：\n- 孕妇数据分析\n- 护理建议\n- 随访计划\n- 健康趋势评估',
+    })
+    ElMessage.success('聊天记录已清除')
+  } catch {
+    ElMessage.error('清除失败，请稍后重试')
+  }
 }
 
 /** 自动播报助手消息 */

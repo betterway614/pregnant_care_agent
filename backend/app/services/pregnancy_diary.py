@@ -188,12 +188,8 @@ class PregnancyDiaryService:
     @staticmethod
     def _calc_current_week(pregnant: Pregnant) -> int:
         """根据末次月经或孕周天数推算当前孕周"""
-        if pregnant.gestational_age_days:
-            return pregnant.gestational_age_days // 7
-        if pregnant.lmp_date:
-            delta = beijing_now().date() - pregnant.lmp_date
-            return delta.days // 7
-        return 0
+        from .patient_context_service import compute_gestational_days
+        return compute_gestational_days(pregnant) // 7
 
     @staticmethod
     def _group_points(points: List[HealthDataPoint]) -> dict:

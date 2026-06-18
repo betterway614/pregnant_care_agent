@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from ..database import get_db
 from ..models import Pregnant, HealthDataPoint, ScheduleNode
 from ..schemas import PregnantResponse, PregnantUpdateRequest, PregnantHomeData
@@ -52,14 +52,8 @@ def get_pregnant_home(pregnant_id: str, db: Session = Depends(get_db), user: Tok
         raise HTTPException(404, "孕妇不存在")
 
     # 实时计算孕周：优先从 lmp_date（末次月经）动态计算，兜底使用静态字段
-    from datetime import date, datetime, timedelta
-    today = date.today()
-    if pregnant.lmp_date:
-        delta = (today - pregnant.lmp_date).days
-        gest_days = max(0, delta)  # 不允许负数
-    else:
-        # 兜底：使用静态字段（首次录入时的值，不会自动增长）
-        gest_days = pregnant.gestational_age_days or 0
+    from ..services.patient_context_service import compute_gestational_days
+    gest_days = compute_gestational_days(pregnant)
     gest_week = gest_days // 7
     gest_day = gest_days % 7
 
@@ -269,7 +263,8 @@ async def _auto_evaluate_alerts(db: Session, pregnant_id: str):
     if not pregnant:
         return
 
-    gest_week = (pregnant.gestational_age_days or 0) // 7
+    from ..services.patient_context_service import compute_gestational_days
+    gest_week = compute_gestational_days(pregnant) // 7
 
     # 构建评估上下文
     context = _build_rule_context(db, pregnant_id, gest_week)
@@ -305,7 +300,7 @@ async def _auto_evaluate_alerts(db: Session, pregnant_id: str):
             "trigger_source": alert.trigger_source,
             "status": alert.status,
             "created_at": alert.created_at.isoformat() if alert.created_at else None,
-            "gestational_age_days": pregnant.gestational_age_days,
+            "gestational_age_days": compute_gestational_days(pregnant),
             "source_role": "system",
             "action": "created",
             "details": {"action": rule_action},

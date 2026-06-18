@@ -23,7 +23,8 @@
     <div class="search-bar">
       <el-select v-model="filterStatus" placeholder="随访状态筛选" clearable style="width: 160px" @change="handleFilterChange">
         <el-option label="全部状态" value="" />
-        <el-option label="进行中" value="draft,in_progress" />
+        <el-option label="待开始" value="draft" />
+        <el-option label="进行中" value="in_progress" />
         <el-option label="已完成" value="completed" />
         <el-option label="已确认" value="confirmed" />
         <el-option label="已归档" value="archived" />
@@ -324,17 +325,20 @@
             <!-- AI 快照分析（已完成的记录显示历史快照） -->
             <div v-if="reviewRecord.ai_snapshot && Object.keys(reviewRecord.ai_snapshot).length" class="record-ai-snapshot">
               <div class="record-ai-snapshot__title">AI 分析快照</div>
-              <div v-if="reviewRecord.ai_snapshot.warm_summary" class="record-ai-snapshot__text">
-                {{ reviewRecord.ai_snapshot.warm_summary }}
+              <div v-if="reviewRecord.ai_snapshot.summary || reviewRecord.ai_snapshot.warm_summary" class="record-ai-snapshot__text">
+                {{ reviewRecord.ai_snapshot.summary || reviewRecord.ai_snapshot.warm_summary }}
               </div>
-              <div v-if="reviewRecord.ai_snapshot.abnormal_indicators?.length" class="record-ai-snapshot__abnormal">
+              <div v-if="(reviewRecord.ai_snapshot.abnormal_flags || reviewRecord.ai_snapshot.abnormal_indicators)?.length" class="record-ai-snapshot__abnormal">
                 <el-tag
-                  v-for="(item, i) in reviewRecord.ai_snapshot.abnormal_indicators"
+                  v-for="(item, i) in (reviewRecord.ai_snapshot.abnormal_flags || reviewRecord.ai_snapshot.abnormal_indicators)"
                   :key="i"
                   type="danger"
                   size="small"
                   style="margin-right: 4px; margin-bottom: 4px;"
                 >{{ item }}</el-tag>
+              </div>
+              <div v-if="reviewRecord.ai_snapshot.detail_analysis" class="record-ai-snapshot__text" style="margin-top: 6px">
+                {{ reviewRecord.ai_snapshot.detail_analysis }}
               </div>
             </div>
           </div>
@@ -463,8 +467,19 @@
           </el-button>
         </div>
 
-        <!-- confirmed / archived 状态：打印 / 导出PDF -->
-        <div class="record-actions" v-else-if="isArchived">
+        <!-- confirmed 状态：前往归档确认页 -->
+        <div class="record-actions" v-else-if="reviewRecord.status === 'confirmed'">
+          <el-button
+            type="primary"
+            @click="goPrintPage"
+            style="flex: 1"
+          >
+            归档确认
+          </el-button>
+        </div>
+
+        <!-- archived 状态：打印/导出（归档后方可发布） -->
+        <div class="record-actions" v-else-if="reviewRecord.status === 'archived'">
           <el-button type="primary" @click="goPrintPage" style="flex: 1">
             预览打印版
           </el-button>
@@ -474,6 +489,7 @@
         </div>
       </template>
     </el-drawer>
+
   </div>
 </template>
 
@@ -488,13 +504,22 @@ import { fieldLabel, examLabel, labLabel } from '@/utils/labelMaps'
 
 /** 轮询间隔（毫秒） */
 const POLL_INTERVAL = 30000
+/** 推荐列表刷新倍率：每 N 次记录轮询刷新一次推荐 */
+const RECOMMEND_POLL_MULTIPLIER = 3
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let pollTick = 0
 
 /** 开始轮询 */
 function startPolling() {
   if (pollTimer) return
+  pollTick = 0
   pollTimer = setInterval(() => {
+    pollTick++
     fetchRecords()
+    // 每 N 次记录轮询同步刷新一次推荐列表
+    if (pollTick % RECOMMEND_POLL_MULTIPLIER === 0) {
+      fetchRecommendations()
+    }
   }, POLL_INTERVAL)
 }
 
@@ -512,6 +537,7 @@ function handleVisibilityChange() {
     stopPolling()
   } else {
     fetchRecords()
+    fetchRecommendations()
     startPolling()
   }
 }
@@ -542,7 +568,6 @@ const reviewRecord = ref<FollowUpRecord | null>(null)
 const aiReviewLoading = ref(false)
 const aiReviewResult = ref<any>(null)
 const confirmLoading = ref(false)
-
 /** 编辑功能 */
 const editMode = ref(false)
 const saveEditLoading = ref(false)
@@ -630,6 +655,7 @@ function statusType(status: string): string {
     completed: 'primary',
     in_progress: 'warning',
     draft: 'info',
+    cancelled: 'info',
   }
   return map[status] || 'info'
 }
@@ -641,7 +667,8 @@ function statusLabel(status: string): string {
     confirmed: '已确认',
     completed: '已完成',
     in_progress: '进行中',
-    draft: '进行中',
+    draft: '待开始',
+    cancelled: '已取消',
   }
   return map[status] || status
 }
@@ -823,6 +850,7 @@ async function doConfirmFromDrawer(status: string) {
   }
 }
 
+/** 保存护士签名 */
 /** 上报医生 */
 async function escalateToDoctor() {
   if (!reviewRecord.value) return
@@ -881,15 +909,20 @@ async function fetchRecommendations() {
 /** 一键触发推荐的随访 */
 async function doQuickTrigger(rec: any) {
   rec._triggering = true
+  const idx = recommendations.value.indexOf(rec)
   try {
     await followUpApi.trigger(rec.pregnant_id, rec.template_id)
     ElMessage.success(`已触发对 ${rec.patient_name} 的随访`)
+    // 乐观移除：立即从推荐列表中移除，避免等待后端重取
+    if (idx !== -1) {
+      recommendations.value.splice(idx, 1)
+    }
     await fetchRecords()
-    await fetchRecommendations()
+    // 后台异步同步推荐列表（不阻塞 UI）
+    fetchRecommendations()
   } catch (err: any) {
     const msg = err.response?.data?.detail || err.message || '触发失败'
     ElMessage.error(msg)
-  } finally {
     rec._triggering = false
   }
 }
@@ -906,6 +939,8 @@ async function doBatchTrigger() {
   )
 
   batchTriggering.value = true
+  // 记录选中项的 pregnant_id 集合，用于乐观移除
+  const triggeredIds = new Set(selected.map(r => r.pregnant_id))
   try {
     const pregnantIds = selected.map(r => r.pregnant_id)
     const res = await nurseBriefingApi.batchTriggerFollowups(pregnantIds, '')
@@ -925,6 +960,11 @@ async function doBatchTrigger() {
     } else {
       ElMessage.error('批量触发失败')
     }
+
+    // 乐观移除：立即从推荐列表中移除已触发的条目（含 skipped 的，因为已有活跃随访）
+    recommendations.value = recommendations.value.filter(
+      (r: any) => !triggeredIds.has(r.pregnant_id)
+    )
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.detail || '批量触发失败')
   } finally {
@@ -933,7 +973,8 @@ async function doBatchTrigger() {
   }
 
   await fetchRecords()
-  await fetchRecommendations()
+  // 后台异步同步推荐列表
+  fetchRecommendations()
 }
 
 onMounted(() => {
@@ -1287,4 +1328,5 @@ onUnmounted(() => {
   margin-top: 12px;
   border-top: 1px solid var(--border);
 }
+
 </style>

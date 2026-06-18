@@ -21,6 +21,7 @@ class FollowUpStatus(str, Enum):
     COMPLETED = "completed"
     CONFIRMED = "confirmed"
     ARCHIVED = "archived"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -110,3 +111,5 @@ followup_fsm.add(FollowUpStatus.IN_PROGRESS, FollowUpStatus.COMPLETED, "complete
 followup_fsm.add(FollowUpStatus.COMPLETED, FollowUpStatus.CONFIRMED, "confirm")
 followup_fsm.add(FollowUpStatus.COMPLETED, FollowUpStatus.DRAFT, "reject")  # 驳回重做
 followup_fsm.add(FollowUpStatus.CONFIRMED, FollowUpStatus.ARCHIVED, "archive")
+followup_fsm.add(FollowUpStatus.DRAFT, FollowUpStatus.CANCELLED, "cancel")  # 取消草稿（去重/主动取消）
+followup_fsm.add(FollowUpStatus.IN_PROGRESS, FollowUpStatus.CANCELLED, "cancel")  # 取消进行中的随访

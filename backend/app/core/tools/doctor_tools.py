@@ -40,7 +40,8 @@ async def agno_analyze_patient_comprehensive(pregnant_id: str = "", run_context:
             if not pregnant:
                 return {"error": "孕妇不存在"}
 
-            gest_days = pregnant.gestational_age_days or 0
+            from ...services.patient_context_service import compute_gestational_days
+            gest_days = compute_gestational_days(pregnant)
             result = {
                 "patient_info": {
                     "name": pregnant.display_name,

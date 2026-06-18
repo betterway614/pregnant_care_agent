@@ -5,6 +5,7 @@ import time
 from loguru import logger
 
 from ..utils.timezone import beijing_now
+from .patient_context_service import compute_gestational_days
 
 from ..models import Alert, Pregnant, FollowUpRecord
 from .audit_service import AuditService
@@ -45,7 +46,7 @@ class AlertAnalysisService:
 
     @staticmethod
     async def run_nurse_analysis(db, alert: Alert, pregnant: Pregnant) -> dict | None:
-        gest_week = (pregnant.gestational_age_days or 0) // 7
+        gest_week = compute_gestational_days(pregnant) // 7
         snapshot = _build_data_snapshot(db, alert.pregnant_id)
         snapshot_block = f"\n\n患者数据快照：\n{snapshot}" if snapshot else ""
         prompt = (
@@ -86,7 +87,7 @@ class AlertAnalysisService:
         if alert.level not in ("RED", "ORANGE"):
             return None
 
-        gest_week = (pregnant.gestational_age_days or 0) // 7
+        gest_week = compute_gestational_days(pregnant) // 7
         snapshot = _build_data_snapshot(db, alert.pregnant_id)
         snapshot_block = f"\n\n患者数据快照：\n{snapshot}" if snapshot else ""
         prompt = (
@@ -126,7 +127,7 @@ class AlertAnalysisService:
     @staticmethod
     async def run_alert_workflow(db, alert: Alert, pregnant: Pregnant) -> dict:
         """执行完整预警分析 — 优先 Team 并行，降级串行 Workflow，最终降级单 Agent"""
-        gest_week = (pregnant.gestational_age_days or 0) // 7
+        gest_week = compute_gestational_days(pregnant) // 7
         input_text = (
             f"预警ID {alert.id}：孕妇 {pregnant.display_name} 孕{gest_week}周，"
             f"级别 {alert.level}，{alert.message}"

@@ -15,6 +15,7 @@ from ..core import rule_engine
 from ..core.rule_engine import get_rule_message as _get_rule_message
 from ..core.websocket_manager import ws_manager
 from ..core.auth import get_current_user, TokenPayload
+from ..services.patient_context_service import compute_gestational_days
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def get_alerts(status: Optional[str] = None,
         result.append(AlertResponse(
             **{c.name: getattr(a, c.name) for c in a.__table__.columns},
             patient_name=pregnant.display_name if pregnant else "未知",
-            gestational_age_days=pregnant.gestational_age_days if pregnant else None,
+            gestational_age_days=compute_gestational_days(pregnant) if pregnant else None,
             rule_standard_message=_get_rule_message(a.rule_id),
         ))
     return result
@@ -134,7 +135,7 @@ async def create_alert(
         "trigger_source": req.trigger_source,
         "status": alert.status,
         "created_at": alert.created_at.isoformat() if alert.created_at else None,
-        "gestational_age_days": pregnant.gestational_age_days,
+        "gestational_age_days": compute_gestational_days(pregnant),
         "source_role": "system",
         "action": "created",
         "details": req.details if req.details else {},
@@ -155,7 +156,7 @@ async def create_alert(
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name,
-        gestational_age_days=pregnant.gestational_age_days,
+        gestational_age_days=compute_gestational_days(pregnant),
         rule_standard_message=_get_rule_message(req.rule_id),
     )
 
@@ -297,7 +298,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
             "trigger_source": alert.trigger_source,
             "status": alert.status,
             "created_at": alert.created_at.isoformat() if alert.created_at else None,
-            "gestational_age_days": pregnant.gestational_age_days if pregnant else None,
+            "gestational_age_days": compute_gestational_days(pregnant) if pregnant else None,
             "source_role": source_role,
             "action": review.action,
             "review_reason": review.reason,
@@ -331,7 +332,7 @@ async def review_alert(alert_id: str, review: AlertReviewRequest,
     return AlertResponse(
         **{c.name: getattr(alert, c.name) for c in alert.__table__.columns},
         patient_name=pregnant.display_name if pregnant else "未知",
-        gestational_age_days=pregnant.gestational_age_days if pregnant else None,
+        gestational_age_days=compute_gestational_days(pregnant) if pregnant else None,
         rule_standard_message=_get_rule_message(alert.rule_id),
     )
 

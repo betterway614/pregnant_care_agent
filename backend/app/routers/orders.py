@@ -264,7 +264,8 @@ def sign_order(
     # 生成归档文档
     pregnant = db.query(Pregnant).filter(Pregnant.pregnant_id == order.pregnant_id).first()
     patient_name = pregnant.display_name if pregnant else "未知"
-    gest_days = pregnant.gestational_age_days if pregnant else 0
+    from ..services.patient_context_service import compute_gestational_days
+    gest_days = compute_gestational_days(pregnant) if pregnant else 0
     gest_week = f"{gest_days // 7}+{gest_days % 7}" if gest_days else "未知"
 
     snapshot, text = order_service.generate_order_document(

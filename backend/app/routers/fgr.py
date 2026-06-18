@@ -13,6 +13,7 @@ from ..database import get_db
 from ..models import FgrAssessment, Pregnant
 from ..schemas import FgrAssessRequest, FgrAssessResponse, FgrTrendPoint, PatientImageResponse
 from ..core import rule_engine
+from ..services.patient_context_service import compute_gestational_days
 from ..config import settings
 from ..services.segmentation_service import SegmentationError, get_segmentation_service
 from ..services.alert_service import alert_service
@@ -220,7 +221,7 @@ def _evaluate_rules(db: Session, pregnant_id: str, result: dict) -> list[dict]:
             "trigger_source": "FGR_ALGORITHM",
             "status": alert.status,
             "created_at": alert.created_at.isoformat() if alert.created_at else None,
-            "gestational_age_days": pregnant.gestational_age_days if pregnant else None,
+            "gestational_age_days": compute_gestational_days(pregnant) if pregnant else None,
             "source_role": "system",
             "action": "created",
             "details": {"action": hit.get("action", "")},

@@ -49,7 +49,8 @@ async def doctor_analyze(pregnant_id: str, req: DoctorAnalyzeRequest = None, use
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
 
-    gest_days = pregnant.gestational_age_days or 0
+    from ..services.patient_context_service import compute_gestational_days
+    gest_days = compute_gestational_days(pregnant)
     gest_week = gest_days // 7
     gest_day = gest_days % 7
     risk_tags = pregnant.risk_tags or []
@@ -598,6 +599,19 @@ async def doctor_chat_stream(req: ChatStreamRequest, user: TokenPayload = Depend
             nlu_result = nlu_engine.parse(message.strip())
             intent_classification = nlu_result.intent
 
+            # UNKNOWN 意图：LLM 辅助分类（规则引擎未命中时用 LLM 二次判定）
+            if nlu_result.intent == "UNKNOWN":
+                refined_intent = await asyncio.to_thread(
+                    nlu_engine.classify_with_llm, message.strip(), "doctor"
+                )
+                if refined_intent != "UNKNOWN":
+                    nlu_result.intent = refined_intent
+                    nlu_result.category = nlu_engine._classify_category(
+                        refined_intent, nlu_result.entities, message.strip(),
+                    )
+                    intent_classification = refined_intent
+                    logger.info("医生端LLM重分类: UNKNOWN → %s", refined_intent)
+
             # 根据意图选择工具子集
             tools, intent_variant = resolve_doctor_tools_by_intent({
                 "intent": nlu_result.intent,
@@ -768,7 +782,8 @@ async def generate_report(pregnant_id: str, user: TokenPayload = Depends(get_cur
     if not pregnant:
         raise HTTPException(404, "孕妇不存在")
 
-    gest_days = pregnant.gestational_age_days or 0
+    from ..services.patient_context_service import compute_gestational_days
+    gest_days = compute_gestational_days(pregnant)
     gest_week = gest_days // 7
     gest_day = gest_days % 7
 

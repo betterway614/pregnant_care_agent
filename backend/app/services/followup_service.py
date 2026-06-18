@@ -394,6 +394,7 @@ class FollowUpService:
 
         # ---- 结构化快照 ----
         snapshot = {
+            "record_id": record.get("record_id"),
             "patient_name": patient_name,
             "gestational_week": gest_week,
             "follow_up_date": follow_up_date,
@@ -412,6 +413,9 @@ class FollowUpService:
             "reviewed_at": str(record.get("reviewed_at", "")),
             "review_comment": record.get("review_comment"),
             "ai_snapshot": record.get("ai_snapshot", {}),
+            "archive_summary_draft_text": record.get("archive_summary_draft_text", ""),
+            "archive_summary_final_text": record.get("archive_summary_final_text", ""),
+            "archive_summary_modified": bool(record.get("archive_summary_modified")),
             "generated_at": beijing_now().isoformat(),
         }
 
@@ -463,7 +467,12 @@ class FollowUpService:
         gt = record.get("guidance_tags", [])
         if gt:
             for g in gt:
-                lines.append(f"  [{g.get('tag', '')}] {g.get('content', '')}")
+                if isinstance(g, dict):
+                    tag = str(g.get("tag") or "").strip()
+                    content = str(g.get("content") or "").strip()
+                    lines.append(f"  [{tag}] {content}".rstrip())
+                elif str(g).strip():
+                    lines.append(f"  [{str(g).strip()}]")
         nfd = record.get("next_followup_date")
         if nfd:
             lines.append(f"  下次随访日期：{nfd}")
@@ -471,6 +480,14 @@ class FollowUpService:
         if ref and ref.get("has_referral"):
             lines.append(f"  转诊：{ref.get('reason', '')} → {ref.get('institution', '')} {ref.get('department', '')}")
         lines.append("")
+
+        archive_summary = record.get("archive_summary_final_text")
+        if archive_summary:
+            lines.append("归档总结（护士确认）")
+            for line in str(archive_summary).splitlines():
+                if line.strip():
+                    lines.append(f"  {line.strip()}")
+            lines.append("")
 
         # 审核信息
         rb = record.get("reviewed_by")
